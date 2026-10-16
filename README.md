@@ -110,7 +110,7 @@ Not yet. The target is:
 
 ```sh
 docker compose up        # pforte + Postgres
-open http://localhost:3000/admin
+open http://localhost:3300/admin
 ```
 
 ## Roadmap
