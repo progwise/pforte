@@ -3,8 +3,10 @@
 A small, self-hosted OpenID Connect identity service for organisations whose users are managed
 by a back office rather than by self-registration.
 
-**Status: design phase.** Nothing runs yet. This README describes what is being built, so that
-early integrators can plan against it. Expect the first usable release around the end of 2026.
+**Status: early development.** The repository skeleton runs: a server with a health endpoint on
+top of Postgres. There is no OpenID Connect, no users and no admin yet. This README describes
+what is being built, so that early integrators can plan against it. Expect the first usable
+release around the end of 2026.
 
 ## Why another identity service
 
@@ -106,12 +108,25 @@ ERP ──(hourly)──▶ import job ──(admin API)──▶ pforte
 
 ## Quick start
 
-Not yet. The target is:
+Not yet usable as an identity service. The target is:
 
 ```sh
 docker compose up        # pforte + Postgres
 open http://localhost:3300/admin
 ```
+
+## Development
+
+To run the current skeleton (Node.js 22, pnpm and Docker required):
+
+```sh
+cp .env.example .env
+pnpm install
+pnpm dev:up              # local Postgres
+pnpm dev                 # http://localhost:3300/health
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 ## Roadmap
 
@@ -125,8 +140,8 @@ open http://localhost:3300/admin
 
 ## Contributing
 
-Issues and pull requests are welcome once the skeleton exists. Contributions need a
-Developer Certificate of Origin sign-off (`git commit -s`); there is no contributor agreement.
+Issues and pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). Contributions need
+a Developer Certificate of Origin sign-off (`git commit -s`); there is no contributor agreement.
 Please report security issues privately, see [SECURITY.md](SECURITY.md).
 
 ## License
