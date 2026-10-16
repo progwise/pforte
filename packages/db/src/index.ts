@@ -12,7 +12,7 @@ export const createDb = (connectionString: string, { onError = console.error }: 
   const pool = new Pool({ connectionString, connectionTimeoutMillis: 5000 })
   // Without a listener, an error on an idle client crashes the process.
   pool.on('error', onError)
-  const db = drizzle(pool, { schema })
+  const db = drizzle(pool, { schema, casing: 'snake_case' })
   return { db, pool }
 }
 

@@ -11,6 +11,8 @@
     "dev": "pnpm --filter @progwise/pforte-server dev",
     "dev:up": "docker compose -f compose.dev.yaml up -d --wait",
     "dev:down": "docker compose -f compose.dev.yaml down",
+    "db:generate": "pnpm --filter @progwise/pforte-db db:generate",
+    "db:migrate": "pnpm --filter @progwise/pforte-db db:migrate",
     "build": "pnpm -r build",
     "lint": "oxlint",
     "typecheck": "pnpm -r typecheck",

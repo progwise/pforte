@@ -1,2 +1,7 @@
-// Tables are added in the data model issue (#2).
-export {}
+export * from './audit-events.js'
+export * from './claims.js'
+export * from './clients.js'
+export * from './devices.js'
+export * from './oidc-payloads.js'
+export * from './otp-codes.js'
+export * from './users.js'
