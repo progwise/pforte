@@ -17,7 +17,11 @@ const provider = await createProviderHolder({
   onError: (error) => app.log.error(error, 'OpenID provider error'),
 })
 const authenticate = await createAuthenticate(db)
-const app = buildApp({ getDatabaseTime: () => getDatabaseTime(db), oidc: { provider, authenticate } })
+const app = buildApp({
+  getDatabaseTime: () => getDatabaseTime(db),
+  oidc: { provider, authenticate },
+  admin: { db, provider },
+})
 
 const cleanup = setInterval(() => {
   deleteExpiredOidcPayloads(db).catch((error) => app.log.error(error, 'cleanup of expired OIDC payloads failed'))

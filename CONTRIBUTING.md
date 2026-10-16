@@ -26,7 +26,7 @@ pnpm install
 pnpm dev:keys      # generates COOKIE_KEYS and JWKS in .env (keeps existing values)
 pnpm dev:up        # Postgres from compose.dev.yaml, waits until it is healthy
 pnpm db:migrate    # create the tables
-pnpm db:seed       # fictional dev data: an admin, two clients, ten users with claims
+pnpm db:seed       # fictional dev data: an admin, four clients, ten users with claims
 pnpm dev           # server on http://localhost:3300, loads .env
 pnpm dev:example   # optional: example application on http://localhost:3400
 ```
@@ -38,6 +38,26 @@ and commit the new migration.
 
 Check it works: `curl http://localhost:3300/health` returns `{"status":"ok","databaseTime":"…"}`.
 Stop the database with `pnpm dev:down`.
+
+### Trying the admin API
+
+The seed registers two machine clients for the admin API (secret `dev-secret`): `demo-admin` with
+the `admin` scope and `demo-import` with the `directory` scope (users and claims only). With
+`pnpm dev` running:
+
+```sh
+TOKEN=$(curl -s -u demo-admin:dev-secret -d grant_type=client_credentials -d scope=admin \
+  http://localhost:3300/token | jq -r .access_token)
+
+# create or update a user (safe to repeat; says "unchanged" when nothing differs)
+curl -X PUT -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"firstName":"Ada","lastName":"Lovelace"}' \
+  http://localhost:3300/admin/users/by-email/ada@example.com
+
+curl -H "authorization: Bearer $TOKEN" 'http://localhost:3300/admin/users?search=ada'
+```
+
+Every change is recorded in the audit log with the client that made it.
 
 ### Ports
 

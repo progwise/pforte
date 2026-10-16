@@ -86,7 +86,9 @@ export class ClientAdapter implements Adapter {
       redirect_uris: client.redirectUris,
       post_logout_redirect_uris: client.postLogoutRedirectUris,
       grant_types: client.allowedGrants,
-      response_types: ['code'],
+      scope: client.scopes.join(' '),
+      // Machine clients (client_credentials only) never go through the authorization endpoint.
+      response_types: client.allowedGrants.includes('authorization_code') ? ['code'] : [],
       pkce_required: client.type === 'public' || client.pkceRequired,
       token_endpoint_auth_method: confidential ? 'client_secret_basic' : 'none',
       // The stored value is an argon2 hash; compareClientSecret is overridden to verify against it.

@@ -86,7 +86,11 @@ export const createProvider = async ({ config, db, onError }: ProviderOptions) =
     pkce: {
       required: (_ctx, client) => client.clientAuthMethod === 'none' || client.metadata().pkce_required !== false,
     },
+    // `admin` and `directory` are the scopes of the admin API. Only clients registered with them
+    // can ask for them (clients.scopes), and only through the client_credentials grant.
+    scopes: ['openid', 'offline_access', 'admin', 'directory'],
     features: {
+      clientCredentials: { enabled: true },
       devInteractions: { enabled: false },
       rpInitiatedLogout: { enabled: true },
       backchannelLogout: { enabled: true },
