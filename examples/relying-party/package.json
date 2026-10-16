@@ -1,0 +1,16 @@
+{
+  "name": "@progwise/pforte-example-relying-party",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "openid-client": "6.8.8"
+  },
+  "devDependencies": {
+    "tsx": "4.23.15"
+  }
+}

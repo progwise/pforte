@@ -28,6 +28,7 @@ pnpm dev:up        # Postgres from compose.dev.yaml, waits until it is healthy
 pnpm db:migrate    # create the tables
 pnpm db:seed       # fictional dev data: an admin, two clients, ten users with claims
 pnpm dev           # server on http://localhost:3300, loads .env
+pnpm dev:example   # optional: example application on http://localhost:3400
 ```
 
 The seed is safe to run again and refuses to run when `NODE_ENV=production`. All seeded users
@@ -72,7 +73,7 @@ pnpm build
 | --- | --- |
 | `apps/server` | Fastify application: OpenID Connect provider, admin API and pages |
 | `packages/db` | Drizzle ORM schema, migrations and the database connection |
-| `examples/` | Example client applications (planned) |
+| `examples/relying-party` | Example application that signs in with pforte; see its README |
 
 ## Rules for the repository
 

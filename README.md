@@ -3,10 +3,11 @@
 A small, self-hosted OpenID Connect identity service for organisations whose users are managed
 by a back office rather than by self-registration.
 
-**Status: early development.** The repository skeleton runs: a server with a health endpoint on
-top of Postgres. There is no OpenID Connect, no users and no admin yet. This README describes
-what is being built, so that early integrators can plan against it. Expect the first usable
-release around the end of 2026.
+**Status: early development.** The OpenID Connect provider works: sign-in with e-mail and
+password, the authorization code flow with PKCE, claims in the ID token, refresh tokens with
+rotation, and logout. There is no admin API or UI, no import, no second factor and no password
+reset yet. This README describes what is being built, so that early integrators can plan
+against it. Expect the first usable release around the end of 2026.
 
 ## Why another identity service
 
@@ -97,6 +98,8 @@ Browser / app  ──(authorization code + PKCE)──▶  pforte  ──▶  ID
 
 The application verifies the token with the JWKS endpoint, reads the claims, and decides itself
 what the user may see. pforte does not do authorization beyond "this person holds these claims".
+A complete, runnable example of such an application is in
+[examples/relying-party](examples/relying-party).
 
 A system of record keeps users current:
 
@@ -122,8 +125,12 @@ To run the current skeleton (Node.js 22, pnpm and Docker required):
 ```sh
 cp .env.example .env
 pnpm install
+pnpm dev:keys            # development signing and cookie keys
 pnpm dev:up              # local Postgres
-pnpm dev                 # http://localhost:3300/health
+pnpm db:migrate && pnpm db:seed
+pnpm dev                 # pforte on http://localhost:3300
+pnpm dev:example         # example application on http://localhost:3400, sign in as
+                         # anna.schmidt@example.com / dev-password
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
