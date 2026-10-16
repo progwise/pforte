@@ -92,7 +92,15 @@ Warnings are accepted for certification. These are known and intended:
 - `oidcc-claims-essential`: `name` is not in the userinfo, because pforte does not support the
   `claims` request parameter (`claims_parameter_supported` is false) and ignores it, which is
   allowed. Applications get claims through scopes.
-- `oidcc-scope-address`: skipped, because pforte does not support the `address` scope.
+- `oidcc-alternate-happy-flow`: the same two warnings as `oidcc-scope-email` (the e-mail is also in
+  the ID token; not all standard claims of the scope are returned).
+- `oidcc-ensure-request-with-acr-values-succeeds`: the request succeeds, but pforte returns no
+  `acr` claim although `acr_values` were requested. This is a SHOULD. pforte does not advertise
+  `acr_values_supported`; the second factor (#6) is the natural place to add `acr` and `amr`.
+- `oidcc-scope-address`, `oidcc-scope-all`: skipped, because pforte does not support the
+  `address` scope (`scope-all` includes it).
+- `oidcc-unsigned-request-object-supported-correctly-or-rejected-as-unsupported`: skipped,
+  because pforte does not support request objects (`request_parameter_supported` is false).
 
 ## PKCE and the suite's clients
 
@@ -118,4 +126,36 @@ Keep the link to each test's log. Record the outcome of each run below.
 
 ## Results
 
-No run recorded yet.
+### Run of 2026-10-16: no failures
+
+Plan `oidcc-basic-certification-test-plan`, suite version 5.3.3, variant
+`server_metadata=discovery, client_registration=static_client`, alias `progwise-pforte`,
+issuer `https://conformance.pforte.dev`. The table shows the latest result of each test; tests
+were repeated while the gaps listed below were fixed, so this was not one uninterrupted pass. The
+final code is pforte commit `1f7811a`. A clean full run is repeated before each release.
+
+**35 tests: 23 passed, 5 warnings, 4 to review, 3 skipped, 0 failed, 0 interrupted.**
+
+| Result | Tests |
+| --- | --- |
+| Passed | `server`, `response-type-missing`, `userinfo-get`, `userinfo-post-header`, `userinfo-post-body`, `ensure-request-without-nonce-succeeds-for-code-flow`, `scope-phone`, `display-page`, `display-popup`, `prompt-none-not-logged-in`, `prompt-none-logged-in`, `max-age-10000`, `ensure-request-with-unknown-parameter-succeeds`, `id-token-hint`, `login-hint`, `ui-locales`, `claims-locales`, `codereuse`, `codereuse-30seconds`, `ensure-post-request-succeeds`, `server-client-secret-post`, `refresh-token`, `ensure-request-with-valid-pkce-succeeds` |
+| Warning (accepted, see above) | `scope-profile`, `scope-email`, `alternate-happy-flow`, `ensure-request-with-acr-values-succeeds`, `claims-essential` |
+| Review | `prompt-login`, `max-age-1`, `ensure-registered-redirect-uri`, `ensure-request-object-with-redirect-uri` |
+| Skipped | `scope-address`, `scope-all`, `unsigned-request-object-supported-correctly-or-rejected-as-unsupported` |
+
+The four tests marked *review* only need a human to look at evidence (screenshots of the login
+page or of an error page). They are required for a formal certification submission, which has
+not been made. The suite's "private link" for the plan is not published here, because the logs
+contain the generated test credentials.
+
+### What the run found and fixed
+
+The first runs exposed gaps that unit tests had missed, all fixed with tests:
+
+- PKCE was required for every client, but the suite's confidential clients do not send it. It is
+  now a per-client setting (`pkce_required`, default on; always on for public clients).
+- A browser that was already signed in and asked for more scopes was sent to a consent page that
+  does not exist. The grant is now extended, and `prompt=consent` is accepted automatically.
+- The authorization endpoint did not accept POST, which OpenID Connect requires. It does now, for
+  https issuers (it needs a `SameSite=None; Secure` session cookie).
+- `login_hint` is used to prefill the e-mail field.
