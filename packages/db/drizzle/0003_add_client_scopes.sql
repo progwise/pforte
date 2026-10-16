@@ -1,0 +1,1 @@
+ALTER TABLE "clients" ADD COLUMN "scopes" text[] DEFAULT '{openid,offline_access,profile,email,phone}' NOT NULL;

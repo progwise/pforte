@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./oidc": "./src/oidc.ts",
+    "./admin": "./src/admin/index.ts",
     "./seed": "./src/seed.ts",
     "./users": "./src/users.ts",
     "./testing": "./src/test/test-database.ts"

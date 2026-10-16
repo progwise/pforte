@@ -25,6 +25,15 @@ export const clients = pgTable(
     /** Where pforte sends back-channel logout tokens when a session ends. Null disables it. */
     backchannelLogoutUri: text(),
     backchannelLogoutSessionRequired: boolean().notNull().default(false),
+    /**
+     * Scopes the client may request. Ordinary applications get the OpenID scopes; admin clients
+     * (machines calling the admin API with the client_credentials grant) only `admin` or
+     * `directory`, so an application can never obtain an admin token.
+     */
+    scopes: text()
+      .array()
+      .notNull()
+      .default(sql`'{openid,offline_access,profile,email,phone}'`),
     allowedGrants: text()
       .array()
       .notNull()

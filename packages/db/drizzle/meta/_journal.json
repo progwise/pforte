@@ -22,6 +22,13 @@
       "when": 1792179916365,
       "tag": "0002_add_pkce_required",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792183805857,
+      "tag": "0003_add_client_scopes",
+      "breakpoints": true
     }
   ]
 }

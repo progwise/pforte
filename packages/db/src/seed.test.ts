@@ -18,12 +18,13 @@ describe.skipIf(!hasDatabase)('seed', () => {
     return Number(rows[0]!.count)
   }
 
-  it('creates one admin, two clients and ten users with claims', async () => {
+  it('creates one admin, four clients and ten users with claims', async () => {
     await seed(database.db)
 
     expect(await count('users', 'is_admin')).toBe(1)
     expect(await count('users', 'not is_admin')).toBe(10)
-    expect(await count('clients')).toBe(2)
+    expect(await count('clients')).toBe(4)
+    expect(await count('clients', `'admin' = any(scopes)`)).toBe(1)
     expect(await count('user_claims', `claim_type_key = 'partner_no'`)).toBeGreaterThanOrEqual(10)
   })
 

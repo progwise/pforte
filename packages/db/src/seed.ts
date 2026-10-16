@@ -21,7 +21,7 @@ const fictionalUsers = [
 
 /**
  * Fills an empty or existing database with fictional development data: one administrator,
- * three claim types, two clients and ten users with claims. Safe to run repeatedly.
+ * three claim types, four clients (two applications, two admin clients) and ten users with claims. Safe to run repeatedly.
  */
 export const seed = async (db: Database) => {
   if (process.env.NODE_ENV === 'production') {
@@ -57,6 +57,23 @@ export const seed = async (db: Database) => {
         secretHash,
         redirectUris: ['http://localhost:3500/callback'],
         postLogoutRedirectUris: ['http://localhost:3500/'],
+      },
+      // Machines for the admin API: client_credentials grant, admin scopes only.
+      {
+        clientId: 'demo-admin',
+        name: 'Demo admin client (admin scope)',
+        type: 'confidential',
+        secretHash,
+        allowedGrants: ['client_credentials'],
+        scopes: ['admin'],
+      },
+      {
+        clientId: 'demo-import',
+        name: 'Demo import client (directory scope: users and claims)',
+        type: 'confidential',
+        secretHash,
+        allowedGrants: ['client_credentials'],
+        scopes: ['directory'],
       },
     ])
     .onConflictDoNothing()
