@@ -24,8 +24,15 @@ Then:
 cp .env.example .env
 pnpm install
 pnpm dev:up        # Postgres from compose.dev.yaml, waits until it is healthy
+pnpm db:migrate    # create the tables
+pnpm db:seed       # fictional dev data: an admin, two clients, ten users with claims
 pnpm dev           # server on http://localhost:3300, loads .env
 ```
+
+The seed is safe to run again and refuses to run when `NODE_ENV=production`. All seeded users
+have the password `dev-password`; the confidential client `demo-backend` uses the secret
+`dev-secret`. After changing the schema in `packages/db/src/schema`, run `pnpm db:generate`
+and commit the new migration.
 
 Check it works: `curl http://localhost:3300/health` returns `{"status":"ok","databaseTime":"…"}`.
 Stop the database with `pnpm dev:down`.

@@ -10,14 +10,17 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "db:seed": "tsx --env-file-if-exists=../../.env src/seed-cli.ts"
   },
   "dependencies": {
+    "@node-rs/argon2": "2.2.2",
     "drizzle-orm": "0.45.4",
     "pg": "8.23.1"
   },
   "devDependencies": {
     "@types/pg": "8.23.1",
-    "drizzle-kit": "0.31.11"
+    "drizzle-kit": "0.31.11",
+    "tsx": "4.23.15"
   }
 }
