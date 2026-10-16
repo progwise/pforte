@@ -1,0 +1,106 @@
+import { createOidcPayloadStore, listClaimTypes } from '@progwise/pforte-db/oidc'
+import type { Database } from '@progwise/pforte-db'
+import { verify } from '@node-rs/argon2'
+import Provider, { type Configuration, type JWK } from 'oidc-provider'
+import type { Config } from '../config.js'
+import { createFindAccount, standardClaims } from './accounts.js'
+import { ClientAdapter, PayloadAdapter } from './adapter.js'
+
+export interface ProviderOptions {
+  config: Pick<Config, 'issuer' | 'cookieKeys' | 'jwks'>
+  db: Database
+}
+
+/**
+ * Every client is registered by an administrator and is first-party, so there is no consent
+ * screen: a grant for all requested scopes is created on the first login.
+ */
+const grantRequestedScopes: Configuration['loadExistingGrant'] = async (ctx) => {
+  const { client, session } = ctx.oidc
+  const grantId = ctx.oidc.result?.consent?.grantId || (client && session?.grantIdFor(client.clientId))
+  if (grantId) {
+    return ctx.oidc.provider.Grant.find(grantId)
+  }
+  if (!client || !session?.accountId) {
+    return undefined
+  }
+
+  const grant = new ctx.oidc.provider.Grant({ clientId: client.clientId, accountId: session.accountId })
+  grant.addOIDCScope(String(ctx.oidc.params?.scope ?? 'openid'))
+  await grant.save()
+  return grant
+}
+
+/**
+ * Builds a provider. The library fixes its list of known claims at construction, so claim types
+ * are read from the database here and the provider is rebuilt when they change (see
+ * `createProviderHolder`).
+ */
+export const createProvider = async ({ config, db }: ProviderOptions) => {
+  const claimTypeKeys = (await listClaimTypes(db)).map((claimType) => claimType.key)
+  const store = createOidcPayloadStore(db)
+
+  const provider = new Provider(config.issuer, {
+    adapter: (name: string) => (name === 'Client' ? new ClientAdapter(db) : new PayloadAdapter(name, store)),
+    cookies: { keys: config.cookieKeys },
+    jwks: { keys: config.jwks.keys as unknown as JWK[] },
+    claims: {
+      openid: [...standardClaims.openid, ...claimTypeKeys],
+      profile: [...standardClaims.profile],
+      phone: [...standardClaims.phone],
+    },
+    findAccount: createFindAccount(db),
+    responseTypes: ['code'],
+    // The library only supports S256 (plain was removed), and we require PKCE for every client.
+    pkce: { required: () => true },
+    features: {
+      devInteractions: { enabled: false },
+      rpInitiatedLogout: { enabled: true },
+      backchannelLogout: { enabled: true },
+    },
+    // A phone stays signed in: refresh tokens go to every client that may use them and
+    // outlive the browser session. They rotate on every use; reuse revokes the grant.
+    issueRefreshToken: async (_ctx, client) => client.grantTypeAllowed('refresh_token'),
+    expiresWithSession: async () => false,
+    rotateRefreshToken: () => true,
+    loadExistingGrant: grantRequestedScopes,
+    interactions: { url: (_ctx, interaction) => `/interaction/${interaction.uid}` },
+  })
+
+  // The provider derives its URLs from X-Forwarded-Proto / Host. Both are set from the issuer
+  // by the route handler (see routes.ts), so trusting them is safe.
+  provider.proxy = true
+
+  // Client secrets are stored as argon2 hashes, but the library compares plain values.
+  // For confidential clients the "secret" it holds is the hash.
+  provider.Client.prototype.compareClientSecret = async function compareClientSecret(actual: string) {
+    try {
+      return await verify(this.clientSecret as string, actual)
+    } catch {
+      return false
+    }
+  }
+
+  return provider
+}
+
+/**
+ * Holds the current provider so it can be replaced without restarting the server, e.g. after
+ * claim types changed. Sessions and tokens live in Postgres, so nobody is signed out.
+ */
+export const createProviderHolder = async (options: ProviderOptions) => {
+  let provider = await createProvider(options)
+  let callback = provider.callback()
+
+  return {
+    issuer: options.config.issuer,
+    current: () => provider,
+    handle: (...args: Parameters<typeof callback>) => callback(...args),
+    reload: async () => {
+      provider = await createProvider(options)
+      callback = provider.callback()
+    },
+  }
+}
+
+export type ProviderHolder = Awaited<ReturnType<typeof createProviderHolder>>
