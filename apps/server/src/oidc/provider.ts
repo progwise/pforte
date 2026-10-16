@@ -3,12 +3,15 @@ import type { Database } from '@progwise/pforte-db'
 import { verify } from '@node-rs/argon2'
 import Provider, { type Configuration, type JWK } from 'oidc-provider'
 import type { Config } from '../config.js'
+import { errorPage } from '../interaction/templates.js'
 import { createFindAccount, standardClaims } from './accounts.js'
 import { ClientAdapter, PayloadAdapter } from './adapter.js'
 
 export interface ProviderOptions {
-  config: Pick<Config, 'issuer' | 'cookieKeys' | 'jwks'>
+  config: Pick<Config, 'issuer' | 'cookieKeys' | 'jwks'> & Partial<Pick<Config, 'allowPrivateAddresses'>>
   db: Database
+  /** Called with unexpected errors raised while handling a request. */
+  onError?: (error: Error) => void
 }
 
 /**
@@ -36,7 +39,7 @@ const grantRequestedScopes: Configuration['loadExistingGrant'] = async (ctx) => 
  * are read from the database here and the provider is rebuilt when they change (see
  * `createProviderHolder`).
  */
-export const createProvider = async ({ config, db }: ProviderOptions) => {
+export const createProvider = async ({ config, db, onError }: ProviderOptions) => {
   const claimTypeKeys = (await listClaimTypes(db)).map((claimType) => claimType.key)
   const store = createOidcPayloadStore(db)
 
@@ -51,6 +54,22 @@ export const createProvider = async ({ config, db }: ProviderOptions) => {
     },
     findAccount: createFindAccount(db),
     responseTypes: ['code'],
+    // The library refuses to call loopback and private addresses (SSRF protection) by handing
+    // its fetch a guarded dispatcher. Where the administrator allows it, call without the guard.
+    ...(config.allowPrivateAddresses && {
+      fetch: (input: string | URL | Request, init?: RequestInit & { dispatcher?: unknown }) => {
+        const { dispatcher: _guard, ...options } = init ?? {}
+        return fetch(input, options)
+      },
+    }),
+    // Integrators read claims straight from the ID token, so it carries all claims for the
+    // granted scopes instead of leaving them to the userinfo endpoint.
+    conformIdTokenClaims: false,
+    renderError: async (ctx, out, error) => {
+      onError?.(error)
+      ctx.type = 'html'
+      ctx.body = errorPage('Something went wrong', out.error_description ?? out.error ?? 'The request could not be completed.')
+    },
     // The library only supports S256 (plain was removed), and we require PKCE for every client.
     pkce: { required: () => true },
     features: {
@@ -65,6 +84,23 @@ export const createProvider = async ({ config, db }: ProviderOptions) => {
     rotateRefreshToken: () => true,
     loadExistingGrant: grantRequestedScopes,
     interactions: { url: (_ctx, interaction) => `/interaction/${interaction.uid}` },
+  })
+
+  provider.on('server_error', (_ctx, error) => onError?.(error))
+
+  // Because `expiresWithSession` is false, the library marks every authorization as surviving
+  // logout and leaves its tokens alone. We want the opposite: signing out revokes the refresh
+  // tokens of that browser session (and only that one: other devices have their own grants).
+  // Clearing the flag lets the library's own logout revoke the grants. This relies on the
+  // library's session internals, so the flow tests cover it; recheck them on upgrades.
+  provider.on('authorization.success', (ctx) => {
+    const clientId = ctx.oidc.client?.clientId
+    const session = ctx.oidc.session as unknown as
+      | { authorizationFor(clientId: string): { persistsLogout?: boolean } }
+      | undefined
+    if (clientId && session) {
+      session.authorizationFor(clientId).persistsLogout = false
+    }
   })
 
   // The provider derives its URLs from X-Forwarded-Proto / Host. Both are set from the issuer

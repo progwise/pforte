@@ -63,6 +63,12 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...validEnv, JWKS: publicOnly })).toThrow(/not a private key/)
   })
 
+  it('blocks calls to private addresses unless explicitly allowed', () => {
+    expect(loadConfig(validEnv).allowPrivateAddresses).toBe(false)
+    expect(loadConfig({ ...validEnv, OUTBOUND_ALLOW_PRIVATE_ADDRESSES: 'true' }).allowPrivateAddresses).toBe(true)
+    expect(loadConfig({ ...validEnv, OUTBOUND_ALLOW_PRIVATE_ADDRESSES: 'yes' }).allowPrivateAddresses).toBe(false)
+  })
+
   it('rejects an invalid JWKS', () => {
     expect(() => loadConfig({ ...validEnv, JWKS: 'not json' })).toThrow(/JSON/)
   })

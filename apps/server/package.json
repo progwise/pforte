@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@fastify/formbody": "9.0.1",
     "@node-rs/argon2": "2.2.2",
     "@progwise/pforte-db": "workspace:*",
     "fastify": "5.12.7",

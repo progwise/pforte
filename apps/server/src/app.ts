@@ -1,12 +1,17 @@
 import Fastify from 'fastify'
+import type { InteractionDependencies } from './interaction/routes.js'
+import { interactionRoutes } from './interaction/routes.js'
 import { oidcRoutes } from './oidc/routes.js'
 import type { ProviderHolder } from './oidc/provider.js'
 
 export interface AppDependencies {
   /** Returns the current time as reported by the database. */
   getDatabaseTime: () => Promise<Date>
-  /** The OpenID Connect provider. Omitted in tests that do not need it. */
-  oidc?: Pick<ProviderHolder, 'handle' | 'issuer'>
+  /** The OpenID Connect provider and its login. Omitted in tests that do not need them. */
+  oidc?: {
+    provider: Pick<ProviderHolder, 'handle' | 'issuer' | 'current'>
+    authenticate: InteractionDependencies['authenticate']
+  }
 }
 
 export const buildApp = ({ getDatabaseTime, oidc }: AppDependencies) => {
@@ -23,7 +28,8 @@ export const buildApp = ({ getDatabaseTime, oidc }: AppDependencies) => {
   })
 
   if (oidc) {
-    void app.register(oidcRoutes(oidc))
+    void app.register(oidcRoutes(oidc.provider))
+    void app.register(interactionRoutes(oidc))
   }
 
   return app

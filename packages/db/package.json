@@ -7,6 +7,7 @@
     ".": "./src/index.ts",
     "./oidc": "./src/oidc.ts",
     "./seed": "./src/seed.ts",
+    "./users": "./src/users.ts",
     "./testing": "./src/test/test-database.ts"
   },
   "scripts": {

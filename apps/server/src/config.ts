@@ -15,6 +15,12 @@ export interface Config {
   cookieKeys: string[]
   /** Private signing keys. The first key signs tokens, all keys are published and verify (rotation). */
   jwks: { keys: Jwk[] }
+  /**
+   * Whether pforte may call applications on loopback or private network addresses (back-channel
+   * logout). Off by default, which protects against server-side request forgery; turn it on when
+   * the applications run on the organisation's own network.
+   */
+  allowPrivateAddresses: boolean
 }
 
 type Env = Record<string, string | undefined>
@@ -105,4 +111,5 @@ export const loadConfig = (env: Env = process.env): Config => ({
   issuer: parseIssuer(requireSecret(env, 'ISSUER')),
   cookieKeys: parseCookieKeys(requireSecret(env, 'COOKIE_KEYS', '; run pnpm dev:keys for development')),
   jwks: parseJwks(requireSecret(env, 'JWKS', '; run pnpm dev:keys for development')),
+  allowPrivateAddresses: env.OUTBOUND_ALLOW_PRIVATE_ADDRESSES === 'true',
 })
