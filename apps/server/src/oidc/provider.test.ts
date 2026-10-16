@@ -4,6 +4,7 @@ import { seed } from '@progwise/pforte-db/seed'
 import { createTestDatabase, hasDatabase } from '@progwise/pforte-db/testing'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { buildApp } from '../app.js'
+import { createAuthenticate } from '../auth/authenticate.js'
 import { createProviderHolder, type ProviderHolder } from './provider.js'
 
 const testJwks = () => {
@@ -23,7 +24,10 @@ describe.skipIf(!hasDatabase)('OpenID Connect provider', () => {
       config: { issuer: 'http://localhost:3300', cookieKeys: ['k'.repeat(40)], jwks: testJwks() },
       db: database.db,
     })
-    app = buildApp({ getDatabaseTime: () => getDatabaseTime(database.db), oidc })
+    app = buildApp({
+      getDatabaseTime: () => getDatabaseTime(database.db),
+      oidc: { provider: oidc, authenticate: await createAuthenticate(database.db) },
+    })
     await app.ready()
   })
 
