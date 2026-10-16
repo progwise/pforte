@@ -52,6 +52,9 @@ export const seedConformance = async (db: Database, { alias }: { alias: string }
       name: `OpenID conformance suite (${clientId})`,
       type: 'confidential' as const,
       secretHash: await hash(secret),
+      // The suite's Basic profile does not use PKCE, which OpenID Connect Core makes optional
+      // for confidential clients.
+      pkceRequired: false,
       redirectUris,
       postLogoutRedirectUris,
     }

@@ -87,6 +87,7 @@ export class ClientAdapter implements Adapter {
       post_logout_redirect_uris: client.postLogoutRedirectUris,
       grant_types: client.allowedGrants,
       response_types: ['code'],
+      pkce_required: client.type === 'public' || client.pkceRequired,
       token_endpoint_auth_method: confidential ? 'client_secret_basic' : 'none',
       // The stored value is an argon2 hash; compareClientSecret is overridden to verify against it.
       ...(confidential && client.secretHash ? { client_secret: client.secretHash } : {}),

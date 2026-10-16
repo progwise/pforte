@@ -69,6 +69,15 @@ release.
 5. Stop the tunnel and pforte when you are done. The conformance instance has no rate limiting
    yet, so do not leave it running.
 
+## PKCE and the suite's clients
+
+pforte requires PKCE (S256) for every client by default. The suite's Basic profile does not send
+PKCE, which OpenID Connect Core makes optional for confidential clients. The conformance seed
+therefore registers its two clients with `pkce_required = false`. This is a per-client setting
+that an administrator can also use for older applications that cannot send PKCE. Public clients
+always require PKCE; the database enforces it. A client that is not required to send a challenge
+but does is still verified.
+
 ## Reading results
 
 `PASSED`, `REVIEW`, `WARNING` and `SKIPPED` are acceptable; `FAILED` and `INTERRUPTED` are not.

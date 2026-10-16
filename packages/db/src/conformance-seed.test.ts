@@ -21,6 +21,7 @@ describe.skipIf(!hasDatabase)('conformance seed', () => {
     expect(rows.map((row) => row.client_id)).toEqual(['conformance-1', 'conformance-2'])
     for (const row of rows) {
       expect(row.type).toBe('confidential')
+      expect(row.pkce_required).toBe(false)
       expect(row.redirect_uris).toEqual([
         'https://www.certification.openid.net/test/a/progwise-pforte/callback',
         'https://www.certification.openid.net/test/a/progwise-pforte/callback?dummy1=lorem&dummy2=ipsum',

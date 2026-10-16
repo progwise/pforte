@@ -71,8 +71,13 @@ export const createProvider = async ({ config, db, onError }: ProviderOptions) =
       ctx.type = 'html'
       ctx.body = errorPage('Something went wrong', out.error_description ?? out.error ?? 'The request could not be completed.')
     },
-    // The library only supports S256 (plain was removed), and we require PKCE for every client.
-    pkce: { required: () => true },
+    // The library only supports S256 (plain was removed). PKCE is required unless an administrator
+    // switched it off for a confidential client (clients.pkce_required); public clients always need it.
+    // When a client sends a challenge anyway, the library verifies it.
+    extraClientMetadata: { properties: ['pkce_required'] },
+    pkce: {
+      required: (_ctx, client) => client.clientAuthMethod === 'none' || client.metadata().pkce_required !== false,
+    },
     features: {
       devInteractions: { enabled: false },
       rpInitiatedLogout: { enabled: true },

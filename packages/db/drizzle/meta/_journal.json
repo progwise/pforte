@@ -15,6 +15,13 @@
       "when": 1792167136690,
       "tag": "0001_add_backchannel_logout",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792179916365,
+      "tag": "0002_add_pkce_required",
+      "breakpoints": true
     }
   ]
 }

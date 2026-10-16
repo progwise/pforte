@@ -1,0 +1,2 @@
+ALTER TABLE "clients" ADD COLUMN "pkce_required" boolean DEFAULT true NOT NULL;--> statement-breakpoint
+ALTER TABLE "clients" ADD CONSTRAINT "clients_public_requires_pkce" CHECK ("clients"."type" = 'confidential' or "clients"."pkce_required");

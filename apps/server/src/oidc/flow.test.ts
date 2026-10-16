@@ -236,6 +236,57 @@ describe.skipIf(!hasDatabase)('authorization code flow', () => {
       expect(right.statusCode).toBe(200)
     })
 
+    describe('PKCE', () => {
+      const withoutPkce = (clientId: string, redirectUri: string) =>
+        new URLSearchParams({
+          client_id: clientId,
+          redirect_uri: redirectUri,
+          response_type: 'code',
+          scope: 'openid',
+          state: 'abc',
+        })
+
+      it('is required by default, also for confidential clients', async () => {
+        const response = await new Browser(app).request('GET', `/auth?${withoutPkce(BACKEND.clientId, BACKEND.redirectUri)}`)
+
+        expect(new URL(response.headers.location as string).searchParams.get('error')).toBe('invalid_request')
+      })
+
+      it('can be switched off for one confidential client, which then signs in without a challenge', async () => {
+        await database.pool.query(`update clients set pkce_required = false where client_id = 'demo-backend'`)
+        await provider.reload()
+        try {
+          const browser = new Browser(app)
+          const authorize = await browser.request('GET', `/auth?${withoutPkce(BACKEND.clientId, BACKEND.redirectUri)}`)
+          expect(authorize.headers.location).toMatch(/^\/interaction\//)
+
+          // The public client is unaffected.
+          const publicResponse = await new Browser(app).request('GET', `/auth?${withoutPkce(WEB.clientId, WEB.redirectUri)}`)
+          expect(new URL(publicResponse.headers.location as string).searchParams.get('error')).toBe('invalid_request')
+        } finally {
+          await database.pool.query(`update clients set pkce_required = true where client_id = 'demo-backend'`)
+          await provider.reload()
+        }
+      })
+
+      it('is still checked when a client that does not require it sends a challenge', async () => {
+        await database.pool.query(`update clients set pkce_required = false where client_id = 'demo-backend'`)
+        await provider.reload()
+        try {
+          const { browser, code } = await loginAs(BACKEND)
+          const response = await exchangeCode(browser, BACKEND, code, 'x'.repeat(43), {
+            authorization: basicAuth('demo-backend', 'dev-secret'),
+          })
+
+          expect(response.statusCode).toBe(400)
+          expect(response.json().error).toBe('invalid_grant')
+        } finally {
+          await database.pool.query(`update clients set pkce_required = true where client_id = 'demo-backend'`)
+          await provider.reload()
+        }
+      })
+    })
+
     it('accepts the secret in the Authorization header or in the request body', async () => {
       const inHeader = await loginAs(BACKEND)
       const viaHeader = await exchangeCode(inHeader.browser, BACKEND, inHeader.code, inHeader.verifier, {

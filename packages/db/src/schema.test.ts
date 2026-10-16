@@ -64,6 +64,22 @@ describe.skipIf(!hasDatabase)('data model', () => {
     expect(error.constraint).toBe('clients_confidential_has_secret')
   })
 
+  it('requires PKCE for public clients but lets a confidential client opt out', async () => {
+    const error = await rejection(
+      database.pool.query(
+        `insert into clients (client_id, name, type, pkce_required) values ('public-no-pkce', 'P', 'public', false)`,
+      ),
+    )
+    expect(error.constraint).toBe('clients_public_requires_pkce')
+
+    await database.pool.query(
+      `insert into clients (client_id, name, type, secret_hash, pkce_required)
+       values ('legacy', 'Legacy app', 'confidential', 'hash', false)`,
+    )
+    const { rows } = await database.pool.query(`select pkce_required from clients where client_id = 'legacy'`)
+    expect(rows[0].pkce_required).toBe(false)
+  })
+
   it('generates time-ordered UUID version 7 ids', async () => {
     const { rows } = await insertUser('uuid@example.com')
     expect(rows[0].id[14]).toBe('7')

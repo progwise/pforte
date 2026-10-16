@@ -14,6 +14,12 @@ export const clients = pgTable(
     type: clientType().notNull(),
     /** Hash of the client secret. Required for confidential clients. */
     secretHash: text(),
+    /**
+     * Whether authorization requests must carry a PKCE challenge. Always true for public
+     * clients. An administrator can switch it off for a confidential client that cannot send
+     * PKCE, e.g. an older application.
+     */
+    pkceRequired: boolean().notNull().default(true),
     redirectUris: text().array().notNull().default(sql`'{}'`),
     postLogoutRedirectUris: text().array().notNull().default(sql`'{}'`),
     /** Where pforte sends back-channel logout tokens when a session ends. Null disables it. */
@@ -34,6 +40,7 @@ export const clients = pgTable(
       'clients_confidential_has_secret',
       sql`${table.type} = 'public' or ${table.secretHash} is not null`,
     ),
+    check('clients_public_requires_pkce', sql`${table.type} = 'confidential' or ${table.pkceRequired}`),
   ],
 )
 
