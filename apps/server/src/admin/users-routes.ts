@@ -4,14 +4,18 @@ import {
   deleteUser,
   findUserByEmail,
   findUserById,
+  getUserClaims,
   listUsers,
   type RequestContext,
+  setUserClaims,
   updateUser,
 } from '@progwise/pforte-db/admin'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import type { ZodTypeProvider } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 import { type AdminAuth, hasScope } from './auth.js'
+import { answeringClaimsErrors } from './claims-errors.js'
+import { claimValues } from './claims-routes.js'
 import { problem, problemSchema } from './problem.js'
 
 const USER_STATUSES = ['created', 'active', 'locked', 'deactivated'] as const
@@ -230,47 +234,63 @@ export const usersRoutes =
           summary: 'Create or update a user by e-mail',
           description:
             'Idempotent, so an hourly import can call it blindly. Updates names, phone and language; never the ' +
-            'password, status or administrator rights. Writes nothing and says `unchanged` when nothing differs.',
+            'password, status or administrator rights. With `claims`, replaces the values of exactly the claim types ' +
+            'given (see PUT /users/{id}/claims). Writes nothing and says `unchanged` when nothing differs. ' +
+            'Everything happens in one transaction: if a claim is invalid, the user is not created or changed either.',
           params: z.object({ email }),
-          body: z.object({ firstName: name, lastName: name, phone: phone.nullable().optional(), language: language.optional() }),
+          body: z.object({
+            firstName: name,
+            lastName: name,
+            phone: phone.nullable().optional(),
+            language: language.optional(),
+            claims: claimValues.optional(),
+          }),
           response: {
-            200: z.object({ outcome: z.enum(['updated', 'unchanged']), user: userSchema }),
-            201: z.object({ outcome: z.literal('created'), user: userSchema }),
+            200: z.object({ outcome: z.enum(['updated', 'unchanged']), user: userSchema, claims: claimValues }),
+            201: z.object({ outcome: z.literal('created'), user: userSchema, claims: claimValues }),
             ...ERROR_RESPONSES,
           },
         },
       },
       async (request, reply) => {
         const { email: address } = request.params
-        const { phone: wantedPhone, ...rest } = request.body
+        const { phone: wantedPhone, claims: wantedClaims, ...rest } = request.body
         const profile = { ...rest, ...(wantedPhone !== undefined && { phone: wantedPhone }) }
 
         const upsert = () =>
           db.transaction(async (tx) => {
+            const context = requestContext(request)
             const existing = await findUserByEmail(tx, address)
-            if (!existing) {
-              const created = await createUser(tx, requestContext(request), {
-                email: address,
-                ...profile,
-                phone: profile.phone ?? undefined,
-              })
-              return { outcome: 'created' as const, user: created }
-            }
-            const { user, changed } = await updateUser(tx, requestContext(request), existing, profile)
-            return { outcome: changed ? ('updated' as const) : ('unchanged' as const), user }
+            const { user, profileChanged } = existing
+              ? await updateUser(tx, context, existing, profile).then((result) => ({
+                  user: result.user,
+                  profileChanged: result.changed,
+                }))
+              : {
+                  user: await createUser(tx, context, { email: address, ...profile, phone: profile.phone ?? undefined }),
+                  profileChanged: true,
+                }
+            const { changed: claimsChanged, claims } = wantedClaims
+              ? await setUserClaims(tx, context, user, wantedClaims)
+              : { changed: false, claims: await getUserClaims(tx, user.id) }
+
+            const outcome = !existing ? ('created' as const) : profileChanged || claimsChanged ? ('updated' as const) : ('unchanged' as const)
+            return { outcome, user, claims }
           })
 
-        let result
-        try {
-          result = await upsert()
-        } catch (error) {
-          // Two imports creating the same user at once: the loser finds it on the second try.
-          if (!isUniqueViolation(error)) throw error
-          result = await upsert()
-        }
+        return answeringClaimsErrors(reply, async () => {
+          let result
+          try {
+            result = await upsert()
+          } catch (error) {
+            // Two imports creating the same user at once: the loser finds it on the second try.
+            if (!isUniqueViolation(error)) throw error
+            result = await upsert()
+          }
 
-        const body = { outcome: result.outcome, user: toUserDto(result.user) }
-        return result.outcome === 'created' ? reply.code(201).send(body as never) : reply.send(body as never)
+          const body = { outcome: result.outcome, user: toUserDto(result.user), claims: result.claims }
+          return result.outcome === 'created' ? reply.code(201).send(body as never) : reply.send(body as never)
+        })
       },
     )
   }
