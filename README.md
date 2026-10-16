@@ -13,7 +13,7 @@ address, and that the identity provider is the system of record for who exists. 
 the other case:
 
 - The list of people comes from somewhere else: an ERP, a membership system, an HR tool.
-- Back-office staff create, lock and remove accounts. There is no public sign-up.
+- Back-office staff create, lock and remove accounts. Version 1 has no public sign-up.
 - Applications need more than "who is this": they need **claims** such as a customer number,
   a partner number or a branch code, and one person may hold several.
 - The second factor is a code by SMS or e-mail, not an authenticator app, because the users are
@@ -80,7 +80,7 @@ Operations
 ## Not planned
 
 SAML, LDAP, social logins, federation to other identity providers, multi-tenancy in the UI,
-passkeys. Some of these may come later when an application needs them; none are needed to ship.
+passkeys, public self-registration. Some of these may come later when an application needs them; none are needed to ship.
 
 ## How an application integrates
 
