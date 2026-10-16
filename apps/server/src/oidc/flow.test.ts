@@ -480,6 +480,48 @@ describe.skipIf(!hasDatabase)('authorization code flow', () => {
       expect(location(response).searchParams.get('code')).toBeTruthy()
     })
 
+    it('treats prompt=consent as already given, because there is no consent screen', async () => {
+      const { browser } = await loginAs(WEB)
+      const pair = pkcePair()
+
+      const authorize = await browser.request(
+        'GET',
+        `/auth?${query({ prompt: 'consent', scope: 'openid offline_access', code_challenge: pair.challenge })}`,
+      )
+      expect(location(authorize).pathname, 'the library asks for consent').toMatch(/^\/interaction\//)
+
+      const consent = await browser.request('GET', authorize.headers.location as string)
+      expect(consent.statusCode, 'pforte answers it without showing a page').toBe(303)
+      const resumed = await browser.request('GET', consent.headers.location as string)
+      const code = location(resumed).searchParams.get('code')
+      expect(code).toBeTruthy()
+
+      const tokens = (await exchangeCode(browser, WEB, code!, pair.verifier)).json()
+      expect(tokens.refresh_token).toBeTruthy()
+      expect(tokens.scope).toContain('offline_access')
+    })
+
+    it('asks for the password first and then accepts the consent prompt when both are needed', async () => {
+      const browser = new Browser(app)
+      const pair = pkcePair()
+      const authorize = await browser.request(
+        'GET',
+        `/auth?${query({ prompt: 'consent', scope: 'openid offline_access', code_challenge: pair.challenge })}`,
+      )
+      const interaction = authorize.headers.location as string
+      await browser.request('GET', interaction)
+
+      const login = await browser.request('POST', `${interaction}/login`, {
+        form: { email: 'anna.schmidt@example.com', password: 'dev-password' },
+      })
+      const afterLogin = await browser.request('GET', login.headers.location as string)
+      expect(location(afterLogin).pathname, 'consent is asked next').toMatch(/^\/interaction\//)
+      const consent = await browser.request('GET', afterLogin.headers.location as string)
+      const resumed = await browser.request('GET', consent.headers.location as string)
+
+      expect(location(resumed).searchParams.get('code')).toBeTruthy()
+    })
+
     it('shows the login_hint in the e-mail field', async () => {
       const browser = new Browser(app)
       const authorize = await browser.request('GET', `/auth?${query({ login_hint: 'hint@example.com' })}`)

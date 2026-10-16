@@ -45,6 +45,27 @@ export const interactionRoutes =
     app.get<{ Params: { uid: string } }>('/interaction/:uid', async (request, reply) => {
       const details = await interactionFor(request, reply, request.params.uid)
       if (!details) return expired(reply)
+
+      if (details.prompt.name === 'consent') {
+        // There is no consent screen: every client is first-party. The library still asks for
+        // consent when a client sends prompt=consent (which the OpenID spec prescribes together
+        // with offline_access) or asks for more than the grant covers. Grant what is missing.
+        const { Grant } = provider.current()
+        const missing = details.prompt.details as { missingOIDCScope?: string[]; missingOIDCClaims?: string[] }
+        const grant =
+          (details.grantId && (await Grant.find(details.grantId))) ||
+          new Grant({ accountId: details.session?.accountId, clientId: String(details.params.client_id) })
+        if (missing.missingOIDCScope) grant.addOIDCScope(missing.missingOIDCScope.join(' '))
+        if (missing.missingOIDCClaims) grant.addOIDCClaims(missing.missingOIDCClaims)
+
+        const grantId = await grant.save()
+        reply.hijack()
+        await provider
+          .current()
+          .interactionFinished(request.raw, reply.raw, { consent: { grantId } }, { mergeWithLastSubmission: true })
+        return
+      }
+
       if (details.prompt.name !== 'login') {
         request.log.warn({ prompt: details.prompt.name, reasons: details.prompt.reasons }, 'unsupported interaction prompt')
         return reply.code(400).type('text/html').send(errorPage('Not supported', 'This request cannot be completed.'))
