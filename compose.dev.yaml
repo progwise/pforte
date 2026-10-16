@@ -1,0 +1,21 @@
+# Local development only: services that `pnpm dev` needs. Run with `pnpm dev:up`.
+# Dev-only credentials; never use them in production.
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: pforte
+      POSTGRES_PASSWORD: pforte
+      POSTGRES_DB: pforte
+    ports:
+      - '${PFORTE_DB_PORT:-5432}:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U pforte -d pforte']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:
