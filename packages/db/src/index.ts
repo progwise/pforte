@@ -3,8 +3,15 @@ import { drizzle } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'
 import * as schema from './schema/index.js'
 
-export const createDb = (connectionString: string) => {
-  const pool = new Pool({ connectionString })
+export interface CreateDbOptions {
+  /** Called when an idle client fails, e.g. because the database restarted. Defaults to console.error. */
+  onError?: (error: Error) => void
+}
+
+export const createDb = (connectionString: string, { onError = console.error }: CreateDbOptions = {}) => {
+  const pool = new Pool({ connectionString, connectionTimeoutMillis: 5000 })
+  // Without a listener, an error on an idle client crashes the process.
+  pool.on('error', onError)
   const db = drizzle(pool, { schema })
   return { db, pool }
 }

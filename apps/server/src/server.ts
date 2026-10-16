@@ -3,7 +3,9 @@ import { buildApp } from './app.js'
 import { loadConfig } from './config.js'
 
 const config = loadConfig()
-const { db, pool } = createDb(config.databaseUrl)
+const { db, pool } = createDb(config.databaseUrl, {
+  onError: (error) => app.log.error(error, 'database pool error'),
+})
 
 const app = buildApp({ getDatabaseTime: () => getDatabaseTime(db) })
 
