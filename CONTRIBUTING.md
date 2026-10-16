@@ -23,6 +23,7 @@ Then:
 ```sh
 cp .env.example .env
 pnpm install
+pnpm dev:keys      # generates COOKIE_KEYS and JWKS in .env (keeps existing values)
 pnpm dev:up        # Postgres from compose.dev.yaml, waits until it is healthy
 pnpm db:migrate    # create the tables
 pnpm db:seed       # fictional dev data: an admin, two clients, ten users with claims
@@ -37,15 +38,19 @@ and commit the new migration.
 Check it works: `curl http://localhost:3300/health` returns `{"status":"ok","databaseTime":"…"}`.
 Stop the database with `pnpm dev:down`.
 
-### Port 5432 is already in use
+### Ports
 
-The compose file publishes Postgres on port 5432. If another Postgres already uses it, pick
-another host port and use the same one in `DATABASE_URL`:
+- The development Postgres is published on port **5433**, so it does not clash with a Postgres
+  you already run on the usual 5432. If 5433 is taken too, pick another host port and use the
+  same one in `DATABASE_URL`. Set both in `.env`; Docker Compose reads `PFORTE_DB_PORT` from there:
 
-```sh
-PFORTE_DB_PORT=5433 pnpm dev:up
-# in .env: DATABASE_URL=postgres://pforte:pforte@localhost:5433/pforte
-```
+  ```sh
+  # in .env
+  PFORTE_DB_PORT=5434
+  DATABASE_URL=postgres://pforte:pforte@localhost:5434/pforte
+  ```
+
+- `PORT` is a different setting: the port of the pforte server itself (default 3300).
 
 `compose.dev.yaml` is for local development only. Its credentials are public; never use them
 anywhere else.
@@ -73,6 +78,9 @@ pnpm build
 
 - No customer names, real data or secrets. Fixtures and seed data are fictional.
 - Configuration comes from environment variables. Do not add defaults for secrets.
+- Every secret (`DATABASE_URL`, `COOKIE_KEYS`, `JWKS`) can also be read from a file with the
+  `_FILE` suffix, e.g. `COOKIE_KEYS_FILE=/run/secrets/cookie_keys`, for mounted secrets. Setting
+  both the variable and the `_FILE` variant is an error.
 
 ## Security issues
 

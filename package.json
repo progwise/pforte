@@ -11,6 +11,7 @@
     "dev": "pnpm --filter @progwise/pforte-server dev",
     "dev:up": "docker compose -f compose.dev.yaml up -d --wait",
     "dev:down": "docker compose -f compose.dev.yaml down",
+    "dev:keys": "node scripts/dev-keys.mjs",
     "db:generate": "pnpm --filter @progwise/pforte-db db:generate",
     "db:migrate": "pnpm --filter @progwise/pforte-db db:migrate",
     "db:seed": "pnpm --filter @progwise/pforte-db db:seed",
