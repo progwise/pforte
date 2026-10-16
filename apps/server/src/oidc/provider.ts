@@ -16,19 +16,21 @@ export interface ProviderOptions {
 
 /**
  * Every client is registered by an administrator and is first-party, so there is no consent
- * screen: a grant for all requested scopes is created on the first login.
+ * screen: the grant covers whatever scopes the client asks for. It is created on the first
+ * login and extended when the same signed-in browser later asks for more scopes. Without the
+ * extension the library would ask for consent, which has no page here.
  */
 const grantRequestedScopes: Configuration['loadExistingGrant'] = async (ctx) => {
   const { client, session } = ctx.oidc
-  const grantId = ctx.oidc.result?.consent?.grantId || (client && session?.grantIdFor(client.clientId))
-  if (grantId) {
-    return ctx.oidc.provider.Grant.find(grantId)
-  }
   if (!client || !session?.accountId) {
     return undefined
   }
 
-  const grant = new ctx.oidc.provider.Grant({ clientId: client.clientId, accountId: session.accountId })
+  const grantId = ctx.oidc.result?.consent?.grantId || session.grantIdFor(client.clientId)
+  const grant =
+    (grantId && (await ctx.oidc.provider.Grant.find(grantId))) ||
+    new ctx.oidc.provider.Grant({ clientId: client.clientId, accountId: session.accountId })
+
   grant.addOIDCScope(String(ctx.oidc.params?.scope ?? 'openid'))
   await grant.save()
   return grant
@@ -42,10 +44,11 @@ const grantRequestedScopes: Configuration['loadExistingGrant'] = async (ctx) => 
 export const createProvider = async ({ config, db, onError }: ProviderOptions) => {
   const claimTypeKeys = (await listClaimTypes(db)).map((claimType) => claimType.key)
   const store = createOidcPayloadStore(db)
+  const secureIssuer = config.issuer.startsWith('https:')
 
   const provider = new Provider(config.issuer, {
     adapter: (name: string) => (name === 'Client' ? new ClientAdapter(db) : new PayloadAdapter(name, store)),
-    cookies: { keys: config.cookieKeys },
+    cookies: { keys: config.cookieKeys, ...(secureIssuer && { long: { sameSite: 'none' as const } }) },
     jwks: { keys: config.jwks.keys as unknown as JWK[] },
     claims: {
       openid: [...standardClaims.openid, ...claimTypeKeys],
@@ -55,6 +58,11 @@ export const createProvider = async ({ config, db, onError }: ProviderOptions) =
     },
     findAccount: createFindAccount(db),
     responseTypes: ['code'],
+    // OpenID Connect Core requires the authorization endpoint to accept POST as well as GET. A
+    // POST comes from the application's site, so the session cookie must be sent cross-site:
+    // SameSite=None, which browsers only accept together with Secure. That means https; for the
+    // http issuer of local development POST stays off.
+    enableHttpPostMethods: secureIssuer,
     // The library refuses to call loopback and private addresses (SSRF protection) by handing
     // its fetch a guarded dispatcher. Where the administrator allows it, call without the guard.
     ...(config.allowPrivateAddresses && {

@@ -69,6 +69,31 @@ release.
 5. Stop the tunnel and pforte when you are done. The conformance instance has no rate limiting
    yet, so do not leave it running.
 
+## Tips for a run
+
+- The suite runs all tests in the same browser, so pforte's session cookie stays between tests.
+  This is intended for most tests, but `oidcc-prompt-none-not-logged-in` asks you to remove the
+  provider's cookies first, and it fails with "expected an error but got a code" otherwise. Run
+  that test in a private window, or delete the cookies of `conformance.pforte.dev` before it.
+- Restart `pnpm conformance:start` after every code change; the instance does not reload itself.
+- Do not run other commands that stop or start pforte on port 3301 while a plan is running.
+- Test `oidcc-max-age-1` needs the previous sign-in to be more than a couple of seconds old
+  (the library compares whole seconds).
+
+## Accepted warnings
+
+Warnings are accepted for certification. These are known and intended:
+
+- `oidcc-scope-profile`, `oidcc-scope-email`: not all standard claims of the scope are returned.
+  pforte only returns claims it holds (for example no `picture`, `birthdate` or
+  `email_verified`); inventing values would be wrong.
+- `oidcc-scope-email`: the e-mail is also in the ID token. Claims for the granted scopes are
+  deliberately placed in the ID token so applications can read them without a second request.
+- `oidcc-claims-essential`: `name` is not in the userinfo, because pforte does not support the
+  `claims` request parameter (`claims_parameter_supported` is false) and ignores it, which is
+  allowed. Applications get claims through scopes.
+- `oidcc-scope-address`: skipped, because pforte does not support the `address` scope.
+
 ## PKCE and the suite's clients
 
 pforte requires PKCE (S256) for every client by default. The suite's Basic profile does not send
@@ -77,6 +102,14 @@ therefore registers its two clients with `pkce_required = false`. This is a per-
 that an administrator can also use for older applications that cannot send PKCE. Public clients
 always require PKCE; the database enforces it. A client that is not required to send a challenge
 but does is still verified.
+
+## The https requirement
+
+OpenID Connect requires the authorization endpoint to accept POST as well as GET. A POST comes
+from the application's site, so pforte's session cookie must be sent cross-site: `SameSite=None`,
+which browsers only accept together with `Secure`. pforte therefore enables POST and sets that
+cookie attribute when the issuer is an https URL, which every real deployment uses. For the http
+issuer of local development, POST stays off.
 
 ## Reading results
 

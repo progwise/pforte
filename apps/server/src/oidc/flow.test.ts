@@ -7,9 +7,12 @@ import { createTestDatabase, hasDatabase } from '@progwise/pforte-db/testing'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { buildApp } from '../app.js'
 import { createAuthenticate } from '../auth/authenticate.js'
-import { basicAuth, Browser, signIn, verifyJwt } from '../test/browser.js'
+import { basicAuth, Browser, pkcePair, signIn, verifyJwt } from '../test/browser.js'
 import { createProviderHolder, type ProviderHolder } from './provider.js'
 
+// https, like every real deployment: the session cookie is then SameSite=None; Secure, which
+// the POST binding of the authorization endpoint needs.
+const ISSUER = 'https://localhost:3300'
 const WEB = { clientId: 'demo-web', redirectUri: 'http://localhost:3400/callback' }
 const BACKEND = { clientId: 'demo-backend', redirectUri: 'http://localhost:3500/callback' }
 
@@ -34,7 +37,7 @@ describe.skipIf(!hasDatabase)('authorization code flow', () => {
       select id, 'branch_code', 'MUC' from users where email = 'anna.schmidt@example.com'`)
     provider = await createProviderHolder({
       config: {
-        issuer: 'http://localhost:3300',
+        issuer: ISSUER,
         cookieKeys: ['k'.repeat(40)],
         jwks: testJwks(),
         // The test receiver for back-channel logout runs on loopback.
@@ -119,7 +122,7 @@ describe.skipIf(!hasDatabase)('authorization code flow', () => {
     it('redirects with access_denied when the user cancels', async () => {
       const browser = new Browser(app)
       const authorize = await signIn(browser, { ...WEB, password: 'wrong' })
-      const interactionUrl = new URL(authorize.loginPage.raw.req.url as string, 'http://localhost:3300').pathname
+      const interactionUrl = new URL(authorize.loginPage.raw.req.url as string, ISSUER).pathname
       const cancelled = await browser.request('POST', `${interactionUrl}/abort`)
       const resumed = await browser.request('GET', cancelled.headers.location as string)
 
@@ -148,12 +151,21 @@ describe.skipIf(!hasDatabase)('authorization code flow', () => {
   })
 
   describe('public client with PKCE', () => {
+    it('sets the session cookie SameSite=None and Secure, which the POST binding needs', async () => {
+      const result = await signIn(new Browser(app), { ...WEB })
+
+      const cookies = [result.resumed!.headers['set-cookie']].flat().join('\n').toLowerCase()
+      expect(cookies).toMatch(/_session=[^;]+;[^\n]*samesite=none/)
+      expect(cookies).toContain('secure')
+      expect(cookies).toContain('httponly')
+    })
+
     it('returns the code to the redirect URI with the state and issuer', async () => {
       const { callback, state } = await loginAs(WEB)
 
       expect(callback.origin + callback.pathname).toBe(WEB.redirectUri)
       expect(callback.searchParams.get('state')).toBe(state)
-      expect(callback.searchParams.get('iss')).toBe('http://localhost:3300')
+      expect(callback.searchParams.get('iss')).toBe(ISSUER)
     })
 
     it('exchanges the code for a signed ID token with the user and the allowed claims', async () => {
@@ -169,7 +181,7 @@ describe.skipIf(!hasDatabase)('authorization code flow', () => {
       expect(valid).toBe(true)
       expect(header).toMatchObject({ alg: 'RS256', kid: 'test-key' })
       expect(claims).toMatchObject({
-        iss: 'http://localhost:3300',
+        iss: ISSUER,
         aud: 'demo-web',
         nonce,
         email: 'anna.schmidt@example.com',
@@ -330,6 +342,200 @@ describe.skipIf(!hasDatabase)('authorization code flow', () => {
       const { claims } = await verifyJwt(app, tokens.id_token)
 
       expect(claims).toMatchObject({ partner_no: ['00892'], customer_no: '10001', branch_code: 'MUC' })
+    })
+  })
+
+  describe('scopes', () => {
+    const userinfoFor = async (scope: string) => {
+      const { browser, code, verifier } = await loginAs(BACKEND, scope)
+      const tokens = (
+        await exchangeCode(browser, BACKEND, code, verifier, { authorization: basicAuth('demo-backend', 'dev-secret') })
+      ).json()
+      const userinfo = await browser.request('GET', '/me', { headers: { authorization: `Bearer ${tokens.access_token}` } })
+      return { tokens, userinfo: userinfo.json(), status: userinfo.statusCode }
+    }
+
+    it.each([
+      ['profile', ['name', 'given_name', 'family_name', 'locale']],
+      ['email', ['email']],
+      ['phone', ['phone_number', 'phone_number_verified']],
+    ])('returns the %s claims at the userinfo endpoint when that scope is requested', async (scope, claims) => {
+      const { userinfo, status, tokens } = await userinfoFor(`openid ${scope}`)
+
+      expect(status).toBe(200)
+      for (const claim of claims) expect(userinfo).toHaveProperty(claim)
+      expect(tokens.scope).toContain(scope)
+    })
+
+    it('does not return profile or phone claims for a plain openid request', async () => {
+      const { userinfo } = await userinfoFor('openid')
+
+      expect(userinfo).not.toHaveProperty('name')
+      expect(userinfo).not.toHaveProperty('phone_number')
+      expect(userinfo).toHaveProperty('email')
+    })
+
+    it('grants an additional scope to a browser that is already signed in, without asking again', async () => {
+      const browser = new Browser(app)
+      const first = await signIn(browser, { ...WEB, scope: 'openid' })
+      expect(first.code).toBeTruthy()
+
+      // Same browser, same session, now asking for more scopes: no login page, no consent page.
+      const { verifier, challenge } = pkcePair()
+      const query = new URLSearchParams({
+        client_id: WEB.clientId,
+        redirect_uri: WEB.redirectUri,
+        response_type: 'code',
+        scope: 'openid profile phone',
+        state: 'again',
+        code_challenge: challenge,
+        code_challenge_method: 'S256',
+      })
+      const response = await browser.request('GET', `/auth?${query}`)
+
+      const location = new URL(response.headers.location as string, ISSUER)
+      expect(location.pathname, 'should go straight back to the application').toBe('/callback')
+      const code = location.searchParams.get('code')!
+      const tokens = (await exchangeCode(browser, WEB, code, verifier)).json()
+      expect(tokens.scope).toContain('profile')
+      const userinfo = await browser.request('GET', '/me', { headers: { authorization: `Bearer ${tokens.access_token}` } })
+      expect(userinfo.json()).toHaveProperty('name')
+      expect(userinfo.json()).toHaveProperty('phone_number')
+    })
+
+    it('ignores a scope it does not support instead of failing, as the suite requests all scopes at once', async () => {
+      const { userinfo, tokens, status } = await userinfoFor('openid profile email address phone')
+
+      expect(status).toBe(200)
+      expect(tokens.scope).not.toContain('address')
+      expect(userinfo).toHaveProperty('name')
+      expect(userinfo).toHaveProperty('phone_number')
+      expect(userinfo).not.toHaveProperty('address')
+    })
+  })
+
+  describe('authorization request parameters', () => {
+    const query = (extra: Record<string, string> = {}, client = WEB) =>
+      new URLSearchParams({
+        client_id: client.clientId,
+        redirect_uri: client.redirectUri,
+        response_type: 'code',
+        scope: 'openid',
+        state: 's1',
+        nonce: 'n1',
+        code_challenge: pkcePair().challenge,
+        code_challenge_method: 'S256',
+        ...extra,
+      })
+    const location = (response: { headers: Record<string, unknown> }) =>
+      new URL(response.headers.location as string, ISSUER)
+
+    it('prompt=none without a session answers login_required instead of showing a page', async () => {
+      const response = await new Browser(app).request('GET', `/auth?${query({ prompt: 'none' })}`)
+
+      const target = location(response)
+      expect(target.origin + target.pathname).toBe(WEB.redirectUri)
+      expect(target.searchParams.get('error')).toBe('login_required')
+      expect(target.searchParams.get('state')).toBe('s1')
+      expect(target.searchParams.get('code')).toBeNull()
+    })
+
+    it('prompt=none with a session returns a code without asking again', async () => {
+      const { browser } = await loginAs(WEB)
+
+      const response = await browser.request('GET', `/auth?${query({ prompt: 'none' })}`)
+
+      expect(location(response).searchParams.get('code')).toBeTruthy()
+    })
+
+    it('prompt=login asks for the password again even though a session exists', async () => {
+      const { browser } = await loginAs(WEB)
+
+      const response = await browser.request('GET', `/auth?${query({ prompt: 'login' })}`)
+
+      expect(location(response).pathname).toMatch(/^\/interaction\//)
+    })
+
+    it('max_age makes an old session sign in again and puts auth_time in the ID token', async () => {
+      const { browser } = await loginAs(WEB)
+      await new Promise((resolve) => setTimeout(resolve, 2200))
+
+      const stale = await browser.request('GET', `/auth?${query({ max_age: '1' })}`)
+      expect(location(stale).pathname, 'a session older than max_age must not be reused').toMatch(/^\/interaction\//)
+
+      const verifierPair = pkcePair()
+      const fresh = await browser.request('GET', `/auth?${query({ max_age: '10000', code_challenge: verifierPair.challenge })}`)
+      const code = location(fresh).searchParams.get('code')
+      expect(code).toBeTruthy()
+      const tokens = (await exchangeCode(browser, WEB, code!, verifierPair.verifier)).json()
+      expect((await verifyJwt(app, tokens.id_token)).claims.auth_time).toEqual(expect.any(Number))
+    })
+
+    it('accepts an id_token_hint from an earlier sign-in', async () => {
+      const first = await loginAs(WEB)
+      const tokens = (await exchangeCode(first.browser, WEB, first.code, first.verifier)).json()
+
+      const response = await first.browser.request('GET', `/auth?${query({ id_token_hint: tokens.id_token })}`)
+
+      expect(location(response).searchParams.get('code')).toBeTruthy()
+    })
+
+    it('shows the login_hint in the e-mail field', async () => {
+      const browser = new Browser(app)
+      const authorize = await browser.request('GET', `/auth?${query({ login_hint: 'hint@example.com' })}`)
+
+      const page = await browser.request('GET', authorize.headers.location as string)
+
+      expect(page.body).toContain('value="hint@example.com"')
+    })
+
+    it.each([
+      ['an unknown parameter', { surprise: 'yes' }],
+      ['display=page', { display: 'page' }],
+      ['display=popup', { display: 'popup' }],
+      ['ui_locales', { ui_locales: 'de en' }],
+      ['claims_locales', { claims_locales: 'de en' }],
+      ['acr_values', { acr_values: 'urn:example:acr' }],
+    ])('ignores %s instead of failing', async (_name, extra) => {
+      const { browser } = await loginAs(WEB)
+
+      const response = await browser.request('GET', `/auth?${query(extra)}`)
+
+      expect(location(response).searchParams.get('code')).toBeTruthy()
+    })
+
+    it('does not redirect to a redirect URI that is not registered', async () => {
+      const response = await new Browser(app).request(
+        'GET',
+        `/auth?${query({ redirect_uri: 'https://evil.example.com/callback' })}`,
+      )
+
+      expect(response.statusCode).toBeGreaterThanOrEqual(400)
+      expect(response.headers.location ?? '').not.toContain('evil.example.com')
+    })
+
+    it('also accepts the authorization request as an HTTP POST, as OpenID Connect requires', async () => {
+      const response = await new Browser(app).request('POST', '/auth', { form: Object.fromEntries(query()) })
+
+      expect(response.statusCode).toBe(303)
+      expect(location(response).pathname).toMatch(/^\/interaction\//)
+    })
+
+    it('answers a request object with request_not_supported', async () => {
+      const response = await new Browser(app).request('GET', `/auth?${query({ request: 'eyJhbGciOiJub25lIn0.e30.' })}`)
+
+      expect(location(response).searchParams.get('error')).toBe('request_not_supported')
+    })
+
+    it('revokes the tokens of a code that is used twice', async () => {
+      const { browser, code, verifier } = await loginAs(WEB)
+      const tokens = (await exchangeCode(browser, WEB, code, verifier)).json()
+
+      const replay = await exchangeCode(browser, WEB, code, verifier)
+      expect(replay.statusCode).toBe(400)
+
+      const userinfo = await browser.request('GET', '/me', { headers: { authorization: `Bearer ${tokens.access_token}` } })
+      expect(userinfo.statusCode, 'the access token from the first use should be revoked').toBe(401)
     })
   })
 
@@ -521,7 +727,7 @@ describe.skipIf(!hasDatabase)('authorization code flow', () => {
         const logoutToken = new URLSearchParams(received.at(-1)).get('logout_token')!
         const { valid, claims } = await verifyJwt(app, logoutToken)
         expect(valid).toBe(true)
-        expect(claims).toMatchObject({ iss: 'http://localhost:3300', aud: 'demo-backend' })
+        expect(claims).toMatchObject({ iss: ISSUER, aud: 'demo-backend' })
         expect(claims.events).toHaveProperty('http://schemas.openid.net/event/backchannel-logout')
         expect(claims.sid).toBeTruthy()
       })

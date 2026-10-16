@@ -46,13 +46,22 @@ export const interactionRoutes =
       const details = await interactionFor(request, reply, request.params.uid)
       if (!details) return expired(reply)
       if (details.prompt.name !== 'login') {
+        request.log.warn({ prompt: details.prompt.name, reasons: details.prompt.reasons }, 'unsupported interaction prompt')
         return reply.code(400).type('text/html').send(errorPage('Not supported', 'This request cannot be completed.'))
       }
 
       const client = await provider.current().Client.find(String(details.params.client_id))
+      const loginHint = details.params.login_hint
       return reply
         .type('text/html')
-        .send(loginPage({ uid: details.uid, clientName: client?.clientName }))
+        .send(
+          loginPage({
+            uid: details.uid,
+            clientName: client?.clientName,
+            // The application may suggest who is signing in (OpenID Connect `login_hint`).
+            email: typeof loginHint === 'string' ? loginHint : '',
+          }),
+        )
     })
 
     app.post<{ Params: { uid: string }; Body: { email?: unknown; password?: unknown } }>(
