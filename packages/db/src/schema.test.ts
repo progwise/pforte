@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { schema } from './index.js'
+import { deleteExpiredOidcPayloads, schema } from './index.js'
 import { createTestDatabase, hasDatabase, rejection } from './test/test-database.js'
 
 describe.skipIf(!hasDatabase)('data model', () => {
@@ -93,6 +93,20 @@ describe.skipIf(!hasDatabase)('data model', () => {
     await database.pool.query(`delete from users where id = $1`, [rows[0].id])
     const events = await database.pool.query(`select 1 from audit_events where target_id = $1`, [rows[0].id])
     expect(events.rowCount).toBe(1)
+  })
+
+  it('deletes only expired OIDC payloads', async () => {
+    await database.db.insert(schema.oidcPayloads).values([
+      { id: 'expired', type: 1, payload: {}, expiresAt: new Date(Date.now() - 60_000) },
+      { id: 'valid', type: 1, payload: {}, expiresAt: new Date(Date.now() + 60_000) },
+      { id: 'no-expiry', type: 1, payload: {} },
+    ])
+
+    const deleted = await deleteExpiredOidcPayloads(database.db)
+
+    const { rows } = await database.pool.query<{ id: string }>(`select id from oidc_payloads order by id`)
+    expect(deleted).toBe(1)
+    expect(rows.map((row) => row.id)).toEqual(['no-expiry', 'valid'])
   })
 
   it('has created_at and updated_at on every table except audit_events', async () => {

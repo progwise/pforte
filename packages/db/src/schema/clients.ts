@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { check, integer, pgEnum, pgTable, primaryKey, text } from 'drizzle-orm/pg-core'
+import { boolean, check, integer, pgEnum, pgTable, primaryKey, text } from 'drizzle-orm/pg-core'
 import { claimTypes } from './claims.js'
 import { timestamps } from './columns.js'
 
@@ -16,6 +16,9 @@ export const clients = pgTable(
     secretHash: text(),
     redirectUris: text().array().notNull().default(sql`'{}'`),
     postLogoutRedirectUris: text().array().notNull().default(sql`'{}'`),
+    /** Where pforte sends back-channel logout tokens when a session ends. Null disables it. */
+    backchannelLogoutUri: text(),
+    backchannelLogoutSessionRequired: boolean().notNull().default(false),
     allowedGrants: text()
       .array()
       .notNull()
