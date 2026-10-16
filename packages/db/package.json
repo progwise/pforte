@@ -15,7 +15,8 @@
     "test": "vitest run --passWithNoTests",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:seed": "tsx --env-file-if-exists=../../.env src/seed-cli.ts"
+    "db:seed": "tsx --env-file-if-exists=../../.env src/seed-cli.ts",
+    "db:seed:conformance": "tsx --env-file=../../.env.conformance src/conformance-seed-cli.ts"
   },
   "dependencies": {
     "@node-rs/argon2": "2.2.2",

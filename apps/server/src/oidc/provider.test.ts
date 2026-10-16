@@ -53,6 +53,14 @@ describe.skipIf(!hasDatabase)('OpenID Connect provider', () => {
     expect(document.end_session_endpoint).toBe('http://localhost:3300/session/end')
   })
 
+  it('supports the standard scopes', async () => {
+    const document = await discovery()
+
+    expect(document.scopes_supported).toEqual(
+      expect.arrayContaining(['openid', 'offline_access', 'profile', 'email', 'phone']),
+    )
+  })
+
   it('offers only the authorization code flow with S256 PKCE', async () => {
     const document = await discovery()
 

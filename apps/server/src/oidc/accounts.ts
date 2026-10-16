@@ -5,6 +5,8 @@ import type { FindAccount } from 'oidc-provider'
 /** Standard OpenID claims kept per scope. Claim types from the database are added to `openid`. */
 export const standardClaims = {
   openid: ['sub', 'email'],
+  // Clients always get the e-mail with `openid`; the scope exists so that requesting it is valid.
+  email: ['email'],
   profile: ['name', 'given_name', 'family_name', 'locale'],
   phone: ['phone_number', 'phone_number_verified'],
 } as const

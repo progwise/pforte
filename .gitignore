@@ -4,5 +4,6 @@ coverage/
 .env
 .env.*
 !.env.example
+!.env.conformance.example
 *.log
 .DS_Store

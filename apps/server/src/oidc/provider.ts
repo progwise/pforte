@@ -49,6 +49,7 @@ export const createProvider = async ({ config, db, onError }: ProviderOptions) =
     jwks: { keys: config.jwks.keys as unknown as JWK[] },
     claims: {
       openid: [...standardClaims.openid, ...claimTypeKeys],
+      email: [...standardClaims.email],
       profile: [...standardClaims.profile],
       phone: [...standardClaims.phone],
     },

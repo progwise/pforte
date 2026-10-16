@@ -236,6 +236,40 @@ describe.skipIf(!hasDatabase)('authorization code flow', () => {
       expect(right.statusCode).toBe(200)
     })
 
+    it('accepts the secret in the Authorization header or in the request body', async () => {
+      const inHeader = await loginAs(BACKEND)
+      const viaHeader = await exchangeCode(inHeader.browser, BACKEND, inHeader.code, inHeader.verifier, {
+        authorization: basicAuth('demo-backend', 'dev-secret'),
+      })
+      expect(viaHeader.statusCode).toBe(200)
+
+      const inBody = await loginAs(BACKEND)
+      const viaBody = await inBody.browser.request('POST', '/token', {
+        form: {
+          grant_type: 'authorization_code',
+          code: inBody.code,
+          redirect_uri: BACKEND.redirectUri,
+          client_id: BACKEND.clientId,
+          client_secret: 'dev-secret',
+          code_verifier: inBody.verifier,
+        },
+      })
+      expect(viaBody.statusCode).toBe(200)
+
+      const wrong = await loginAs(BACKEND)
+      const refused = await wrong.browser.request('POST', '/token', {
+        form: {
+          grant_type: 'authorization_code',
+          code: wrong.code,
+          redirect_uri: BACKEND.redirectUri,
+          client_id: BACKEND.clientId,
+          client_secret: 'wrong',
+          code_verifier: wrong.verifier,
+        },
+      })
+      expect(refused.statusCode).toBe(401)
+    })
+
     it('receives all claim types allowed for it, single-valued ones as strings', async () => {
       const { browser, code, verifier } = await loginAs(BACKEND)
       const tokens = (

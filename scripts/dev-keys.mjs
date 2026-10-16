@@ -1,5 +1,7 @@
 // Fills COOKIE_KEYS and JWKS in .env with freshly generated development keys.
-// Existing values are kept unless --force is given. Usage: node scripts/dev-keys.mjs [--force] [--file <path>]
+// Existing values are kept unless --force is given.
+// Usage: node scripts/dev-keys.mjs [--force] [--file <path>] [--example <path>]
+// A missing --file is created from --example (default .env.example).
 import { generateKeyPairSync, randomBytes } from 'node:crypto'
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -8,11 +10,13 @@ const args = process.argv.slice(2)
 const force = args.includes('--force')
 const fileIndex = args.indexOf('--file')
 const root = resolve(import.meta.dirname, '..')
-const envFile = fileIndex === -1 ? resolve(root, '.env') : resolve(args[fileIndex + 1])
+const exampleIndex = args.indexOf('--example')
+const envFile = fileIndex === -1 ? resolve(root, '.env') : resolve(root, args[fileIndex + 1])
+const exampleFile = exampleIndex === -1 ? resolve(root, '.env.example') : resolve(root, args[exampleIndex + 1])
 
 if (!existsSync(envFile)) {
-  copyFileSync(resolve(root, '.env.example'), envFile)
-  console.log(`Created ${envFile} from .env.example`)
+  copyFileSync(exampleFile, envFile)
+  console.log(`Created ${envFile} from ${exampleFile}`)
 }
 
 const generateJwks = () => {
