@@ -12,11 +12,12 @@ describe('development notifier', () => {
     const notifier = createLogNotifier({ log: (message) => lines.push(message), production: false })
 
     await notifier.sendActivationLink(user, link)
-    await notifier.requestPasswordReset(user)
+    await notifier.sendResetCode(user, { code: '654321', expiresAt: new Date('2030-01-01T10:10:00Z'), url: 'https://id.example.com/reset/code?email=ada%40example.com' })
 
     expect(lines[0]).toContain('ada@example.com')
     expect(lines[0]).toContain(link.url)
-    expect(lines[1]).toContain('Password reset requested for ada@example.com')
+    expect(lines[1]).toContain('Password reset code for ada@example.com')
+    expect(lines[1]).toContain('654321')
   })
 
   it('refuses in production and keeps secrets out of the log', async () => {
@@ -24,7 +25,7 @@ describe('development notifier', () => {
     const notifier = createLogNotifier({ log: (message) => lines.push(message), production: true })
 
     await expect(notifier.sendActivationLink(user, link)).rejects.toBeInstanceOf(NotifierUnavailableError)
-    await expect(notifier.requestPasswordReset(user)).rejects.toBeInstanceOf(NotifierUnavailableError)
+    await expect(notifier.sendResetCode(user, { code: '1', expiresAt: new Date(), url: 'x' })).rejects.toBeInstanceOf(NotifierUnavailableError)
     expect(lines).toEqual([])
   })
 })
@@ -71,8 +72,15 @@ describe('mail notifier', () => {
     expect(sent[0]!.text).toContain('72 hours')
   })
 
-  it('does not pretend to reset passwords yet', async () => {
-    await expect(notifier.requestPasswordReset(user)).rejects.toBeInstanceOf(NotifierUnavailableError)
+  it('sends the password reset code with the page to enter it, in the language of the user', async () => {
+    sent.length = 0
+    const reset = { code: '654321', expiresAt: new Date(Date.now() + 10 * 60_000), url: 'https://id.example.com/reset/code?email=ada%40example.com' }
+    await notifier.sendResetCode(user, reset)
+    await notifier.sendResetCode({ ...user, language: 'de' }, reset)
+    expect(sent[0]).toMatchObject({ to: 'ada@example.com', subject: 'Choose a new password for Example Inc.' })
+    expect(sent[0]!.text).toContain('654321')
+    expect(sent[0]!.text).toContain(reset.url)
+    expect(sent[1]!.subject).toBe('Neues Passwort für Example Inc.')
   })
 })
 

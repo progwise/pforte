@@ -1,0 +1,327 @@
+import { hasDatabase } from '@progwise/pforte-db/testing'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { NotifierUnavailableError } from '../notifications/notifier.js'
+import { type AdminHarness, createAdminHarness } from '../test/admin-harness.js'
+import { Browser, signIn, verifyJwt } from '../test/browser.js'
+
+const WEB = { clientId: 'demo-web', redirectUri: 'http://localhost:3400/callback' }
+const GOOD = 'correct horse battery'
+
+describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
+  let h: AdminHarness
+  let counter = 0
+
+  beforeAll(async () => {
+    h = await createAdminHarness()
+  })
+
+  afterAll(async () => {
+    await h?.close()
+  })
+
+  beforeEach(() => {
+    h.notifications.length = 0
+    h.notifier.failWith = undefined
+  })
+
+  const browser = () => new Browser(h.app)
+  const form = (method: 'GET' | 'POST', url: string, fields?: Record<string, string>) => browser().request(method, url, fields ? { form: fields } : {})
+  const row = async (email: string) => (await h.database.pool.query(`select * from users where email = $1`, [email])).rows[0]
+  /** The page with the address left out, so pages for different addresses can be compared. */
+  const anonymous = (body: string, email: string) => body.replaceAll(encodeURIComponent(email), 'EMAIL').replaceAll(email, 'EMAIL')
+  const tokenOf = (url: string) => new URL(url).searchParams.get('token')!
+
+  /** A created user with an activation link: what an administrator and the mail would produce. */
+  const invited = async () => {
+    const email = `account${++counter}@example.com`
+    const created = (await h.api('POST', '/users', { body: { email, firstName: 'Ada', lastName: 'Lovelace' } })).json()
+    const activate = await h.api('POST', `/users/${created.id}/activate`)
+    expect(activate.statusCode, activate.body).toBe(200)
+    const token = tokenOf(h.notifications.findLast((n) => n.kind === 'activation')!.url!)
+    h.notifications.length = 0
+    return { email, id: created.id as string, token }
+  }
+
+  /** A user who has activated the account with a password. */
+  const activated = async (password = GOOD) => {
+    const user = await invited()
+    const done = await form('POST', '/activate', { token: user.token, password, confirm: password })
+    expect(done.statusCode, done.body).toBe(200)
+    h.notifications.length = 0
+    return { ...user, password }
+  }
+
+  const requestReset = (email: string) => form('POST', '/reset', { email })
+  const resetCode = (email: string) => h.lastResetCode(email)!
+  const submitReset = (email: string, code: string, password = 'a brand new password', confirm = password) =>
+    form('POST', '/reset/code', { email, code, password, confirm })
+
+  describe('activation', () => {
+    it('shows the form for a valid link and refuses anything else', async () => {
+      const { token } = await invited()
+      const page = await form('GET', `/activate?token=${token}`)
+      expect(page.statusCode).toBe(200)
+      expect(page.body).toContain('Choose your password')
+      expect(page.body).toContain(`name="token" value="${token}"`)
+
+      expect((await form('GET', '/activate')).statusCode).toBe(400)
+      expect((await form('GET', '/activate?token=nonsense')).statusCode).toBe(400)
+    })
+
+    it('does not cache the page or send the link along as referrer', async () => {
+      const { token } = await invited()
+      const page = await form('GET', `/activate?token=${token}`)
+      expect(page.headers['referrer-policy']).toBe('no-referrer')
+      expect(page.headers['cache-control']).toBe('no-store')
+      expect(page.headers['content-security-policy']).toContain("default-src 'none'")
+    })
+
+    it('sets the first password, activates, verifies the e-mail, and lets the user sign in', async () => {
+      const { email, token } = await invited()
+      const done = await form('POST', '/activate', { token, password: GOOD, confirm: GOOD })
+
+      expect(done.statusCode).toBe(200)
+      expect(done.body).toContain('Your account is active')
+      const user = await row(email)
+      expect(user).toMatchObject({ status: 'active', activation_token_hash: null })
+      expect(user.email_verified_at).not.toBeNull()
+      expect(user.password_hash).toMatch(/^\$argon2/)
+      expect(user.password_hash).not.toContain(GOOD)
+
+      const signedIn = await signIn(new Browser(h.app), { ...WEB, email, password: GOOD })
+      expect(signedIn.code).toBeTruthy()
+    })
+
+    it('keeps the link usable after a mistake, and says what is wrong', async () => {
+      const { email, token } = await invited()
+      const short = await form('POST', '/activate', { token, password: 'short', confirm: 'short' })
+      expect(short.statusCode).toBe(422)
+      expect(short.body).toContain('at least 10 characters')
+
+      const different = await form('POST', '/activate', { token, password: GOOD, confirm: `${GOOD}!` })
+      expect(different.statusCode).toBe(422)
+      expect(different.body).toContain('not the same')
+
+      const likeEmail = await form('POST', '/activate', { token, password: email, confirm: email })
+      expect(likeEmail.body).toContain('must not be your e-mail address')
+
+      expect((await form('POST', '/activate', { token, password: GOOD, confirm: GOOD })).statusCode).toBe(200)
+    })
+
+    it('works once', async () => {
+      const { token } = await invited()
+      await form('POST', '/activate', { token, password: GOOD, confirm: GOOD })
+      const again = await form('POST', '/activate', { token, password: 'another long password', confirm: 'another long password' })
+      expect(again.statusCode).toBe(400)
+      expect((await form('GET', `/activate?token=${token}`)).statusCode).toBe(400)
+    })
+
+    it('refuses an expired link, and a link replaced by a newer one', async () => {
+      const expired = await invited()
+      await h.database.pool.query(`update users set activation_expires_at = now() - interval '1 minute' where id = $1`, [expired.id])
+      expect((await form('POST', '/activate', { token: expired.token, password: GOOD, confirm: GOOD })).statusCode).toBe(400)
+
+      const replaced = await invited()
+      await h.api('POST', `/users/${replaced.id}/activate`)
+      expect((await form('GET', `/activate?token=${replaced.token}`)).statusCode).toBe(400)
+    })
+
+    it('refuses the link of a user who was deactivated meanwhile', async () => {
+      const { id, token } = await invited()
+      await h.api('POST', `/users/${id}/deactivate`)
+      expect((await form('GET', `/activate?token=${token}`)).statusCode).toBe(400)
+    })
+
+    it('records who activated, without the password or the token', async () => {
+      const { id, token } = await invited()
+      await form('POST', '/activate', { token, password: GOOD, confirm: GOOD })
+      const events = await h.audit('user.activate.complete', id)
+      expect(events).toHaveLength(1)
+      expect(events[0]).toMatchObject({ actor_type: 'user', actor_id: id })
+      expect(JSON.stringify(events[0])).not.toContain(GOOD)
+      expect(JSON.stringify(events[0])).not.toContain(token)
+    })
+  })
+
+  describe('forgotten password', () => {
+    it('is linked from the login page', async () => {
+      const b = browser()
+      const authorize = await b.request('GET', '/auth?client_id=demo-web&redirect_uri=http%3A%2F%2Flocalhost%3A3400%2Fcallback&response_type=code&scope=openid&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256')
+      const page = await b.request('GET', authorize.headers.location as string)
+      expect(page.body).toContain('href="/reset"')
+      expect((await form('GET', '/reset')).body).toContain('Send the code')
+    })
+
+    it('sends a code to a user who can sign in, and says the same to everyone else', async () => {
+      const user = await activated()
+      const known = await requestReset(user.email)
+      expect(h.notifications).toEqual([expect.objectContaining({ kind: 'reset-code', user: expect.objectContaining({ email: user.email }) })])
+      expect(resetCode(user.email)).toMatch(/^\d{6}$/)
+
+      const created = await invited()
+      const locked = await activated()
+      await h.api('POST', `/users/${locked.id}/lock`)
+      h.notifications.length = 0
+
+      const answers = await Promise.all(
+        ['nobody@example.com', created.email, locked.email].map(async (email) => ({ email, response: await requestReset(email) })),
+      )
+      expect(h.notifications).toEqual([])
+      for (const { email, response } of answers) {
+        expect(response.statusCode).toBe(200)
+        expect(anonymous(response.body, email)).toBe(anonymous(known.body, user.email))
+      }
+    })
+
+    it('does not reveal a failure to send, and does not send twice within a minute', async () => {
+      const user = await activated()
+      h.notifier.failWith = new NotifierUnavailableError('SMTP is down')
+      const failed = await requestReset(user.email)
+      expect(failed.statusCode).toBe(200)
+      expect(failed.body).not.toContain('SMTP')
+      h.notifier.failWith = undefined
+
+      expect((await requestReset(user.email)).statusCode).toBe(200)
+      // the failed attempt left a code behind, so the second request is within the cooldown
+      expect(h.notifications).toEqual([])
+    })
+
+    it('rejects a request without an e-mail address', async () => {
+      expect((await form('POST', '/reset', { email: '' })).statusCode).toBe(400)
+    })
+
+    it('changes the password with the code: old password stops, new one works, everything signs out', async () => {
+      const user = await activated()
+      const remembered = browser()
+      const first = await signIn(remembered, { ...WEB, email: user.email, password: user.password })
+      expect(first.code).toBeTruthy()
+      await requestReset(user.email)
+
+      const done = await submitReset(user.email, resetCode(user.email), 'a brand new password')
+      expect(done.statusCode).toBe(200)
+      expect(done.body).toContain('Password changed')
+
+      const old = await signIn(browser(), { ...WEB, email: user.email, password: user.password })
+      expect(old.login.statusCode).toBe(401)
+      const fresh = await signIn(browser(), { ...WEB, email: user.email, password: 'a brand new password' })
+      expect(fresh.code).toBeTruthy()
+
+      const events = await h.audit('user.password_reset.complete', user.id)
+      expect(events).toHaveLength(1)
+      expect(events[0].details.sessionsEnded).toBeGreaterThan(0)
+      expect(JSON.stringify(events[0])).not.toContain('brand new')
+    })
+
+    it('ends the sessions and forgets the remembered devices', async () => {
+      const user = await activated()
+      const b = browser()
+      await signIn(b, { ...WEB, email: user.email, password: user.password })
+      await h.database.pool.query(
+        `insert into devices (user_id, token_hash, expires_at) values ($1, 'x', now() + interval '1 day')`,
+        [user.id],
+      )
+      await requestReset(user.email)
+      await submitReset(user.email, resetCode(user.email))
+
+      expect((await h.database.pool.query(`select count(*) from oidc_payloads where account_id = $1`, [user.id])).rows[0].count).toBe('0')
+      expect((await h.database.pool.query(`select count(*) from devices where user_id = $1 and revoked_at is null`, [user.id])).rows[0].count).toBe('0')
+    })
+
+    it('verifies the e-mail address, since the code came by e-mail', async () => {
+      const user = await activated()
+      await h.database.pool.query(`update users set email_verified_at = null where id = $1`, [user.id])
+      await requestReset(user.email)
+      await submitReset(user.email, resetCode(user.email))
+      expect((await row(user.email)).email_verified_at).not.toBeNull()
+    })
+
+    it('uses a code once, and refuses wrong codes without saying why', async () => {
+      const user = await activated()
+      await requestReset(user.email)
+      const code = resetCode(user.email)
+      const wrong = code === '000000' ? '000001' : '000000'
+
+      const refused = await submitReset(user.email, wrong)
+      expect(refused.statusCode).toBe(401)
+      expect(refused.body).toContain('not correct or has expired')
+      const unknown = await submitReset('nobody@example.com', wrong)
+      expect(unknown.statusCode).toBe(401)
+      expect(anonymous(unknown.body, 'nobody@example.com')).toBe(anonymous(refused.body, user.email))
+
+      expect((await submitReset(user.email, code)).statusCode).toBe(200)
+      expect((await submitReset(user.email, code, 'yet another password')).statusCode).toBe(401)
+    })
+
+    it('invalidates the code at the sixth attempt', async () => {
+      const user = await activated()
+      await requestReset(user.email)
+      const code = resetCode(user.email)
+      const wrong = code === '000000' ? '000001' : '000000'
+      for (let attempt = 0; attempt < 5; attempt++) expect((await submitReset(user.email, wrong)).statusCode).toBe(401)
+      expect((await submitReset(user.email, code)).statusCode).toBe(401)
+      expect((await row(user.email)).failed_login_attempts).toBe(0)
+    })
+
+    it('does not use up an attempt when the new password is not acceptable', async () => {
+      const user = await activated()
+      await requestReset(user.email)
+      const code = resetCode(user.email)
+      for (let attempt = 0; attempt < 8; attempt++) {
+        expect((await submitReset(user.email, code, 'short')).statusCode).toBe(422)
+      }
+      expect((await submitReset(user.email, code, 'now a good password')).statusCode).toBe(200)
+    })
+
+    it('does not accept the code of a sign-in, nor use a reset code to sign in', async () => {
+      const user = await activated()
+      const b = browser()
+      await signIn(b, { ...WEB, email: user.email, password: user.password })
+      const loginCode = h.notifications.findLast((n) => n.kind === 'login-code')!.code!
+      await requestReset(user.email)
+      expect((await submitReset(user.email, loginCode)).statusCode).toBe(401)
+
+      const attempt = await signIn(browser(), { ...WEB, email: user.email, password: user.password, stopAtCode: true })
+      expect(attempt.codePage).toBeDefined()
+    })
+
+    it('lets an administrator start a reset: the mail links to the page that takes the code', async () => {
+      const user = await activated()
+      const response = await h.api('POST', `/users/${user.id}/reset-password`)
+      expect(response.statusCode).toBe(200)
+
+      const mail = h.notifications.findLast((n) => n.kind === 'reset-code')!
+      expect(mail.url).toBe(`https://localhost:3300/reset/code?email=${encodeURIComponent(user.email)}`)
+      const page = await form('GET', `/reset/code?email=${encodeURIComponent(user.email)}`)
+      expect(page.body).toContain(`name="email" value="${user.email}"`)
+      expect((await submitReset(user.email, mail.code!)).statusCode).toBe(200)
+
+      const again = await h.api('POST', `/users/${user.id}/reset-password`)
+      expect(again.statusCode).toBe(200)
+    })
+
+    it('tells an administrator when codes were requested too often', async () => {
+      const user = await activated()
+      expect((await h.api('POST', `/users/${user.id}/reset-password`)).statusCode).toBe(200)
+      const second = await h.api('POST', `/users/${user.id}/reset-password`)
+      expect(second.statusCode).toBe(429)
+      expect(Number(second.headers['retry-after'])).toBeGreaterThan(0)
+      expect(second.json().detail).toContain('saved')
+    })
+
+    it('has the claims of a user who reset their password intact', async () => {
+      const user = await activated()
+      await requestReset(user.email)
+      await submitReset(user.email, resetCode(user.email))
+      const signedIn = await signIn(browser(), { ...WEB, email: user.email, password: 'a brand new password' })
+      const b = browser()
+      const result = await signIn(b, { ...WEB, email: user.email, password: 'a brand new password' })
+      const tokens = (
+        await b.request('POST', '/token', {
+          form: { grant_type: 'authorization_code', code: result.code!, redirect_uri: WEB.redirectUri, client_id: WEB.clientId, code_verifier: result.verifier },
+        })
+      ).json()
+      expect(signedIn.code).toBeTruthy()
+      expect((await verifyJwt(h.app, tokens.id_token)).claims).toMatchObject({ email: user.email, email_verified: true })
+    })
+  })
+})

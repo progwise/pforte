@@ -1,5 +1,5 @@
 import type { Mailer } from './mailer.js'
-import { activationMessage, loginCodeMessage } from './messages.js'
+import { activationMessage, loginCodeMessage, resetCodeMessage } from './messages.js'
 
 export interface NotifiableUser {
   id: string
@@ -15,8 +15,8 @@ export interface Notifier {
   sendLoginCode(user: NotifiableUser, login: { code: string; expiresAt: Date }): Promise<void>
   /** The link a new user opens to set their first password. */
   sendActivationLink(user: NotifiableUser, link: { url: string; expiresAt: Date }): Promise<void>
-  /** Sends the user a code to choose a new password; the notifier owns how the code is made and delivered. */
-  requestPasswordReset(user: NotifiableUser): Promise<void>
+  /** The code with which the user chooses a new password, and the page where they enter it. */
+  sendResetCode(user: NotifiableUser, reset: { code: string; expiresAt: Date; url: string }): Promise<void>
 }
 
 /** No way to reach the user is configured. */
@@ -51,9 +51,9 @@ export const createLogNotifier = ({
       guard()
       log(`[development notifier] Activation link for ${user.email} (valid until ${expiresAt.toISOString()}): ${url}`)
     },
-    async requestPasswordReset(user) {
+    async sendResetCode(user, { code, expiresAt, url }) {
       guard()
-      log(`[development notifier] Password reset requested for ${user.email}`)
+      log(`[development notifier] Password reset code for ${user.email} (valid until ${expiresAt.toISOString()}): ${code}, page: ${url}`)
     },
   }
 }
@@ -74,7 +74,8 @@ export const createMailNotifier = ({ mailer, organisation }: MailNotifierSetting
     const minutes = Math.max(1, Math.round((expiresAt.getTime() - Date.now()) / 3_600_000))
     await mailer.send({ to: user.email, ...activationMessage(user.language, { organisation, firstName: user.firstName, url, minutes }) })
   },
-  async requestPasswordReset() {
-    throw new NotifierUnavailableError('Password reset by e-mail is not available yet.')
+  async sendResetCode(user, { code, expiresAt, url }) {
+    const minutes = Math.max(1, Math.round((expiresAt.getTime() - Date.now()) / 60_000))
+    await mailer.send({ to: user.email, ...resetCodeMessage(user.language, { organisation, firstName: user.firstName, code, minutes, url }) })
   },
 })

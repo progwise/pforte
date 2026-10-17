@@ -67,6 +67,11 @@ Users can ask pforte to remember a device after entering the code (90 days). `GE
 all, so the next sign-in asks for a code again. Locking, deactivating, resetting the password and ending
 sessions revoke them too.
 
+A user created through the API starts as `created`. `POST /admin/users/{id}/activate` e-mails the link
+to `/activate`, where they choose their first password (at least 10 characters). `POST
+/admin/users/{id}/reset-password` e-mails a code for `/reset/code`; users can also ask for one themselves
+at `/reset`, linked from the login page. In development both mails land in Mailpit.
+
 Every change is recorded in the audit log with the client that made it.
 
 The API describes itself: `GET /admin/openapi.json` (with a token) returns an OpenAPI 3.1 document

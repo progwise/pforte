@@ -1,4 +1,5 @@
 import Fastify from 'fastify'
+import { accountRoutes, type AccountDependencies } from './account/routes.js'
 import { type AdminDependencies, adminRoutes } from './admin/index.js'
 import type { InteractionDependencies } from './interaction/routes.js'
 import { interactionRoutes } from './interaction/routes.js'
@@ -8,6 +9,8 @@ import type { ProviderHolder } from './oidc/provider.js'
 export interface AppDependencies {
   /** The admin API. Needs the provider (to verify tokens) and the database. */
   admin?: AdminDependencies
+  /** The pages for choosing the first password and for a forgotten one. */
+  account?: AccountDependencies
   /** Returns the current time as reported by the database. */
   getDatabaseTime: () => Promise<Date>
   /** The OpenID Connect provider and its login. Omitted in tests that do not need them. */
@@ -16,7 +19,7 @@ export interface AppDependencies {
   }
 }
 
-export const buildApp = ({ getDatabaseTime, oidc, admin }: AppDependencies) => {
+export const buildApp = ({ getDatabaseTime, oidc, admin, account }: AppDependencies) => {
   const app = Fastify({ logger: process.env.NODE_ENV !== 'test' })
 
   app.get('/health', async (_request, reply) => {
@@ -32,6 +35,9 @@ export const buildApp = ({ getDatabaseTime, oidc, admin }: AppDependencies) => {
   if (oidc) {
     void app.register(oidcRoutes(oidc.provider))
     void app.register(interactionRoutes(oidc))
+  }
+  if (account) {
+    void app.register(accountRoutes(account))
   }
   if (admin) {
     void app.register(adminRoutes(admin), { prefix: '/admin' })

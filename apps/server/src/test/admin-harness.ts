@@ -5,6 +5,8 @@ import { createTestDatabase } from '@progwise/pforte-db/testing'
 import { expect } from 'vitest'
 import { buildApp } from '../app.js'
 import { createAuthenticate } from '../auth/authenticate.js'
+import { deriveCodeSecrets } from '../auth/code-secrets.js'
+import { createPasswordResetSender } from '../auth/password-reset.js'
 import { createProviderHolder } from '../oidc/provider.js'
 import { basicAuth, registerCodeSource } from './browser.js'
 import { createRecordingNotifier } from './recording-notifier.js'
@@ -27,11 +29,18 @@ export const createAdminHarness = async () => {
     db: database.db,
   })
   /** Everything the app asked the notifier to send, and a switch to make sending fail. */
-  const { notifier, notifications, lastCode } = createRecordingNotifier()
+  const { notifier, notifications, lastCode, lastResetCode } = createRecordingNotifier()
+  const sendPasswordResetCode = createPasswordResetSender({ db: database.db, notifier, codeSecrets: deriveCodeSecrets(COOKIE_KEYS), issuer: ISSUER })
   const app = buildApp({
     getDatabaseTime: () => getDatabaseTime(database.db),
     oidc: { provider, authenticate: await createAuthenticate(database.db), db: database.db, notifier, cookieKeys: COOKIE_KEYS },
-    admin: { db: database.db, provider, notifier },
+    account: { db: database.db, sendPasswordResetCode, codeSecrets: deriveCodeSecrets(COOKIE_KEYS) },
+    admin: {
+      db: database.db,
+      provider,
+      notifier,
+      sendPasswordResetCode,
+    },
   })
   await app.ready()
   registerCodeSource(app, lastCode)
@@ -78,6 +87,7 @@ export const createAdminHarness = async () => {
     provider,
     notifier,
     notifications,
+    lastResetCode,
     api,
     tokenFor,
     adminToken,

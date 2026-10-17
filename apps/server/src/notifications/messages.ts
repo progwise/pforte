@@ -9,8 +9,14 @@ interface MessageValues {
   url?: string
 }
 
-const texts: Record<Language, { loginCode: (v: MessageValues) => { subject: string; text: string }; activation: (v: MessageValues) => { subject: string; text: string } }> = {
+type Message = (values: MessageValues) => { subject: string; text: string }
+
+const texts: Record<Language, { loginCode: Message; activation: Message; resetCode: Message }> = {
   en: {
+    resetCode: ({ organisation, firstName, code, minutes, url }) => ({
+      subject: `Choose a new password for ${organisation}`,
+      text: `Hello ${firstName},\n\nyour code to choose a new password is ${code}. It is valid for ${minutes} minutes. Enter it here:\n\n${url}\n\nIf you did not ask for a new password, ignore this message; your password stays as it is.\n`,
+    }),
     loginCode: ({ organisation, firstName, code, minutes }) => ({
       subject: `Your sign-in code for ${organisation}`,
       text: `Hello ${firstName},\n\nyour sign-in code is ${code}. It is valid for ${minutes} minutes.\n\nIf you did not try to sign in, do not share this code with anyone and tell your administration.\n`,
@@ -21,6 +27,10 @@ const texts: Record<Language, { loginCode: (v: MessageValues) => { subject: stri
     }),
   },
   de: {
+    resetCode: ({ organisation, firstName, code, minutes, url }) => ({
+      subject: `Neues Passwort für ${organisation}`,
+      text: `Guten Tag ${firstName},\n\nIhr Code für ein neues Passwort lautet ${code}. Er ist ${minutes} Minuten gültig. Geben Sie ihn hier ein:\n\n${url}\n\nWenn Sie kein neues Passwort angefordert haben, ignorieren Sie diese Nachricht; Ihr Passwort bleibt unverändert.\n`,
+    }),
     loginCode: ({ organisation, firstName, code, minutes }) => ({
       subject: `Ihr Anmeldecode für ${organisation}`,
       text: `Guten Tag ${firstName},\n\nIhr Anmeldecode lautet ${code}. Er ist ${minutes} Minuten gültig.\n\nWenn Sie sich nicht anmelden wollten, geben Sie den Code an niemanden weiter und informieren Sie Ihre Administration.\n`,
@@ -36,3 +46,4 @@ export const languageFor = (language: string): Language => (language.toLowerCase
 
 export const loginCodeMessage = (language: string, values: MessageValues) => texts[languageFor(language)].loginCode(values)
 export const activationMessage = (language: string, values: MessageValues) => texts[languageFor(language)].activation(values)
+export const resetCodeMessage = (language: string, values: MessageValues) => texts[languageFor(language)].resetCode(values)

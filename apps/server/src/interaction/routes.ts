@@ -1,4 +1,3 @@
-import { createHmac } from 'node:crypto'
 import formbody from '@fastify/formbody'
 import type { Database } from '@progwise/pforte-db'
 import { checkCode, CodeLimitError, issueCode, markEmailVerified } from '@progwise/pforte-db/codes'
@@ -7,12 +6,13 @@ import { findActiveUserById } from '@progwise/pforte-db/oidc'
 import { recordLogin } from '@progwise/pforte-db/users'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { ACR_PASSWORD, ACR_SECOND_FACTOR, secondFactorAssurance } from '../auth/assurance.js'
+import { deriveCodeSecrets } from '../auth/code-secrets.js'
 import type { Authenticate } from '../auth/authenticate.js'
 import { type Notifier, NotifierUnavailableError } from '../notifications/notifier.js'
 import { applyIssuerHeaders } from '../oidc/issuer-headers.js'
 import type { ProviderHolder } from '../oidc/provider.js'
 import { readCookie, setCookieHeader, sign, unsign } from './signed-cookie.js'
-import { codePage, contentSecurityPolicy, errorPage, loginPage } from './templates.js'
+import { addPageHeaders, codePage, errorPage, loginPage } from './templates.js'
 
 export interface InteractionDependencies {
   provider: Pick<ProviderHolder, 'current' | 'issuer'>
@@ -48,15 +48,10 @@ export const interactionRoutes =
     await app.register(formbody)
 
     const secure = provider.issuer.startsWith('https:')
-    const codeSecrets = cookieKeys.map((key) => createHmac('sha256', key).update('one-time-code').digest('hex'))
+    const codeSecrets = deriveCodeSecrets(cookieKeys)
     const cookiePath = (uid: string) => `/interaction/${encodeURIComponent(uid)}`
 
-    app.addHook('onSend', async (_request, reply) => {
-      reply.header('Cache-Control', 'no-store')
-      reply.header('Content-Security-Policy', contentSecurityPolicy)
-      reply.header('X-Content-Type-Options', 'nosniff')
-      reply.header('Referrer-Policy', 'no-referrer')
-    })
+    addPageHeaders(app)
 
     /** The interaction this request belongs to, or undefined if the cookie or uid does not match. */
     const interactionFor = async (request: FastifyRequest, reply: FastifyReply, uid: string) => {

@@ -7,6 +7,7 @@ import {
   serializerCompiler,
   validatorCompiler,
 } from 'fastify-type-provider-zod'
+import type { SendPasswordResetCode } from '../auth/password-reset.js'
 import type { Notifier } from '../notifications/notifier.js'
 import type { ProviderHolder } from '../oidc/provider.js'
 import { createAdminAuth } from './auth.js'
@@ -24,11 +25,13 @@ export interface AdminDependencies {
   provider: Pick<ProviderHolder, 'current' | 'reload' | 'issuer'>
   /** Sends activation links and password reset codes. */
   notifier: Notifier
+  /** Sends the code with which a user chooses a new password. */
+  sendPasswordResetCode: SendPasswordResetCode
 }
 
 /** The admin API, mounted under /admin. */
 export const adminRoutes =
-  ({ db, provider, notifier }: AdminDependencies) =>
+  ({ db, provider, notifier, sendPasswordResetCode }: AdminDependencies) =>
   async (app: FastifyInstance) => {
     app.setValidatorCompiler(validatorCompiler)
     app.setSerializerCompiler(serializerCompiler)
@@ -107,7 +110,7 @@ export const adminRoutes =
     await app.register(usersRoutes({ db, auth }))
     await app.register(claimsRoutes({ db, auth }))
     await app.register(devicesRoutes({ db, auth }))
-    await app.register(lifecycleRoutes({ db, auth, notifier, issuer: provider.issuer }))
+    await app.register(lifecycleRoutes({ db, auth, notifier, sendPasswordResetCode, issuer: provider.issuer }))
     await app.register(claimTypesRoutes({ db, auth, reloadProvider }))
     await app.register(clientsRoutes({ db, auth, reloadProvider }))
     await app.register(auditRoutes({ db, auth }))
