@@ -1,3 +1,6 @@
+import type { Mailer } from './mailer.js'
+import { activationMessage, loginCodeMessage } from './messages.js'
+
 export interface NotifiableUser {
   id: string
   email: string
@@ -6,8 +9,10 @@ export interface NotifiableUser {
   language: string
 }
 
-/** Sends messages to users. E-mail and SMS implementations arrive with the second factor (#6). */
+/** Sends messages to users. */
 export interface Notifier {
+  /** The code for the second factor, sent to the address or number the user has. */
+  sendLoginCode(user: NotifiableUser, login: { code: string; expiresAt: Date }): Promise<void>
   /** The link a new user opens to set their first password. */
   sendActivationLink(user: NotifiableUser, link: { url: string; expiresAt: Date }): Promise<void>
   /** Sends the user a code to choose a new password; the notifier owns how the code is made and delivered. */
@@ -32,12 +37,16 @@ export const createLogNotifier = ({
   const guard = () => {
     if (production) {
       throw new NotifierUnavailableError(
-        'No way to send messages is configured. E-mail and SMS are added with the second factor; until then these actions are not available in production.',
+        'No way to send messages is configured. Set SMTP_URL and MAIL_FROM.',
       )
     }
   }
 
   return {
+    async sendLoginCode(user, { code, expiresAt }) {
+      guard()
+      log(`[development notifier] Sign-in code for ${user.email} (valid until ${expiresAt.toISOString()}): ${code}`)
+    },
     async sendActivationLink(user, { url, expiresAt }) {
       guard()
       log(`[development notifier] Activation link for ${user.email} (valid until ${expiresAt.toISOString()}): ${url}`)
@@ -48,3 +57,24 @@ export const createLogNotifier = ({
     },
   }
 }
+
+export interface MailNotifierSettings {
+  mailer: Mailer
+  /** Named in the messages, e.g. "Example Inc.". */
+  organisation: string
+}
+
+/** Sends the messages by e-mail. */
+export const createMailNotifier = ({ mailer, organisation }: MailNotifierSettings): Notifier => ({
+  async sendLoginCode(user, { code, expiresAt }) {
+    const minutes = Math.max(1, Math.round((expiresAt.getTime() - Date.now()) / 60_000))
+    await mailer.send({ to: user.email, ...loginCodeMessage(user.language, { organisation, firstName: user.firstName, code, minutes }) })
+  },
+  async sendActivationLink(user, { url, expiresAt }) {
+    const minutes = Math.max(1, Math.round((expiresAt.getTime() - Date.now()) / 3_600_000))
+    await mailer.send({ to: user.email, ...activationMessage(user.language, { organisation, firstName: user.firstName, url, minutes }) })
+  },
+  async requestPasswordReset() {
+    throw new NotifierUnavailableError('Password reset by e-mail is not available yet.')
+  },
+})

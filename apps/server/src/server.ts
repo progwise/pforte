@@ -2,7 +2,8 @@ import { createDb, deleteExpiredOidcPayloads, getDatabaseTime } from '@progwise/
 import { buildApp } from './app.js'
 import { createAuthenticate } from './auth/authenticate.js'
 import { loadConfig } from './config.js'
-import { createLogNotifier } from './notifications/notifier.js'
+import { createSmtpMailer } from './notifications/mailer.js'
+import { createLogNotifier, createMailNotifier } from './notifications/notifier.js'
 import { createProviderHolder } from './oidc/provider.js'
 
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000
@@ -18,16 +19,22 @@ const provider = await createProviderHolder({
   onError: (error) => app.log.error(error, 'OpenID provider error'),
 })
 const authenticate = await createAuthenticate(db)
+const notifier = config.mail
+  ? createMailNotifier({
+      mailer: createSmtpMailer({ url: config.mail.smtpUrl, from: config.mail.from }),
+      organisation: config.organisationName,
+    })
+  : createLogNotifier({
+      log: (message) => app.log.info(message),
+      production: process.env.NODE_ENV === 'production',
+    })
 const app = buildApp({
   getDatabaseTime: () => getDatabaseTime(db),
   oidc: { provider, authenticate },
   admin: {
     db,
     provider,
-    notifier: createLogNotifier({
-      log: (message) => app.log.info(message),
-      production: process.env.NODE_ENV === 'production',
-    }),
+    notifier,
   },
 })
 

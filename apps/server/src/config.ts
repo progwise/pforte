@@ -21,6 +21,10 @@ export interface Config {
    * the applications run on the organisation's own network.
    */
   allowPrivateAddresses: boolean
+  /** Named in e-mails. */
+  organisationName: string
+  /** How to send e-mail. Without it, codes and links cannot be sent (development writes them to the log). */
+  mail?: { smtpUrl: string; from: string }
 }
 
 type Env = Record<string, string | undefined>
@@ -105,6 +109,18 @@ const parseJwks = (value: string) => {
   return { keys: keys as Jwk[] }
 }
 
+const parseMail = (env: Env) => {
+  const smtpUrl = readSecret(env, 'SMTP_URL')
+  const from = env.MAIL_FROM?.trim()
+  if (!smtpUrl) {
+    if (from) throw new Error('MAIL_FROM is set, but SMTP_URL (or SMTP_URL_FILE) is not')
+    return undefined
+  }
+  if (!from) throw new Error('MAIL_FROM is required when SMTP_URL is set, e.g. "Example Inc. <no-reply@example.com>"')
+  if (!/^smtps?:\/\//.test(smtpUrl)) throw new Error('SMTP_URL must start with smtp:// or smtps://')
+  return { smtpUrl, from }
+}
+
 export const loadConfig = (env: Env = process.env): Config => ({
   port: Number(env.PORT ?? 3300),
   databaseUrl: requireSecret(env, 'DATABASE_URL'),
@@ -112,4 +128,6 @@ export const loadConfig = (env: Env = process.env): Config => ({
   cookieKeys: parseCookieKeys(requireSecret(env, 'COOKIE_KEYS', '; run pnpm dev:keys for development')),
   jwks: parseJwks(requireSecret(env, 'JWKS', '; run pnpm dev:keys for development')),
   allowPrivateAddresses: env.OUTBOUND_ALLOW_PRIVATE_ADDRESSES === 'true',
+  organisationName: env.ORGANISATION_NAME?.trim() || 'pforte',
+  mail: parseMail(env),
 })

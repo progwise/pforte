@@ -26,8 +26,12 @@ export const createAdminHarness = async () => {
     db: database.db,
   })
   /** Everything the admin API asked the notifier to send, and a switch to make sending fail. */
-  const notifications: { kind: 'activation' | 'password-reset'; user: NotifiableUser; url?: string; expiresAt?: Date }[] = []
+  const notifications: { kind: 'activation' | 'password-reset' | 'login-code'; user: NotifiableUser; url?: string; code?: string; expiresAt?: Date }[] = []
   const notifier: Notifier & { failWith?: Error } = {
+    async sendLoginCode(user, login) {
+      if (notifier.failWith) throw notifier.failWith
+      notifications.push({ kind: 'login-code', user, code: login.code, expiresAt: login.expiresAt })
+    },
     async sendActivationLink(user, link) {
       if (notifier.failWith) throw notifier.failWith
       notifications.push({ kind: 'activation', user, url: link.url, expiresAt: link.expiresAt })

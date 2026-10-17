@@ -24,7 +24,7 @@ Then:
 cp .env.example .env
 pnpm install
 pnpm dev:keys      # generates COOKIE_KEYS and JWKS in .env (keeps existing values)
-pnpm dev:up        # Postgres from compose.dev.yaml, waits until it is healthy
+pnpm dev:up        # Postgres and Mailpit from compose.dev.yaml, waits until they are healthy
 pnpm db:migrate    # create the tables
 pnpm db:seed       # fictional dev data: an admin, four clients, ten users with claims
 pnpm dev           # server on http://localhost:3300, loads .env
@@ -83,6 +83,9 @@ notifier; until e-mail and SMS exist, the development notifier writes them to th
 
 ### Ports
 
+- Mailpit, which catches the e-mails pforte sends, listens for SMTP on **1026** and shows the mails on
+  **http://localhost:8026** (`PFORTE_SMTP_PORT` and `PFORTE_MAIL_UI_PORT` change them; 1025 and 8025
+  are left free because Mailpit's own defaults are often taken). `SMTP_URL` in `.env` points to it.
 - The development Postgres is published on port **5433**, so it does not clash with a Postgres
   you already run on the usual 5432. If 5433 is taken too, pick another host port and use the
   same one in `DATABASE_URL`. Set both in `.env`; Docker Compose reads `PFORTE_DB_PORT` from there:

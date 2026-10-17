@@ -73,3 +73,23 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...validEnv, JWKS: 'not json' })).toThrow(/JSON/)
   })
 })
+
+describe('mail settings', () => {
+  it('has no mail without SMTP_URL', () => {
+    const config = loadConfig(validEnv)
+    expect(config.mail).toBeUndefined()
+    expect(config.organisationName).toBe('pforte')
+  })
+
+  it('reads SMTP_URL, MAIL_FROM and the organisation name', () => {
+    const config = loadConfig({ ...validEnv, SMTP_URL: 'smtp://u:p@mail.example.com:587', MAIL_FROM: 'Example <no-reply@example.com>', ORGANISATION_NAME: ' Example Inc. ' })
+    expect(config.mail).toEqual({ smtpUrl: 'smtp://u:p@mail.example.com:587', from: 'Example <no-reply@example.com>' })
+    expect(config.organisationName).toBe('Example Inc.')
+  })
+
+  it('needs a sender, a smtp URL and no stray MAIL_FROM', () => {
+    expect(() => loadConfig({ ...validEnv, SMTP_URL: 'smtp://mail:25' })).toThrow(/MAIL_FROM is required/)
+    expect(() => loadConfig({ ...validEnv, MAIL_FROM: 'a@b.c' })).toThrow(/SMTP_URL/)
+    expect(() => loadConfig({ ...validEnv, SMTP_URL: 'http://mail', MAIL_FROM: 'a@b.c' })).toThrow(/smtp:\/\//)
+  })
+})
