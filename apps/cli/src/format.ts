@@ -49,7 +49,7 @@ export const formatSummary = (report: ImportReport, { rejectedFile }: { rejected
   if (report.dryRun) {
     const changing = report.rows.filter((row) => (row.outcome === 'created' || row.outcome === 'updated') && row.changes)
     if (changing.length > 0) {
-      lines.push('', 'Changes:', ...listRows(changing, (row) => `${row.outcome}; ${describeChanges(row.changes!)}`))
+      lines.push('', 'Changes:', ...listRows(changing, (row) => row.outcome === 'created' ? 'new user' : `updated; ${describeChanges(row.changes!)}`))
     }
   }
   if (report.warnings.length > 0) lines.push('', ...report.warnings.map((warning) => `Warning: ${warning}`))

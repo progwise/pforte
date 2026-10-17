@@ -143,3 +143,14 @@ describe('pforte import', () => {
     expect(t.written.get('r.csv')).toContain('"bad;mail";"Bo ""B""";X;2;')
   })
 })
+
+describe('dry run changes', () => {
+  it('lists a new user briefly and shows what changes for an existing one', async () => {
+    const api = new FakeApi()
+    api.seed('bob@example.com')
+    const t = setup({ 'users.csv': GOOD }, api)
+    await t.run(['import', 'users.csv', '--dry-run'])
+    expect(t.out()).toContain('line 2: ada@example.com — new user')
+    expect(t.out()).toMatch(/line 3: bob@example.com — updated; firstName: Old → Bob/)
+  })
+})

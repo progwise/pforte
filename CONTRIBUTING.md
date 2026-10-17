@@ -77,6 +77,10 @@ end the user's sessions and refresh tokens. Activation links and reset requests 
 notifier; until e-mail and SMS exist, the development notifier writes them to the server log
 (and refuses to run with `NODE_ENV=production`, so secrets never reach production logs).
 
+### Importing users
+
+`pnpm pforte import users.csv --dry-run` imports a CSV file through the admin API; see [docs/import.md](docs/import.md).
+
 ### Ports
 
 - The development Postgres is published on port **5433**, so it does not clash with a Postgres
