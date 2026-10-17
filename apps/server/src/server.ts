@@ -9,11 +9,15 @@ import { loadConfig } from './config.js'
 import { createSmtpMailer } from './notifications/mailer.js'
 import { createHttpSmsSender } from './notifications/sms.js'
 import { createLogNotifier, createMailNotifier } from './notifications/notifier.js'
+import { createUi } from './ui/index.js'
+import { loadLocaleOverrides } from './i18n/overrides.js'
 import { createProviderHolder } from './oidc/provider.js'
 
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000
 
 const config = loadConfig()
+const { overrides, warnings } = config.brandingDir ? loadLocaleOverrides(config.brandingDir) : { overrides: {}, warnings: [] }
+const ui = createUi({ overrides, defaultLanguage: config.defaultLanguage, rememberDeviceDefault: config.rememberDeviceDefault })
 const { db, pool } = createDb(config.databaseUrl, {
   onError: (error) => app.log.error(error, 'database pool error'),
 })
@@ -21,6 +25,7 @@ const { db, pool } = createDb(config.databaseUrl, {
 const provider = await createProviderHolder({
   config,
   db,
+  ui,
   onError: (error) => app.log.error(error, 'OpenID provider error'),
 })
 const authenticate = await createAuthenticate(db)
@@ -29,6 +34,7 @@ const notifier = config.mail
       mailer: createSmtpMailer({ url: config.mail.smtpUrl, from: config.mail.from }),
       sms: config.sms && createHttpSmsSender(config.sms),
       organisation: config.organisationName,
+      i18n: ui.i18n,
     })
   : createLogNotifier({
       log: (message) => app.log.info(message),
@@ -43,7 +49,7 @@ const sendPasswordResetCode = createPasswordResetSender({
 })
 const app = buildApp({
   getDatabaseTime: () => getDatabaseTime(db),
-  oidc: { provider, authenticate, db, notifier, cookieKeys: config.cookieKeys },
+  oidc: { provider, authenticate, db, notifier, cookieKeys: config.cookieKeys, ui },
   account: {
     db,
     sendPasswordResetCode,
@@ -51,6 +57,7 @@ const app = buildApp({
     notifier,
     cookieKeys: config.cookieKeys,
     secure: config.issuer.startsWith('https:'),
+    ui,
   },
   admin: {
     db,
@@ -59,6 +66,8 @@ const app = buildApp({
     sendPasswordResetCode,
   },
 })
+
+for (const warning of warnings) app.log.warn(warning)
 
 const cleanup = setInterval(() => {
   deleteExpiredOidcPayloads(db).catch((error) => app.log.error(error, 'cleanup of expired OIDC payloads failed'))

@@ -23,5 +23,5 @@ export const createPasswordResetSender =
   async (user) => {
     const channel = channelFor(user, notifier)
     const { code, expiresAt } = await issueCode(db, { userId: user.id, channel, purpose: 'password_reset' }, { secrets: codeSecrets })
-    await notifier.sendResetCode(user, { code, expiresAt, channel, url: `${issuer}/reset/code?email=${encodeURIComponent(user.email)}` })
+    await notifier.sendResetCode(user, { code, expiresAt, channel, url: `${issuer}/reset/code?email=${encodeURIComponent(user.email)}&lang=${encodeURIComponent(user.language)}` })
   }

@@ -24,6 +24,12 @@ export interface Config {
   allowPrivateAddresses: boolean
   /** Named in e-mails. */
   organisationName: string
+  /** A folder with texts that replace or add to the built-in ones (`locales/<language>.json`). */
+  brandingDir?: string
+  /** The language of pages and messages when nothing says otherwise. */
+  defaultLanguage: string
+  /** Whether "Remember this device" is ticked when the code page opens. */
+  rememberDeviceDefault: boolean
   /** How to send e-mail. Without it, codes and links cannot be sent (development writes them to the log). */
   mail?: { smtpUrl: string; from: string }
   /** How to send SMS. Without it, codes go by e-mail only. */
@@ -192,6 +198,9 @@ export const loadConfig = (env: Env = process.env): Config => ({
   jwks: parseJwks(requireSecret(env, 'JWKS', '; run pnpm dev:keys for development')),
   allowPrivateAddresses: env.OUTBOUND_ALLOW_PRIVATE_ADDRESSES === 'true',
   organisationName: env.ORGANISATION_NAME?.trim() || 'pforte',
+  brandingDir: env.BRANDING_DIR?.trim() || undefined,
+  defaultLanguage: env.DEFAULT_LANGUAGE?.trim().toLowerCase() || 'en',
+  rememberDeviceDefault: env.REMEMBER_DEVICE_DEFAULT === 'true',
   mail: parseMail(env),
   sms: parseSms(env),
 })

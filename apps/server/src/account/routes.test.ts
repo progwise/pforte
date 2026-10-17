@@ -150,7 +150,7 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
       const b = browser()
       const authorize = await b.request('GET', '/auth?client_id=demo-web&redirect_uri=http%3A%2F%2Flocalhost%3A3400%2Fcallback&response_type=code&scope=openid&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256')
       const page = await b.request('GET', authorize.headers.location as string)
-      expect(page.body).toContain('href="/reset"')
+      expect(page.body).toContain('href="/reset?lang=en"')
       expect((await form('GET', '/reset')).body).toContain('Send the code')
     })
 
@@ -292,7 +292,7 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
       expect(response.statusCode).toBe(200)
 
       const mail = h.notifications.findLast((n) => n.kind === 'reset-code')!
-      expect(mail.url).toBe(`https://localhost:3300/reset/code?email=${encodeURIComponent(user.email)}`)
+      expect(mail.url).toBe(`https://localhost:3300/reset/code?email=${encodeURIComponent(user.email)}&lang=en`)
       const page = await form('GET', `/reset/code?email=${encodeURIComponent(user.email)}`)
       expect(page.body).toContain(`name="email" value="${user.email}"`)
       expect((await submitReset(user.email, mail.code!)).statusCode).toBe(200)

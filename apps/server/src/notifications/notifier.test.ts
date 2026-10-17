@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { createI18n } from '../i18n/index.js'
 import { createMailNotifier, createLogNotifier, NotifierUnavailableError } from './notifier.js'
 import { createSmtpMailer, type Mail } from './mailer.js'
 import { createTransport } from 'nodemailer'
@@ -45,7 +46,7 @@ describe('development notifier codes', () => {
 
 describe('mail notifier', () => {
   const sent: Mail[] = []
-  const notifier = createMailNotifier({ mailer: { send: async (mail) => void sent.push(mail) }, organisation: 'Example Inc.' })
+  const notifier = createMailNotifier({ mailer: { send: async (mail) => void sent.push(mail) }, organisation: 'Example Inc.', i18n: createI18n() })
 
   it('sends the sign-in code in the language of the user', async () => {
     sent.length = 0
@@ -61,7 +62,7 @@ describe('mail notifier', () => {
 
   it('falls back to English for other languages', async () => {
     sent.length = 0
-    await notifier.sendLoginCode({ ...user, language: 'fr' }, { code: '111111', expiresAt: new Date(Date.now() + 600_000), channel: 'email' as const })
+    await notifier.sendLoginCode({ ...user, language: 'pt' }, { code: '111111', expiresAt: new Date(Date.now() + 600_000), channel: 'email' as const })
     expect(sent[0]!.subject).toContain('Your sign-in code')
   })
 
@@ -91,12 +92,13 @@ describe('mail notifier with SMS', () => {
     mailer: { send: async (mail) => void mails.push(mail) },
     sms: { send: async (sms) => void texts.push(sms) },
     organisation: 'Example Inc.',
+    i18n: createI18n(),
   })
   const expiresAt = () => new Date(Date.now() + 10 * 60_000)
 
   it('says it can send SMS only when a sender is configured', () => {
     expect(notifier.smsAvailable).toBe(true)
-    expect(createMailNotifier({ mailer: { send: async () => {} }, organisation: 'x' }).smsAvailable).toBe(false)
+    expect(createMailNotifier({ mailer: { send: async () => {} }, organisation: 'x', i18n: createI18n() }).smsAvailable).toBe(false)
   })
 
   it('sends the sign-in code as a short text with the code first, to the phone number', async () => {
@@ -122,7 +124,7 @@ describe('mail notifier with SMS', () => {
 
   it('cannot send an SMS to a user without a number, or without a configured sender', async () => {
     await expect(notifier.sendLoginCode({ ...user, phone: null }, { code: '1', expiresAt: expiresAt(), channel: 'sms' })).rejects.toBeInstanceOf(NotifierUnavailableError)
-    const mailOnly = createMailNotifier({ mailer: { send: async () => {} }, organisation: 'x' })
+    const mailOnly = createMailNotifier({ mailer: { send: async () => {} }, organisation: 'x', i18n: createI18n() })
     await expect(mailOnly.sendPhoneCode(user, { code: '1', expiresAt: expiresAt() })).rejects.toBeInstanceOf(NotifierUnavailableError)
   })
 })

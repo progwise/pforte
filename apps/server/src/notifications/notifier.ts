@@ -1,5 +1,5 @@
 import type { Mailer } from './mailer.js'
-import { activationMessage, loginCodeMessage, resetCodeMessage, smsMessage } from './messages.js'
+import type { I18n, MessageKey, Values } from '../i18n/index.js'
 import type { SmsSender } from './sms.js'
 
 export type Channel = 'email' | 'sms'
@@ -79,14 +79,18 @@ export interface MailNotifierSettings {
   sms?: SmsSender
   /** Named in the messages, e.g. "Example Inc.". */
   organisation: string
+  /** The texts of the messages; the language of the user decides. */
+  i18n: I18n
 }
 
 const minutesUntil = (expiresAt: Date) => Math.max(1, Math.round((expiresAt.getTime() - Date.now()) / 60_000))
+const hoursUntil = (expiresAt: Date) => Math.max(1, Math.round((expiresAt.getTime() - Date.now()) / 3_600_000))
 
 /** Sends the messages by e-mail and, where configured, by SMS. */
-export const createMailNotifier = ({ mailer, sms, organisation }: MailNotifierSettings): Notifier => {
-  const text = (user: NotifiableUser, kind: 'login' | 'reset' | 'phone', code: string, expiresAt: Date) =>
-    smsMessage(kind, user.language, { organisation, code, minutes: minutesUntil(expiresAt) })
+export const createMailNotifier = ({ mailer, sms, organisation, i18n }: MailNotifierSettings): Notifier => {
+  const language = (user: NotifiableUser) => i18n.pick(user.language)
+  const text = (user: NotifiableUser, key: MessageKey, values: Values = {}) =>
+    i18n.text(language(user), key, { organisation, firstName: user.firstName, ...values })
 
   const sendSms = async (user: NotifiableUser, message: string) => {
     if (!sms || !user.phone) throw new NotifierUnavailableError('The user cannot be reached by SMS.')
@@ -96,21 +100,24 @@ export const createMailNotifier = ({ mailer, sms, organisation }: MailNotifierSe
   return {
     smsAvailable: Boolean(sms),
     async sendLoginCode(user, { code, expiresAt, channel }) {
-      if (channel === 'sms') return sendSms(user, text(user, 'login', code, expiresAt))
-      const minutes = minutesUntil(expiresAt)
-      await mailer.send({ to: user.email, ...loginCodeMessage(user.language, { organisation, firstName: user.firstName, code, minutes }) })
+      const values = { code, minutes: minutesUntil(expiresAt) }
+      if (channel === 'sms') return sendSms(user, text(user, 'sms.login', values))
+      await mailer.send({ to: user.email, subject: text(user, 'mail.loginCode.subject'), text: text(user, 'mail.loginCode.text', values) })
     },
     async sendActivationLink(user, { url, expiresAt }) {
-      const hours = Math.max(1, Math.round((expiresAt.getTime() - Date.now()) / 3_600_000))
-      await mailer.send({ to: user.email, ...activationMessage(user.language, { organisation, firstName: user.firstName, url, minutes: hours }) })
+      await mailer.send({
+        to: user.email,
+        subject: text(user, 'mail.activation.subject'),
+        text: text(user, 'mail.activation.text', { url, hours: hoursUntil(expiresAt) }),
+      })
     },
     async sendResetCode(user, { code, expiresAt, url, channel }) {
-      if (channel === 'sms') return sendSms(user, `${text(user, 'reset', code, expiresAt)} ${url}`)
-      const minutes = minutesUntil(expiresAt)
-      await mailer.send({ to: user.email, ...resetCodeMessage(user.language, { organisation, firstName: user.firstName, code, minutes, url }) })
+      const values = { code, minutes: minutesUntil(expiresAt), url }
+      if (channel === 'sms') return sendSms(user, `${text(user, 'sms.reset', values)} ${url}`)
+      await mailer.send({ to: user.email, subject: text(user, 'mail.resetCode.subject'), text: text(user, 'mail.resetCode.text', values) })
     },
     async sendPhoneCode(user, { code, expiresAt }) {
-      await sendSms(user, text(user, 'phone', code, expiresAt))
+      await sendSms(user, text(user, 'sms.phone', { code, minutes: minutesUntil(expiresAt) }))
     },
   }
 }

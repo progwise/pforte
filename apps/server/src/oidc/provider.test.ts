@@ -5,6 +5,7 @@ import { createTestDatabase, hasDatabase } from '@progwise/pforte-db/testing'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { buildApp } from '../app.js'
 import { createAuthenticate } from '../auth/authenticate.js'
+import { createUi } from '../ui/index.js'
 import { registerCodeSource } from '../test/browser.js'
 import { createRecordingNotifier } from '../test/recording-notifier.js'
 import { createProviderHolder, type ProviderHolder } from './provider.js'
@@ -30,7 +31,7 @@ describe.skipIf(!hasDatabase)('OpenID Connect provider', () => {
     })
     app = buildApp({
       getDatabaseTime: () => getDatabaseTime(database.db),
-      oidc: { provider: oidc, authenticate: await createAuthenticate(database.db), db: database.db, notifier: recording.notifier, cookieKeys: ['k'.repeat(40)] },
+      oidc: { provider: oidc, authenticate: await createAuthenticate(database.db), db: database.db, notifier: recording.notifier, cookieKeys: ['k'.repeat(40)], ui: createUi() },
     })
     await app.ready()
     registerCodeSource(app, recording.lastCode)

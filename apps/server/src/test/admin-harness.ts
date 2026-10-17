@@ -7,6 +7,7 @@ import { buildApp } from '../app.js'
 import { createAuthenticate } from '../auth/authenticate.js'
 import { deriveCodeSecrets } from '../auth/code-secrets.js'
 import { createPasswordResetSender } from '../auth/password-reset.js'
+import { createUi } from '../ui/index.js'
 import { createProviderHolder } from '../oidc/provider.js'
 import { basicAuth, registerCodeSource } from './browser.js'
 import { createRecordingNotifier } from './recording-notifier.js'
@@ -20,6 +21,7 @@ export const createAdminHarness = async () => {
   await seed(database.db)
 
   const jwk = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ format: 'jwk' })
+  const ui = createUi()
   const provider = await createProviderHolder({
     config: {
       issuer: ISSUER,
@@ -33,7 +35,7 @@ export const createAdminHarness = async () => {
   const sendPasswordResetCode = createPasswordResetSender({ db: database.db, notifier, codeSecrets: deriveCodeSecrets(COOKIE_KEYS), issuer: ISSUER })
   const app = buildApp({
     getDatabaseTime: () => getDatabaseTime(database.db),
-    oidc: { provider, authenticate: await createAuthenticate(database.db), db: database.db, notifier, cookieKeys: COOKIE_KEYS },
+    oidc: { provider, authenticate: await createAuthenticate(database.db), db: database.db, notifier, cookieKeys: COOKIE_KEYS, ui },
     account: {
       db: database.db,
       sendPasswordResetCode,
@@ -41,6 +43,7 @@ export const createAdminHarness = async () => {
       notifier,
       cookieKeys: COOKIE_KEYS,
       secure: true,
+      ui,
     },
     admin: {
       db: database.db,

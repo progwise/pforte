@@ -153,3 +153,21 @@ describe('SMS settings', () => {
     expect(loadConfig({ ...validEnv, ...sms, SMS_URL: 'http://localhost:9000/sms' }).sms?.url).toBe('http://localhost:9000/sms')
   })
 })
+
+describe('language and branding settings', () => {
+  it('has sensible defaults', () => {
+    expect(loadConfig(validEnv)).toMatchObject({ defaultLanguage: 'en', rememberDeviceDefault: false, brandingDir: undefined })
+  })
+
+  it('reads them from the environment', () => {
+    expect(loadConfig({ ...validEnv, DEFAULT_LANGUAGE: ' DE ', BRANDING_DIR: ' /branding ', REMEMBER_DEVICE_DEFAULT: 'true' })).toMatchObject({
+      defaultLanguage: 'de',
+      brandingDir: '/branding',
+      rememberDeviceDefault: true,
+    })
+  })
+
+  it('ticks nothing for any other value', () => {
+    expect(loadConfig({ ...validEnv, REMEMBER_DEVICE_DEFAULT: 'yes' }).rememberDeviceDefault).toBe(false)
+  })
+})

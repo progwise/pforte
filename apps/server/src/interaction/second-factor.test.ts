@@ -38,6 +38,7 @@ describe.skipIf(!hasDatabase)('second factor at sign-in', () => {
         scope: 'openid',
         state: 's',
         nonce: 'n',
+        ui_locales: 'en',
         code_challenge: challenge,
         code_challenge_method: 'S256',
       }),
@@ -265,6 +266,7 @@ describe.skipIf(!hasDatabase)('remembered devices at sign-in', () => {
       scope: 'openid',
       state: 's',
       nonce: 'n',
+      ui_locales: 'en',
       code_challenge: challenge,
       code_challenge_method: 'S256',
       ...extra,
@@ -473,6 +475,7 @@ describe.skipIf(!hasDatabase)('second factor by SMS', () => {
       scope: 'openid',
       state: 's',
       nonce: 'n',
+      ui_locales: 'en',
       code_challenge: challenge,
       code_challenge_method: 'S256',
     })

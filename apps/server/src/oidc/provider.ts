@@ -3,7 +3,8 @@ import type { Database } from '@progwise/pforte-db'
 import { verify } from '@node-rs/argon2'
 import Provider, { type Configuration, type JWK } from 'oidc-provider'
 import type { Config } from '../config.js'
-import { errorPage } from '../interaction/templates.js'
+import { parseAcceptLanguage } from '../i18n/index.js'
+import { createUi, type Ui } from '../ui/index.js'
 import { ACR_PASSWORD, ACR_SECOND_FACTOR } from '../auth/assurance.js'
 import { createFindAccount, standardClaims } from './accounts.js'
 import { ClientAdapter, PayloadAdapter } from './adapter.js'
@@ -13,6 +14,8 @@ export interface ProviderOptions {
   db: Database
   /** Called with unexpected errors raised while handling a request. */
   onError?: (error: Error) => void
+  /** The pages and languages for error pages. Defaults to the built-in ones. */
+  ui?: Ui
 }
 
 /**
@@ -42,7 +45,7 @@ const grantRequestedScopes: Configuration['loadExistingGrant'] = async (ctx) => 
  * are read from the database here and the provider is rebuilt when they change (see
  * `createProviderHolder`).
  */
-export const createProvider = async ({ config, db, onError }: ProviderOptions) => {
+export const createProvider = async ({ config, db, onError, ui = createUi() }: ProviderOptions) => {
   const claimTypeKeys = (await listClaimTypes(db)).map((claimType) => claimType.key)
   const store = createOidcPayloadStore(db)
   const secureIssuer = config.issuer.startsWith('https:')
@@ -81,7 +84,9 @@ export const createProvider = async ({ config, db, onError }: ProviderOptions) =
     renderError: async (ctx, out, error) => {
       onError?.(error)
       ctx.type = 'html'
-      ctx.body = errorPage('Something went wrong', out.error_description ?? out.error ?? 'The request could not be completed.')
+      const view = ui.pages.for(ui.i18n.pick(parseAcceptLanguage(ctx.get('accept-language'))))
+      // The library's own description is in English; the title and the fallback follow the browser's language.
+      ctx.body = view.notice(view.t('error.title'), out.error_description ?? out.error ?? view.t('error.generic'))
     },
     // The library only supports S256 (plain was removed). PKCE is required unless an administrator
     // switched it off for a confidential client (clients.pkce_required); public clients always need it.

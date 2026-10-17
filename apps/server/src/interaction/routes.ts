@@ -12,8 +12,10 @@ import type { Authenticate } from '../auth/authenticate.js'
 import { type Channel, type Notifier, NotifierUnavailableError } from '../notifications/notifier.js'
 import { applyIssuerHeaders } from '../oidc/issuer-headers.js'
 import type { ProviderHolder } from '../oidc/provider.js'
+import { parseAcceptLanguage } from '../i18n/index.js'
+import type { Ui } from '../ui/index.js'
+import { addPageHeaders, type PageSet } from '../ui/pages.js'
 import { readCookie, setCookieHeader, sign, unsign } from './signed-cookie.js'
-import { addPageHeaders, codePage, errorPage, loginPage } from './templates.js'
 
 export interface InteractionDependencies {
   provider: Pick<ProviderHolder, 'current' | 'issuer'>
@@ -22,6 +24,8 @@ export interface InteractionDependencies {
   notifier: Notifier
   /** The cookie keys of the service: they sign the step cookie and, derived, the one-time codes. */
   cookieKeys: string[]
+  /** The pages and their languages. */
+  ui: Ui
 }
 
 const STEP_COOKIE = 'pforte_second_factor'
@@ -35,14 +39,13 @@ interface Step {
   uid: string
   userId: string
   expiresAt: number
+  /** The language of the pages, fixed when the password was accepted. */
+  language: string
 }
-
-
-const GENERIC_LOGIN_ERROR = 'The e-mail or password is not correct.'
 
 /** The login pages the provider redirects to ("interactions"). */
 export const interactionRoutes =
-  ({ provider, authenticate, db, notifier, cookieKeys }: InteractionDependencies) =>
+  ({ provider, authenticate, db, notifier, cookieKeys, ui }: InteractionDependencies) =>
   async (app: FastifyInstance) => {
     await app.register(formbody)
 
@@ -63,15 +66,25 @@ export const interactionRoutes =
       }
     }
 
-    const expired = (reply: FastifyReply) =>
-      reply
-        .code(400)
-        .type('text/html')
-        .send(errorPage('Sign-in expired', 'This sign-in request has expired. Please go back to the application and start again.'))
+    /**
+     * The language of the pages: what the application asked for (`ui_locales`), else the user's own,
+     * else the browser's, else the default.
+     */
+    const languageOf = (request: FastifyRequest, params?: Record<string, unknown>, userLanguage?: string) =>
+      ui.i18n.pick(
+        typeof params?.ui_locales === 'string' ? params.ui_locales.split(' ') : undefined,
+        userLanguage,
+        parseAcceptLanguage(request.headers['accept-language']),
+      )
+
+    const expired = (request: FastifyRequest, reply: FastifyReply) => {
+      const view = ui.pages.for(languageOf(request))
+      return reply.code(400).type('text/html').send(view.notice(view.t('error.signInExpiredTitle'), view.t('error.signInExpired')))
+    }
 
     app.get<{ Params: { uid: string } }>('/interaction/:uid', async (request, reply) => {
       const details = await interactionFor(request, reply, request.params.uid)
-      if (!details) return expired(reply)
+      if (!details) return expired(request, reply)
 
       if (details.prompt.name === 'consent') {
         // There is no consent screen: every client is first-party. The library still asks for
@@ -95,7 +108,8 @@ export const interactionRoutes =
 
       if (details.prompt.name !== 'login') {
         request.log.warn({ prompt: details.prompt.name, reasons: details.prompt.reasons }, 'unsupported interaction prompt')
-        return reply.code(400).type('text/html').send(errorPage('Not supported', 'This request cannot be completed.'))
+        const view = ui.pages.for(languageOf(request, details.params))
+        return reply.code(400).type('text/html').send(view.notice(view.t('error.notSupportedTitle'), view.t('error.notSupported')))
       }
 
       const client = await provider.current().Client.find(String(details.params.client_id))
@@ -103,7 +117,7 @@ export const interactionRoutes =
       return reply
         .type('text/html')
         .send(
-          loginPage({
+          ui.pages.for(languageOf(request, details.params)).login({
             uid: details.uid,
             clientName: client?.clientName,
             // The application may suggest who is signing in (OpenID Connect `login_hint`).
@@ -116,7 +130,7 @@ export const interactionRoutes =
       '/interaction/:uid/login',
       async (request, reply) => {
         const details = await interactionFor(request, reply, request.params.uid)
-        if (!details) return expired(reply)
+        if (!details) return expired(request, reply)
 
         const { email, password } = request.body ?? {}
         const result =
@@ -124,15 +138,16 @@ export const interactionRoutes =
 
         if (!result) {
           const client = await provider.current().Client.find(String(details.params.client_id))
+          const view = ui.pages.for(languageOf(request, details.params))
           return reply
             .code(401)
             .type('text/html')
             .send(
-              loginPage({
+              view.login({
                 uid: details.uid,
                 clientName: client?.clientName,
                 email: typeof email === 'string' ? email : '',
-                error: GENERIC_LOGIN_ERROR,
+                error: view.t('login.wrong'),
               }),
             )
         }
@@ -173,9 +188,9 @@ export const interactionRoutes =
     type StepUser = NonNullable<Awaited<ReturnType<typeof stepFor>>>['user']
 
     /** The code page, telling where the code that is valid now was sent. */
-    const codePageFor = async (user: StepUser, uid: string, extra: { error?: string; notice?: string } = {}) => {
+    const codePageFor = async (user: StepUser, uid: string, language: string, extra: { error?: string; notice?: string } = {}) => {
       const channel = (await currentCode(db, { userId: user.id, purpose: 'login' }))?.channel ?? 'email'
-      return codePage({
+      return ui.pages.for(language).code({
         uid,
         channel,
         sentTo: channel === 'sms' && user.phone ? maskPhone(user.phone) : maskEmail(user.email),
@@ -204,14 +219,14 @@ export const interactionRoutes =
       }
     }
 
-    const limitMessage = (error: CodeLimitError) =>
+    const limitMessage = (view: PageSet, error: CodeLimitError) =>
       error.reason === 'cooldown'
-        ? `A code was sent a moment ago. You can ask for a new one in ${error.retryAfterSeconds} seconds.`
-        : `Too many codes were requested. Please try again in ${Math.ceil(error.retryAfterSeconds / 60)} minutes.`
+        ? view.t('code.cooldown', { seconds: error.retryAfterSeconds })
+        : view.t('code.tooMany', { minutes: Math.ceil(error.retryAfterSeconds / 60) })
 
-    const cannotSend = (reply: FastifyReply, error: NotifierUnavailableError) => {
+    const cannotSend = (reply: FastifyReply, view: PageSet, error: NotifierUnavailableError) => {
       reply.log.error(error, 'the sign-in code could not be sent')
-      return reply.code(503).type('text/html').send(errorPage('Cannot send the code', 'The code could not be sent. Please try again later.'))
+      return reply.code(503).type('text/html').send(view.notice(view.t('error.cannotSendTitle'), view.t('error.cannotSend')))
     }
 
     /** The password was right: send the code and ask for it. */
@@ -223,7 +238,9 @@ export const interactionRoutes =
     ) => {
       const acrValues = params.acr_values
       const user = await findActiveUserById(db, userId)
-      if (!user) return expired(reply)
+      if (!user) return expired(request, reply)
+      const language = languageOf(request, params, user.language)
+      const view = ui.pages.for(language)
 
       // A remembered device skips the code, unless the application asks for the stronger
       // assurance: then the second factor is required whatever the browser remembers.
@@ -236,31 +253,31 @@ export const interactionRoutes =
       try {
         await sendCode(user, channelFor(user, notifier))
       } catch (error) {
-        if (error instanceof NotifierUnavailableError) return cannotSend(reply, error)
+        if (error instanceof NotifierUnavailableError) return cannotSend(reply, view, error)
         if (!(error instanceof CodeLimitError)) throw error
         // Not a fresh sign-in after all, but repeated requests: the code sent earlier still works.
         if (error.reason === 'too_many') {
-          return reply.code(429).header('Retry-After', error.retryAfterSeconds).type('text/html').send(errorPage('Too many codes', limitMessage(error)))
+          return reply.code(429).header('Retry-After', error.retryAfterSeconds).type('text/html').send(view.notice(view.t('code.tooManyTitle'), limitMessage(view, error)))
         }
         // A code went out a moment ago and still works.
       }
 
-      const step: Step = { uid, userId, expiresAt: Date.now() + STEP_LIFETIME_SECONDS * 1000 }
+      const step: Step = { uid, userId, language, expiresAt: Date.now() + STEP_LIFETIME_SECONDS * 1000 }
       reply.header('Set-Cookie', setCookieHeader(STEP_COOKIE, sign(cookieKeys, step), { path: cookiePath(uid), maxAgeSeconds: STEP_LIFETIME_SECONDS, secure }))
       return reply.redirect(`${cookiePath(uid)}/code`, 303)
     }
 
     app.get<{ Params: { uid: string } }>('/interaction/:uid/code', async (request, reply) => {
       const details = await interactionFor(request, reply, request.params.uid)
-      if (!details) return expired(reply)
+      if (!details) return expired(request, reply)
       const current = await stepFor(request, details.uid)
       if (!current) return reply.redirect(cookiePath(details.uid), 303)
-      return reply.type('text/html').send(await codePageFor(current.user, details.uid))
+      return reply.type('text/html').send(await codePageFor(current.user, details.uid, current.step.language))
     })
 
     app.post<{ Params: { uid: string }; Body: { code?: unknown; remember?: unknown } }>('/interaction/:uid/code', async (request, reply) => {
       const details = await interactionFor(request, reply, request.params.uid)
-      if (!details) return expired(reply)
+      if (!details) return expired(request, reply)
       const current = await stepFor(request, details.uid)
       if (!current) return reply.redirect(cookiePath(details.uid), 303)
       const { user } = current
@@ -271,13 +288,8 @@ export const interactionRoutes =
         : ({ ok: false, reason: 'wrong' } as const)
 
       if (!result.ok) {
-        const error = {
-          wrong: 'The code is not correct.',
-          exhausted: 'Too many wrong attempts. Please ask for a new code.',
-          expired: 'The code has expired. Please ask for a new one.',
-          none: 'There is no valid code. Please ask for a new one.',
-        }[result.reason]
-        return reply.code(401).type('text/html').send(await codePageFor(user, details.uid, { error }))
+        const error = ui.pages.for(current.step.language).t(`code.${result.reason}`)
+        return reply.code(401).type('text/html').send(await codePageFor(user, details.uid, current.step.language, { error }))
       }
 
       if (result.channel === 'email') await markEmailVerified(db, user.id)
@@ -296,7 +308,7 @@ export const interactionRoutes =
 
     app.post<{ Params: { uid: string }; Body: { channel?: unknown } }>('/interaction/:uid/code/resend', async (request, reply) => {
       const details = await interactionFor(request, reply, request.params.uid)
-      if (!details) return expired(reply)
+      if (!details) return expired(request, reply)
       const current = await stepFor(request, details.uid)
       if (!current) return reply.redirect(cookiePath(details.uid), 303)
 
@@ -305,20 +317,23 @@ export const interactionRoutes =
       try {
         await sendCode(current.user, wanted)
       } catch (error) {
-        if (error instanceof NotifierUnavailableError) return cannotSend(reply, error)
+        const view = ui.pages.for(current.step.language)
+        if (error instanceof NotifierUnavailableError) return cannotSend(reply, view, error)
         if (!(error instanceof CodeLimitError)) throw error
         return reply
           .code(429)
           .header('Retry-After', error.retryAfterSeconds)
           .type('text/html')
-          .send(await codePageFor(current.user, details.uid, { error: limitMessage(error) }))
+          .send(await codePageFor(current.user, details.uid, current.step.language, { error: limitMessage(view, error) }))
       }
-      return reply.type('text/html').send(await codePageFor(current.user, details.uid, { notice: 'A new code is on its way.' }))
+      return reply
+        .type('text/html')
+        .send(await codePageFor(current.user, details.uid, current.step.language, { notice: ui.pages.for(current.step.language).t('code.newOnItsWay') }))
     })
 
     app.post<{ Params: { uid: string } }>('/interaction/:uid/abort', async (request, reply) => {
       const details = await interactionFor(request, reply, request.params.uid)
-      if (!details) return expired(reply)
+      if (!details) return expired(request, reply)
 
       reply.hijack()
       await provider
