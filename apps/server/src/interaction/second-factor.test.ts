@@ -230,3 +230,202 @@ describe.skipIf(!hasDatabase)('second factor at sign-in', () => {
     expect(result.code).toBeTruthy()
   })
 })
+
+describe.skipIf(!hasDatabase)('remembered devices at sign-in', () => {
+  let h: AdminHarness
+
+  beforeAll(async () => {
+    h = await createAdminHarness()
+  })
+
+  afterAll(async () => {
+    await h?.close()
+  })
+
+  beforeEach(async () => {
+    h.notifications.length = 0
+    await h.database.pool.query(`delete from otp_codes`)
+    await h.database.pool.query(`delete from devices`)
+    await h.database.pool.query(`update users set phone = null, email_verified_at = null, status = 'active' where password_hash is not null`)
+  })
+
+  const authorize = (extra: Record<string, string> = {}) => {
+    const { challenge, verifier } = pkcePair()
+    const params = new URLSearchParams({
+      client_id: WEB.clientId,
+      redirect_uri: WEB.redirectUri,
+      response_type: 'code',
+      scope: 'openid',
+      state: 's',
+      nonce: 'n',
+      code_challenge: challenge,
+      code_challenge_method: 'S256',
+      ...extra,
+    })
+    return { params, verifier }
+  }
+
+  /** Signs in with the password (and the code, remembering the device if asked). Returns the ID token claims. */
+  const signInOn = async (browser: Browser, email: string, { remember = false, extra = {} as Record<string, string> } = {}) => {
+    // A new visit: the single sign-on session is gone, the remembered device is not.
+    for (const name of browser.cookies.keys()) if (name !== 'pforte_device') browser.cookies.delete(name)
+    const { params, verifier } = authorize(extra)
+    const interaction = (await browser.request('GET', `/auth?${params}`)).headers.location as string
+    await browser.request('GET', interaction)
+    const password = await browser.request('POST', `${interaction}/login`, { form: { email, password: 'dev-password' } })
+    const askedForCode = password.headers.location === `${interaction}/code`
+    let finished = password
+    if (askedForCode) {
+      const code = h.notifications.findLast((n) => n.kind === 'login-code' && n.user.email === email)!.code!
+      finished = await browser.request('POST', `${interaction}/code`, { form: { code, ...(remember ? { remember: 'on' } : {}) } })
+    }
+    const resumed = await browser.request('GET', finished.headers.location as string)
+    const code = new URL(resumed.headers.location as string).searchParams.get('code')!
+    const tokens = (
+      await browser.request('POST', '/token', {
+        form: { grant_type: 'authorization_code', code, redirect_uri: WEB.redirectUri, client_id: WEB.clientId, code_verifier: verifier },
+      })
+    ).json()
+    return { askedForCode, claims: (await verifyJwt(h.app, tokens.id_token)).claims, finished }
+  }
+
+  const userId = async (email: string) => (await h.database.pool.query(`select id from users where email = $1`, [email])).rows[0].id as string
+  const fresh = () => h.database.pool.query(`delete from otp_codes`)
+
+  it('asks for the code until the user chooses to remember the device', async () => {
+    const browser = new Browser(h.app)
+    const first = await signInOn(browser, 'anna.schmidt@example.com')
+    expect(first.askedForCode).toBe(true)
+    expect(browser.cookies.has('pforte_device')).toBe(false)
+
+    await fresh()
+    const second = await signInOn(browser, 'anna.schmidt@example.com', { remember: true })
+    expect(second.askedForCode).toBe(true)
+    expect(browser.cookies.has('pforte_device')).toBe(true)
+  })
+
+  it('sets the device cookie so that scripts cannot read it and other sites cannot send it', async () => {
+    const browser = new Browser(h.app)
+    const { finished } = await signInOn(browser, 'ben.keller@example.com', { remember: true })
+    const cookie = [finished.headers['set-cookie']].flat().find((header) => header?.startsWith('pforte_device='))!
+    expect(cookie).toContain('HttpOnly')
+    expect(cookie).toContain('SameSite=Strict')
+    expect(cookie).toContain('Secure')
+    expect(cookie).toContain(`Max-Age=${90 * 24 * 60 * 60}`)
+  })
+
+  it('skips the code on a remembered device and says so in acr and amr', async () => {
+    const browser = new Browser(h.app)
+    await signInOn(browser, 'felix.brandt@example.com', { remember: true })
+    h.notifications.length = 0
+
+    const again = await signInOn(browser, 'felix.brandt@example.com')
+    expect(again.askedForCode).toBe(false)
+    expect(h.notifications).toEqual([])
+    expect(again.claims).toMatchObject({ acr: 'urn:pforte:acr:pwd', amr: ['pwd'] })
+  })
+
+  it('asks for the code on another browser, and for another user on the same browser', async () => {
+    const browser = new Browser(h.app)
+    await signInOn(browser, 'greta.lang@example.com', { remember: true })
+
+    expect((await signInOn(new Browser(h.app), 'greta.lang@example.com')).askedForCode).toBe(true)
+    await fresh()
+    expect((await signInOn(browser, 'hans.weber@example.com')).askedForCode).toBe(true)
+  })
+
+  it('remembers several people on one browser', async () => {
+    const browser = new Browser(h.app)
+    await signInOn(browser, 'greta.lang@example.com', { remember: true })
+    await fresh()
+    await signInOn(browser, 'hans.weber@example.com', { remember: true })
+
+    expect((await signInOn(browser, 'greta.lang@example.com')).askedForCode).toBe(false)
+    expect((await signInOn(browser, 'hans.weber@example.com')).askedForCode).toBe(false)
+  })
+
+  it('ignores a made-up device cookie', async () => {
+    const browser = new Browser(h.app)
+    browser.cookies.set('pforte_device', 'made-up-token.another')
+    expect((await signInOn(browser, 'anna.schmidt@example.com')).askedForCode).toBe(true)
+  })
+
+  it('asks again after the device was revoked through the admin API', async () => {
+    const email = 'ben.keller@example.com'
+    const browser = new Browser(h.app)
+    await signInOn(browser, email, { remember: true })
+    expect((await signInOn(browser, email)).askedForCode).toBe(false)
+
+    const id = await userId(email)
+    const list = await h.api('GET', `/users/${id}/devices`)
+    expect(list.statusCode).toBe(200)
+    expect(list.json().items).toHaveLength(1)
+    expect(list.json().items[0]).toMatchObject({ userAgent: expect.any(String) })
+
+    const revoked = await h.api('DELETE', `/users/${id}/devices/${list.json().items[0].id}`)
+    expect(revoked.statusCode).toBe(204)
+    expect((await h.audit('user.device.revoke', id))).toHaveLength(1)
+
+    expect((await signInOn(browser, email)).askedForCode).toBe(true)
+  })
+
+  it('asks again after all devices were revoked', async () => {
+    const email = 'felix.brandt@example.com'
+    const one = new Browser(h.app)
+    const two = new Browser(h.app)
+    await signInOn(one, email, { remember: true })
+    await fresh()
+    await signInOn(two, email, { remember: true })
+
+    const revoked = await h.api('DELETE', `/users/${await userId(email)}/devices`)
+    expect(revoked.json()).toEqual({ devicesRevoked: 2 })
+    expect((await signInOn(one, email)).askedForCode).toBe(true)
+    await fresh()
+    expect((await signInOn(two, email)).askedForCode).toBe(true)
+  })
+
+  it('asks again after ending the sessions of the user, and reports the devices', async () => {
+    const email = 'greta.lang@example.com'
+    const browser = new Browser(h.app)
+    await signInOn(browser, email, { remember: true })
+
+    const ended = await h.api('POST', `/users/${await userId(email)}/end-sessions`)
+    expect(ended.json().devicesRevoked).toBe(1)
+    expect((await signInOn(browser, email)).askedForCode).toBe(true)
+  })
+
+  it('requires the code on a remembered device when the application asks for the stronger assurance', async () => {
+    const email = 'hans.weber@example.com'
+    const browser = new Browser(h.app)
+    await signInOn(browser, email, { remember: true })
+
+    const stepUp = await signInOn(browser, email, { extra: { acr_values: 'urn:pforte:acr:mfa' } })
+    expect(stepUp.askedForCode).toBe(true)
+    expect(stepUp.claims).toMatchObject({ acr: 'urn:pforte:acr:mfa' })
+
+    // Asking for the weaker one is fine with a remembered device.
+    expect((await signInOn(browser, email, { extra: { acr_values: 'urn:pforte:acr:pwd' } })).askedForCode).toBe(false)
+  })
+
+  it('does not let a remembered device sign in a user who is locked', async () => {
+    const email = 'anna.schmidt@example.com'
+    const browser = new Browser(h.app)
+    await signInOn(browser, email, { remember: true })
+    await h.api('POST', `/users/${await userId(email)}/lock`)
+
+    const { params } = authorize()
+    const interaction = (await browser.request('GET', `/auth?${params}`)).headers.location as string
+    await browser.request('GET', interaction)
+    const login = await browser.request('POST', `${interaction}/login`, { form: { email, password: 'dev-password' } })
+    expect(login.statusCode).toBe(401)
+  })
+
+  it('answers 404 for unknown users and devices, and requires the directory or admin scope', async () => {
+    const unknown = '018f0000-0000-7000-8000-000000000000'
+    expect((await h.api('GET', `/users/${unknown}/devices`)).statusCode).toBe(404)
+    expect((await h.api('DELETE', `/users/${unknown}/devices`)).statusCode).toBe(404)
+    const id = await userId('ben.keller@example.com')
+    expect((await h.api('DELETE', `/users/${id}/devices/${unknown}`)).statusCode).toBe(404)
+    expect((await h.api('GET', `/users/${id}/devices`, { token: null })).statusCode).toBe(401)
+  })
+})

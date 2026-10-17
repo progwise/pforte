@@ -62,6 +62,11 @@ curl -H "authorization: Bearer $TOKEN" 'http://localhost:3300/admin/users?search
 Add `?dryRun=true` to the upsert to see what it would do (`created`, `updated` or `unchanged`, and
 what would change) without writing anything or recording an audit event.
 
+Users can ask pforte to remember a device after entering the code (90 days). `GET
+/admin/users/{id}/devices` lists them and `DELETE /admin/users/{id}/devices[/{deviceId}]` revokes one or
+all, so the next sign-in asks for a code again. Locking, deactivating, resetting the password and ending
+sessions revoke them too.
+
 Every change is recorded in the audit log with the client that made it.
 
 The API describes itself: `GET /admin/openapi.json` (with a token) returns an OpenAPI 3.1 document

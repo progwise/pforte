@@ -212,9 +212,9 @@ export const lifecycleRoutes =
         schema: {
           tags: ['Lifecycle'],
           summary: 'End all sessions of a user',
-          description: 'Deletes their sessions, grants and refresh tokens, so they must sign in again. Their status does not change.',
+          description: 'Deletes their sessions, grants and refresh tokens and revokes their remembered devices, so they must sign in again, with a code. Their status does not change.',
           params,
-          response: { 200: z.object({ sessionsEnded: z.number().int() }), ...ERROR_RESPONSES },
+          response: { 200: z.object({ sessionsEnded: z.number().int(), devicesRevoked: z.number().int() }), ...ERROR_RESPONSES },
         },
       },
       async (request, reply) => {
@@ -222,7 +222,7 @@ export const lifecycleRoutes =
           const found = await findUserById(tx, request.params.id)
           return found ? endSessions(tx, requestContext(request), found) : undefined
         })
-        return result ? { sessionsEnded: result.sessionsEnded } : noUser(reply)
+        return result ? { sessionsEnded: result.sessionsEnded, devicesRevoked: result.devicesRevoked } : noUser(reply)
       },
     )
   }

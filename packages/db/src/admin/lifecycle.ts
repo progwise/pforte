@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import { type DatabaseOrTransaction, recordAuditEvent } from '../audit.js'
 import { oidcPayloads, users } from '../schema/index.js'
+import { revokeUserDevices } from './devices.js'
 import type { RequestContext } from './users.js'
 
 type UserRow = typeof users.$inferSelect
@@ -41,10 +42,13 @@ export const assertAllowed = (user: UserRow, action: LifecycleAction) => {
   }
 }
 
-/** Deletes every session, grant and token of a user, so they must sign in again. Returns how many rows went. */
+/**
+ * Deletes every session, grant and token of a user and revokes their remembered devices, so they
+ * must sign in again, with the second factor. Returns how many of each went.
+ */
 export const endUserSessions = async (tx: DatabaseOrTransaction, userId: string) => {
   const deleted = await tx.delete(oidcPayloads).where(eq(oidcPayloads.accountId, userId)).returning({ id: oidcPayloads.id })
-  return deleted.length
+  return { sessionsEnded: deleted.length, devicesRevoked: await revokeUserDevices(tx, userId) }
 }
 
 const audit = (context: RequestContext, action: string, user: UserRow, details: Record<string, unknown>) => ({
@@ -67,8 +71,8 @@ const setStatus = async (tx: DatabaseOrTransaction, user: UserRow, values: Parti
 export const lockUser = async (tx: DatabaseOrTransaction, context: RequestContext, user: UserRow) => {
   assertAllowed(user, 'lock')
   const updated = await setStatus(tx, user, { status: 'locked', lockedAt: new Date() })
-  const sessionsEnded = await endUserSessions(tx, user.id)
-  await recordAuditEvent(tx, audit(context, 'user.lock', user, { from: user.status, to: 'locked', sessionsEnded }))
+  const { sessionsEnded, devicesRevoked } = await endUserSessions(tx, user.id)
+  await recordAuditEvent(tx, audit(context, 'user.lock', user, { from: user.status, to: 'locked', sessionsEnded, devicesRevoked }))
   return updated
 }
 
@@ -84,8 +88,8 @@ export const deactivateUser = async (tx: DatabaseOrTransaction, context: Request
   assertAllowed(user, 'deactivate')
   // A pending activation link must not work for someone who was deactivated.
   const updated = await setStatus(tx, user, { status: 'deactivated', activationTokenHash: null, activationExpiresAt: null })
-  const sessionsEnded = await endUserSessions(tx, user.id)
-  await recordAuditEvent(tx, audit(context, 'user.deactivate', user, { from: user.status, to: 'deactivated', sessionsEnded }))
+  const { sessionsEnded, devicesRevoked } = await endUserSessions(tx, user.id)
+  await recordAuditEvent(tx, audit(context, 'user.deactivate', user, { from: user.status, to: 'deactivated', sessionsEnded, devicesRevoked }))
   return updated
 }
 
@@ -123,16 +127,16 @@ export const activateUser = async (tx: DatabaseOrTransaction, context: RequestCo
 /** Asks for a password reset (the notifier sends the code) and ends all sessions, as the account may be compromised. */
 export const requestPasswordReset = async (tx: DatabaseOrTransaction, context: RequestContext, user: UserRow) => {
   assertAllowed(user, 'reset-password')
-  const sessionsEnded = await endUserSessions(tx, user.id)
-  await recordAuditEvent(tx, audit(context, 'user.password_reset.request', user, { sessionsEnded }))
+  const { sessionsEnded, devicesRevoked } = await endUserSessions(tx, user.id)
+  await recordAuditEvent(tx, audit(context, 'user.password_reset.request', user, { sessionsEnded, devicesRevoked }))
   return user
 }
 
 export const endSessions = async (tx: DatabaseOrTransaction, context: RequestContext, user: UserRow) => {
   assertAllowed(user, 'end-sessions')
-  const sessionsEnded = await endUserSessions(tx, user.id)
-  await recordAuditEvent(tx, audit(context, 'user.sessions.end', user, { sessionsEnded }))
-  return { user, sessionsEnded }
+  const { sessionsEnded, devicesRevoked } = await endUserSessions(tx, user.id)
+  await recordAuditEvent(tx, audit(context, 'user.sessions.end', user, { sessionsEnded, devicesRevoked }))
+  return { user, sessionsEnded, devicesRevoked }
 }
 
 export const activationTokenHash = hashToken

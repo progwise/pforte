@@ -154,7 +154,7 @@ export const updateUser = async (
 
 /** Deletes a user and everything that hangs on them, including sessions and tokens. The audit event keeps who they were. */
 export const deleteUser = async (tx: DatabaseOrTransaction, context: RequestContext, user: UserRow) => {
-  const sessionsEnded = await endUserSessions(tx, user.id)
+  const { sessionsEnded } = await endUserSessions(tx, user.id)
   await recordAuditEvent(
     tx,
     audit(context, {

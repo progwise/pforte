@@ -1,0 +1,1 @@
+CREATE INDEX "devices_user_id" ON "devices" USING btree ("user_id");

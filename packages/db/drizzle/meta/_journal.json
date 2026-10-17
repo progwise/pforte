@@ -43,6 +43,13 @@
       "when": 1792238220805,
       "tag": "0005_add_email_verified",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792264637439,
+      "tag": "0006_add_devices_index",
+      "breakpoints": true
     }
   ]
 }

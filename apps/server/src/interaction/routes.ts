@@ -2,10 +2,11 @@ import { createHmac } from 'node:crypto'
 import formbody from '@fastify/formbody'
 import type { Database } from '@progwise/pforte-db'
 import { checkCode, CodeLimitError, issueCode, markEmailVerified } from '@progwise/pforte-db/codes'
+import { DEVICE_LIFETIME_MS, findRememberedDevice, rememberDevice } from '@progwise/pforte-db/devices'
 import { findActiveUserById } from '@progwise/pforte-db/oidc'
 import { recordLogin } from '@progwise/pforte-db/users'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import { secondFactorAssurance } from '../auth/assurance.js'
+import { ACR_PASSWORD, ACR_SECOND_FACTOR, secondFactorAssurance } from '../auth/assurance.js'
 import type { Authenticate } from '../auth/authenticate.js'
 import { type Notifier, NotifierUnavailableError } from '../notifications/notifier.js'
 import { applyIssuerHeaders } from '../oidc/issuer-headers.js'
@@ -24,6 +25,10 @@ export interface InteractionDependencies {
 
 const STEP_COOKIE = 'pforte_second_factor'
 const STEP_LIFETIME_SECONDS = 15 * 60
+/** Holds the tokens of remembered devices. Tokens are base64url, so a dot cannot occur inside one. */
+const DEVICE_COOKIE = 'pforte_device'
+/** One browser can be used by several people; each keeps a token, the newest few are kept. */
+const MAX_DEVICE_TOKENS = 5
 
 interface Step {
   uid: string
@@ -138,9 +143,30 @@ export const interactionRoutes =
             )
         }
 
-        return startSecondFactor(request, reply, details.uid, result.userId)
+        return startSecondFactor(request, reply, details, result.userId)
       },
     )
+
+    const deviceTokens = (request: FastifyRequest) =>
+      (readCookie(request.headers.cookie, DEVICE_COOKIE) ?? '').split('.').filter(Boolean).slice(0, MAX_DEVICE_TOKENS)
+
+    const isRemembered = async (request: FastifyRequest, userId: string) =>
+      Boolean(await findRememberedDevice(db, userId, deviceTokens(request)))
+
+    /** Ends the interaction with a successful login. */
+    const finishLogin = async (
+      request: FastifyRequest,
+      reply: FastifyReply,
+      accountId: string,
+      assurance: { acr: string; amr: string[] },
+      headers: string[] = [],
+    ) => {
+      if (headers.length > 0) reply.raw.setHeader('Set-Cookie', headers)
+      reply.hijack()
+      await provider
+        .current()
+        .interactionFinished(request.raw, reply.raw, { login: { accountId, ...assurance } }, { mergeWithLastSubmission: false })
+    }
 
     /** The step cookie, if it is valid, belongs to this interaction and the user can still sign in. */
     const stepFor = async (request: FastifyRequest, uid: string) => {
@@ -173,9 +199,23 @@ export const interactionRoutes =
     }
 
     /** The password was right: send the code and ask for it. */
-    const startSecondFactor = async (request: FastifyRequest, reply: FastifyReply, uid: string, userId: string) => {
+    const startSecondFactor = async (
+      request: FastifyRequest,
+      reply: FastifyReply,
+      { uid, params }: { uid: string; params: Record<string, unknown> },
+      userId: string,
+    ) => {
+      const acrValues = params.acr_values
       const user = await findActiveUserById(db, userId)
       if (!user) return expired(reply)
+
+      // A remembered device skips the code, unless the application asks for the stronger
+      // assurance: then the second factor is required whatever the browser remembers.
+      const requested = typeof acrValues === 'string' ? acrValues.split(' ') : []
+      if (!requested.includes(ACR_SECOND_FACTOR) && (await isRemembered(request, user.id))) {
+        await recordLogin(db, user.id)
+        return finishLogin(request, reply, user.id, { acr: ACR_PASSWORD, amr: ['pwd'] })
+      }
 
       try {
         await sendCode(user)
@@ -202,7 +242,7 @@ export const interactionRoutes =
       return reply.type('text/html').send(codePageFor(current.user, details.uid))
     })
 
-    app.post<{ Params: { uid: string }; Body: { code?: unknown } }>('/interaction/:uid/code', async (request, reply) => {
+    app.post<{ Params: { uid: string }; Body: { code?: unknown; remember?: unknown } }>('/interaction/:uid/code', async (request, reply) => {
       const details = await interactionFor(request, reply, request.params.uid)
       if (!details) return expired(reply)
       const current = await stepFor(request, details.uid)
@@ -227,16 +267,15 @@ export const interactionRoutes =
       if (result.channel === 'email') await markEmailVerified(db, user.id)
       await recordLogin(db, user.id)
 
-      reply.raw.setHeader('Set-Cookie', setCookieHeader(STEP_COOKIE, '', { path: cookiePath(details.uid), maxAgeSeconds: 0, secure }))
-      reply.hijack()
-      await provider
-        .current()
-        .interactionFinished(
-          request.raw,
-          reply.raw,
-          { login: { accountId: user.id, ...secondFactorAssurance(result.channel) } },
-          { mergeWithLastSubmission: false },
+      const cookies = [setCookieHeader(STEP_COOKIE, '', { path: cookiePath(details.uid), maxAgeSeconds: 0, secure })]
+      if (request.body?.remember === 'on') {
+        const { token } = await rememberDevice(db, { userId: user.id, userAgent: request.headers['user-agent'] })
+        const tokens = [...deviceTokens(request), token].slice(-MAX_DEVICE_TOKENS)
+        cookies.push(
+          setCookieHeader(DEVICE_COOKIE, tokens.join('.'), { path: '/interaction', maxAgeSeconds: DEVICE_LIFETIME_MS / 1000, secure }),
         )
+      }
+      return finishLogin(request, reply, user.id, secondFactorAssurance(result.channel), cookies)
     })
 
     app.post<{ Params: { uid: string } }>('/interaction/:uid/code/resend', async (request, reply) => {

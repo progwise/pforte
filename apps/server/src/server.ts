@@ -1,4 +1,6 @@
 import { createDb, deleteExpiredOidcPayloads, getDatabaseTime } from '@progwise/pforte-db'
+import { deleteOldCodes } from '@progwise/pforte-db/codes'
+import { deleteOldDevices } from '@progwise/pforte-db/devices'
 import { buildApp } from './app.js'
 import { createAuthenticate } from './auth/authenticate.js'
 import { loadConfig } from './config.js'
@@ -40,6 +42,8 @@ const app = buildApp({
 
 const cleanup = setInterval(() => {
   deleteExpiredOidcPayloads(db).catch((error) => app.log.error(error, 'cleanup of expired OIDC payloads failed'))
+  deleteOldCodes(db).catch((error) => app.log.error(error, 'cleanup of old one-time codes failed'))
+  deleteOldDevices(db).catch((error) => app.log.error(error, 'cleanup of old devices failed'))
 }, CLEANUP_INTERVAL_MS)
 cleanup.unref()
 

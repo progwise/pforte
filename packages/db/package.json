@@ -10,6 +10,7 @@
     "./seed": "./src/seed.ts",
     "./users": "./src/users.ts",
     "./codes": "./src/codes.ts",
+    "./devices": "./src/devices.ts",
     "./testing": "./src/test/test-database.ts"
   },
   "scripts": {

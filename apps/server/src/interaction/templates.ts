@@ -14,6 +14,8 @@ const css = `
   input { width: 100%; padding: 0.6rem; margin-bottom: 1rem; font: inherit; border: 1px solid #8c959f; border-radius: 0.3rem; }
   button { width: 100%; padding: 0.7rem; font: inherit; font-weight: 600; color: #fff; background: #0b5cad;
     border: 0; border-radius: 0.3rem; cursor: pointer; }
+  label.check { display: flex; gap: 0.5rem; align-items: flex-start; margin-bottom: 1rem; font-weight: 400; }
+  label.check input { width: auto; margin: 0.3rem 0 0; }
   button.secondary { margin-top: 0.5rem; color: #0b5cad; background: transparent; }
   .error { margin-bottom: 1rem; padding: 0.6rem; color: #82071e; background: #ffebe9; border-radius: 0.3rem; }
 `
@@ -88,6 +90,7 @@ ${error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : ''}
 <form method="post" action="/interaction/${encodeURIComponent(uid)}/code">
 <label for="code">Code</label>
 <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]*" maxlength="7" required autofocus>
+<label class="check"><input type="checkbox" name="remember"> Remember this device for 90 days, so I am not asked for a code here again</label>
 <button type="submit">Continue</button>
 </form>
 <form method="post" action="/interaction/${encodeURIComponent(uid)}/code/resend">

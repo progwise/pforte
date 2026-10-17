@@ -13,6 +13,7 @@ import { createAdminAuth } from './auth.js'
 import { auditRoutes } from './audit-routes.js'
 import { claimTypesRoutes } from './claim-types-routes.js'
 import { clientsRoutes } from './clients-routes.js'
+import { devicesRoutes } from './devices-routes.js'
 import { claimsRoutes } from './claims-routes.js'
 import { lifecycleRoutes } from './lifecycle-routes.js'
 import { problem } from './problem.js'
@@ -48,6 +49,7 @@ export const adminRoutes =
         tags: [
           { name: 'Users', description: 'Create, find, change and delete users; idempotent upsert by e-mail for imports.' },
           { name: 'Lifecycle', description: 'Lock, unlock, activate, deactivate, reset the password and end the sessions of a user.' },
+          { name: 'Devices', description: 'The devices a user asked pforte to remember, so they skip the second factor there.' },
           { name: 'Claims', description: 'The claim values of a user.' },
           { name: 'Claim types', description: 'The kinds of claims, and which clients receive them.' },
           { name: 'Clients', description: 'The applications and machines that use pforte.' },
@@ -104,6 +106,7 @@ export const adminRoutes =
 
     await app.register(usersRoutes({ db, auth }))
     await app.register(claimsRoutes({ db, auth }))
+    await app.register(devicesRoutes({ db, auth }))
     await app.register(lifecycleRoutes({ db, auth, notifier, issuer: provider.issuer }))
     await app.register(claimTypesRoutes({ db, auth, reloadProvider }))
     await app.register(clientsRoutes({ db, auth, reloadProvider }))
