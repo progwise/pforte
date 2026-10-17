@@ -251,6 +251,15 @@ importers:
         specifier: 4.23.15
         version: 4.23.15
 
+  packages/import:
+    dependencies:
+      csv-parse:
+        specifier: 7.0.3
+        version: 7.0.3
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+
 packages:
 
   '@apidevtools/json-schema-ref-parser@16.0.5':
@@ -1344,6 +1353,9 @@ packages:
   cookies@0.9.2:
     resolution: {integrity: sha512-8BIbcC6tPZMv2/PD4PrB3CtKks7LmAWhA7FRZK/6/b/WJ2RUz00KCga7gq50S4/RhZ22kxefRFGgsuts0v3eoA==}
     engines: {node: '>= 0.8'}
+
+  csv-parse@7.0.3:
+    resolution: {integrity: sha512-YFd3QM/yo17vH91L1IOZuvl09zM0zEEtdfTcOCKWcMdM++MNaQSyp09slXyFCLaPXvHstQFx/xC8myiFHSMUvw==}
 
   debug@4.4.3:
     resolution: {integrity: sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==}
@@ -2764,6 +2776,8 @@ snapshots:
     dependencies:
       depd: 2.0.0
       keygrip: 1.1.0
+
+  csv-parse@7.0.3: {}
 
   debug@4.4.3:
     dependencies:

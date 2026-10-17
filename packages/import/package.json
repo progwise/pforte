@@ -1,0 +1,18 @@
+{
+  "name": "@progwise/pforte-import",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Reads user files (CSV) and imports them into pforte through the admin API.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "csv-parse": "7.0.3",
+    "zod": "4.6.7"
+  }
+}
