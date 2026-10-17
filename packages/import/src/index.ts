@@ -1,4 +1,7 @@
+export * from './api.js'
 export * from './columns.js'
 export * from './errors.js'
+export * from './missing.js'
 export * from './read.js'
 export * from './rows.js'
+export * from './run.js'
