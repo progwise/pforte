@@ -14,7 +14,7 @@ import { applyIssuerHeaders } from '../oidc/issuer-headers.js'
 import type { ProviderHolder } from '../oidc/provider.js'
 import { parseAcceptLanguage } from '../i18n/index.js'
 import type { Ui } from '../ui/index.js'
-import { addPageHeaders, type PageSet } from '../ui/pages.js'
+import type { PageSet } from '../ui/pages.js'
 import { readCookie, setCookieHeader, sign, unsign } from './signed-cookie.js'
 
 export interface InteractionDependencies {
@@ -53,7 +53,7 @@ export const interactionRoutes =
     const codeSecrets = deriveCodeSecrets(cookieKeys)
     const cookiePath = (uid: string) => `/interaction/${encodeURIComponent(uid)}`
 
-    addPageHeaders(app)
+    ui.pages.addHeaders(app)
 
     /** The interaction this request belongs to, or undefined if the cookie or uid does not match. */
     const interactionFor = async (request: FastifyRequest, reply: FastifyReply, uid: string) => {

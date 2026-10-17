@@ -13,7 +13,7 @@ import { readCookie, setCookieHeader, sign, unsign } from '../interaction/signed
 import { parseAcceptLanguage } from '../i18n/index.js'
 import { type Notifier, NotifierUnavailableError } from '../notifications/notifier.js'
 import type { Ui } from '../ui/index.js'
-import { addPageHeaders, type PageSet } from '../ui/pages.js'
+import type { PageSet } from '../ui/pages.js'
 
 export interface AccountDependencies {
   db: Database
@@ -45,7 +45,7 @@ export const accountRoutes =
   ({ db, sendPasswordResetCode, codeSecrets, notifier, cookieKeys, secure, ui }: AccountDependencies) =>
   async (app: FastifyInstance) => {
     await app.register(formbody)
-    addPageHeaders(app)
+    ui.pages.addHeaders(app)
 
     const html = (reply: FastifyReply, status: number, body: string) => reply.code(status).type('text/html').send(body)
     const origin = (request: FastifyRequest) => ({ ip: request.ip, userAgent: request.headers['user-agent'] })

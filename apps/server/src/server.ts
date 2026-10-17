@@ -9,15 +9,25 @@ import { loadConfig } from './config.js'
 import { createSmtpMailer } from './notifications/mailer.js'
 import { createHttpSmsSender } from './notifications/sms.js'
 import { createLogNotifier, createMailNotifier } from './notifications/notifier.js'
+import { loadBrand } from './ui/brand.js'
 import { createUi } from './ui/index.js'
+import { defaultTheme } from './ui/theme.js'
 import { loadLocaleOverrides } from './i18n/overrides.js'
 import { createProviderHolder } from './oidc/provider.js'
 
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000
 
 const config = loadConfig()
-const { overrides, warnings } = config.brandingDir ? loadLocaleOverrides(config.brandingDir) : { overrides: {}, warnings: [] }
-const ui = createUi({ overrides, defaultLanguage: config.defaultLanguage, rememberDeviceDefault: config.rememberDeviceDefault })
+const texts = config.brandingDir ? loadLocaleOverrides(config.brandingDir) : { overrides: {}, warnings: [] }
+const brand = config.brandingDir ? loadBrand(config.brandingDir) : { theme: defaultTheme(), name: undefined, warnings: [] }
+const warnings = [...texts.warnings, ...brand.warnings]
+const organisationName = brand.name ?? config.organisationName
+const ui = createUi({
+  overrides: texts.overrides,
+  defaultLanguage: config.defaultLanguage,
+  rememberDeviceDefault: config.rememberDeviceDefault,
+  theme: brand.theme,
+})
 const { db, pool } = createDb(config.databaseUrl, {
   onError: (error) => app.log.error(error, 'database pool error'),
 })
@@ -33,7 +43,7 @@ const notifier = config.mail
   ? createMailNotifier({
       mailer: createSmtpMailer({ url: config.mail.smtpUrl, from: config.mail.from }),
       sms: config.sms && createHttpSmsSender(config.sms),
-      organisation: config.organisationName,
+      organisation: organisationName,
       i18n: ui.i18n,
     })
   : createLogNotifier({
@@ -48,6 +58,7 @@ const sendPasswordResetCode = createPasswordResetSender({
   issuer: config.issuer,
 })
 const app = buildApp({
+  ui,
   getDatabaseTime: () => getDatabaseTime(db),
   oidc: { provider, authenticate, db, notifier, cookieKeys: config.cookieKeys, ui },
   account: {

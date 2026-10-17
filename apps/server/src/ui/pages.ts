@@ -1,49 +1,15 @@
-import { createHash } from 'node:crypto'
 import type { FastifyInstance } from 'fastify'
 import type { I18n, MessageKey, Values } from '../i18n/index.js'
+import { buildContentSecurityPolicy, buildCss, defaultTheme, type FooterLink, type Theme } from './theme.js'
 
 const escapeMap: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
 export const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => escapeMap[char] as string)
 
-const css = `
-  *, *::before, *::after { box-sizing: border-box; }
-  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 1rem;
-    font: 16px/1.5 system-ui, sans-serif; background: #f4f5f7; color: #1b1f24; }
-  main { width: 100%; max-width: 24rem; background: #fff; padding: 2rem; border-radius: 0.5rem;
-    box-shadow: 0 1px 4px rgb(0 0 0 / 15%); }
-  h1 { margin: 0 0 1.5rem; font-size: 1.4rem; }
-  label { display: block; margin-bottom: 0.25rem; font-weight: 600; }
-  input { width: 100%; padding: 0.6rem; margin-bottom: 1rem; font: inherit; border: 1px solid #8c959f; border-radius: 0.3rem; }
-  button { width: 100%; padding: 0.7rem; font: inherit; font-weight: 600; color: #fff; background: #0b5cad;
-    border: 0; border-radius: 0.3rem; cursor: pointer; }
-  label.check { display: flex; gap: 0.5rem; align-items: flex-start; margin-bottom: 1rem; font-weight: 400; }
-  label.check input { width: auto; margin: 0.3rem 0 0; }
-  button.secondary { margin-top: 0.5rem; color: #0b5cad; background: transparent; }
-  a { color: #0b5cad; }
-  .error { margin-bottom: 1rem; padding: 0.6rem; color: #82071e; background: #ffebe9; border-radius: 0.3rem; }
-`
-
-/** Content-Security-Policy for the pages below: no scripts, and only this exact stylesheet. */
-export const contentSecurityPolicy = [
-  "default-src 'none'",
-  `style-src 'sha256-${createHash('sha256').update(css).digest('base64')}'`,
-  "frame-ancestors 'none'",
-  "base-uri 'none'",
-].join('; ')
-
-/** Headers for every page with a form: nothing is cached or sent along as referrer, and nothing but our own styles loads. */
-export const addPageHeaders = (app: FastifyInstance) => {
-  app.addHook('onSend', async (_request, reply) => {
-    reply.header('Cache-Control', 'no-store')
-    reply.header('Content-Security-Policy', contentSecurityPolicy)
-    reply.header('X-Content-Type-Options', 'nosniff')
-    reply.header('Referrer-Policy', 'no-referrer')
-  })
-}
-
 export interface PagesOptions {
   /** Whether "Remember this device" is ticked when the code page opens. */
   rememberDeviceDefault?: boolean
+  /** The look of the pages. The neutral one if not given. */
+  theme?: Theme
 }
 
 /** The pages of one language. */
@@ -74,12 +40,39 @@ export interface PageSet {
 
 export interface Pages {
   for(language: string): PageSet
+  /** Headers for every page with a form: nothing is cached or sent along as referrer, and only our own styles, fonts and logo load. */
+  addHeaders(app: FastifyInstance): void
 }
 
-export const createPages = (i18n: I18n, { rememberDeviceDefault = false }: PagesOptions = {}): Pages => ({
+/** The text of a footer link in a language; `en` is the fallback for languages the link does not list. */
+const labelOf = (link: FooterLink, language: string) =>
+  typeof link.label === 'string' ? link.label : (link.label[language] ?? link.label[language.split('-')[0]!] ?? link.label.en ?? Object.values(link.label)[0]!)
+
+export const createPages = (i18n: I18n, { rememberDeviceDefault = false, theme = defaultTheme() }: PagesOptions = {}): Pages => {
+  const css = buildCss(theme)
+  const contentSecurityPolicy = buildContentSecurityPolicy(css, theme)
+
+  return {
+  addHeaders(app) {
+    app.addHook('onSend', async (_request, reply) => {
+      reply.header('Cache-Control', 'no-store')
+      reply.header('Content-Security-Policy', contentSecurityPolicy)
+      reply.header('X-Content-Type-Options', 'nosniff')
+      reply.header('Referrer-Policy', 'no-referrer')
+    })
+  },
   for(requested) {
     const language = i18n.pick(requested)
     const t = (key: MessageKey, values?: Values) => i18n.text(language, key, values)
+
+    const header = theme.logoUrl
+      ? `<img class="logo" src="${escapeHtml(theme.logoUrl)}" alt="${escapeHtml(theme.name ?? '')}">\n`
+      : theme.name
+        ? `<p class="brand">${escapeHtml(theme.name)}</p>\n`
+        : ''
+    const footer = theme.links.length
+      ? `<nav class="links">\n${theme.links.map((link) => `<a href="${escapeHtml(link.url)}">${escapeHtml(labelOf(link, language))}</a>`).join('\n')}\n</nav>\n`
+      : ''
 
     const page = (title: string, body: string) => `<!doctype html>
 <html lang="${escapeHtml(language)}">
@@ -91,9 +84,9 @@ export const createPages = (i18n: I18n, { rememberDeviceDefault = false }: Pages
 </head>
 <body>
 <main>
-${body}
+${header}${body}
 </main>
-</body>
+${footer}</body>
 </html>`
 
     const alert = (error?: string) => (error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : '')
@@ -222,4 +215,5 @@ ${codeField}
       notice: (title, message) => page(title, `<h1>${escapeHtml(title)}</h1>\n<p>${escapeHtml(message)}</p>`),
     }
   },
-})
+  }
+}
