@@ -4,6 +4,7 @@ import { verify } from '@node-rs/argon2'
 import Provider, { type Configuration, type JWK } from 'oidc-provider'
 import type { Config } from '../config.js'
 import { errorPage } from '../interaction/templates.js'
+import { ACR_PASSWORD, ACR_SECOND_FACTOR } from '../auth/assurance.js'
 import { createFindAccount, standardClaims } from './accounts.js'
 import { ClientAdapter, PayloadAdapter } from './adapter.js'
 
@@ -51,11 +52,14 @@ export const createProvider = async ({ config, db, onError }: ProviderOptions) =
     cookies: { keys: config.cookieKeys, ...(secureIssuer && { long: { sameSite: 'none' as const } }) },
     jwks: { keys: config.jwks.keys as unknown as JWK[] },
     claims: {
-      openid: [...standardClaims.openid, ...claimTypeKeys],
+      // `acr` and `amr` tell the application whether a second factor was used, so they are always
+      // part of the ID token; the library leaves them out unless they are requested.
+      openid: [...standardClaims.openid, 'acr', 'amr', ...claimTypeKeys],
       email: [...standardClaims.email],
       profile: [...standardClaims.profile],
       phone: [...standardClaims.phone],
     },
+    acrValues: [ACR_PASSWORD, ACR_SECOND_FACTOR],
     findAccount: createFindAccount(db),
     responseTypes: ['code'],
     // OpenID Connect Core requires the authorization endpoint to accept POST as well as GET. A

@@ -67,3 +67,34 @@ ${error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : ''}
 
 export const errorPage = (title: string, message: string) =>
   page(title, `<h1>${escapeHtml(title)}</h1>\n<p>${escapeHtml(message)}</p>`)
+
+export interface CodePageOptions {
+  uid: string
+  /** Where the code went, already masked. */
+  sentTo: string
+  error?: string
+  notice?: string
+  /** Shown to users without a phone number, who therefore get codes by e-mail. */
+  phoneHint?: boolean
+}
+
+export const codePage = ({ uid, sentTo, error, notice, phoneHint }: CodePageOptions) =>
+  page(
+    'Enter your code',
+    `<h1>Enter your code</h1>
+<p>We sent a 6-digit code to ${escapeHtml(sentTo)}. It is valid for 10 minutes.</p>
+${notice ? `<p role="status">${escapeHtml(notice)}</p>` : ''}
+${error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : ''}
+<form method="post" action="/interaction/${encodeURIComponent(uid)}/code">
+<label for="code">Code</label>
+<input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]*" maxlength="7" required autofocus>
+<button type="submit">Continue</button>
+</form>
+<form method="post" action="/interaction/${encodeURIComponent(uid)}/code/resend">
+<button type="submit" class="secondary">Send a new code</button>
+</form>
+<form method="post" action="/interaction/${encodeURIComponent(uid)}/abort">
+<button type="submit" class="secondary">Cancel</button>
+</form>
+${phoneHint ? '<p><small>You get codes by e-mail because no mobile number is on file. Ask your administration to add yours if you would rather receive them by SMS.</small></p>' : ''}`,
+  )

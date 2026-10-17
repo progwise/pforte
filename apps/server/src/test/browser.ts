@@ -1,11 +1,18 @@
 import { createHash, createPublicKey, randomBytes, verify } from 'node:crypto'
 import type { FastifyInstance } from 'fastify'
 
+const codeSources = new WeakMap<FastifyInstance, (email: string) => string | undefined>()
+
+/** Tells `signIn` where to read the sign-in code of an app from, e.g. the e-mail the notifier recorded. */
+export const registerCodeSource = (app: FastifyInstance, source: (email: string) => string | undefined) => {
+  codeSources.set(app, source)
+}
+
 /** A minimal browser for driving the provider through `app.inject`: it keeps cookies between requests. */
 export class Browser {
   readonly cookies = new Map<string, string>()
 
-  constructor(private readonly app: FastifyInstance) {}
+  constructor(readonly app: FastifyInstance) {}
 
   private store(setCookie: string | string[] | undefined) {
     for (const header of [setCookie ?? []].flat()) {
@@ -56,12 +63,14 @@ export interface AuthorizeOptions {
   scope?: string
   email?: string
   password?: string
+  /** Stop at the code page instead of entering the code. */
+  stopAtCode?: boolean
 }
 
 /** Runs authorization → login → redirect with a code. Returns the code and the PKCE verifier. */
 export const signIn = async (
   browser: Browser,
-  { clientId, redirectUri, scope = 'openid', email = 'anna.schmidt@example.com', password = 'dev-password' }: AuthorizeOptions,
+  { clientId, redirectUri, scope = 'openid', email = 'anna.schmidt@example.com', password = 'dev-password', stopAtCode = false }: AuthorizeOptions,
 ) => {
   const { verifier, challenge } = pkcePair()
   const nonce = randomBytes(8).toString('hex')
@@ -80,7 +89,16 @@ export const signIn = async (
   const authorize = await browser.request('GET', `/auth?${query}`)
   const interactionUrl = authorize.headers.location as string
   const loginPage = await browser.request('GET', interactionUrl)
-  const login = await browser.request('POST', `${interactionUrl}/login`, { form: { email, password } })
+  const passwordStep = await browser.request('POST', `${interactionUrl}/login`, { form: { email, password } })
+  let login = passwordStep
+  if (passwordStep.statusCode === 303 && (passwordStep.headers.location as string).endsWith('/code')) {
+    // The password was right: the second factor follows. Enter the code the app sent.
+    const codePage = await browser.request('GET', passwordStep.headers.location as string)
+    if (stopAtCode) return { login: passwordStep, loginPage, codePage, verifier, nonce, state }
+    const code = codeSources.get(browser.app)?.(email)
+    if (!code) throw new Error(`No sign-in code was sent to ${email}, or no code source is registered for this app.`)
+    login = await browser.request('POST', `${interactionUrl}/code`, { form: { code } })
+  }
   if (login.statusCode !== 303) {
     return { login, loginPage, verifier, nonce, state }
   }

@@ -5,11 +5,12 @@ import { createTestDatabase } from '@progwise/pforte-db/testing'
 import { expect } from 'vitest'
 import { buildApp } from '../app.js'
 import { createAuthenticate } from '../auth/authenticate.js'
-import { type NotifiableUser, type Notifier } from '../notifications/notifier.js'
 import { createProviderHolder } from '../oidc/provider.js'
-import { basicAuth } from './browser.js'
+import { basicAuth, registerCodeSource } from './browser.js'
+import { createRecordingNotifier } from './recording-notifier.js'
 
 export const ISSUER = 'https://localhost:3300'
+const COOKIE_KEYS = ['k'.repeat(40)]
 
 /** A seeded test database with the whole app (provider, login and admin API) on top of it. */
 export const createAdminHarness = async () => {
@@ -20,33 +21,20 @@ export const createAdminHarness = async () => {
   const provider = await createProviderHolder({
     config: {
       issuer: ISSUER,
-      cookieKeys: ['k'.repeat(40)],
+      cookieKeys: COOKIE_KEYS,
       jwks: { keys: [{ ...jwk, kty: 'RSA', kid: 'test-key', alg: 'RS256', use: 'sig' }] },
     },
     db: database.db,
   })
-  /** Everything the admin API asked the notifier to send, and a switch to make sending fail. */
-  const notifications: { kind: 'activation' | 'password-reset' | 'login-code'; user: NotifiableUser; url?: string; code?: string; expiresAt?: Date }[] = []
-  const notifier: Notifier & { failWith?: Error } = {
-    async sendLoginCode(user, login) {
-      if (notifier.failWith) throw notifier.failWith
-      notifications.push({ kind: 'login-code', user, code: login.code, expiresAt: login.expiresAt })
-    },
-    async sendActivationLink(user, link) {
-      if (notifier.failWith) throw notifier.failWith
-      notifications.push({ kind: 'activation', user, url: link.url, expiresAt: link.expiresAt })
-    },
-    async requestPasswordReset(user) {
-      if (notifier.failWith) throw notifier.failWith
-      notifications.push({ kind: 'password-reset', user })
-    },
-  }
+  /** Everything the app asked the notifier to send, and a switch to make sending fail. */
+  const { notifier, notifications, lastCode } = createRecordingNotifier()
   const app = buildApp({
     getDatabaseTime: () => getDatabaseTime(database.db),
-    oidc: { provider, authenticate: await createAuthenticate(database.db) },
+    oidc: { provider, authenticate: await createAuthenticate(database.db), db: database.db, notifier, cookieKeys: COOKIE_KEYS },
     admin: { db: database.db, provider, notifier },
   })
   await app.ready()
+  registerCodeSource(app, lastCode)
 
   const tokenFor = async (clientId: string, scope: string) => {
     const response = await app.inject({

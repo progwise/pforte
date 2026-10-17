@@ -25,7 +25,9 @@ pnpm dev:example    # this application on http://localhost:3400
 ```
 
 Open <http://localhost:3400>, choose **Sign in** and use `anna.schmidt@example.com` with the
-password `dev-password`. The seed registers this application as the public client `demo-web`
+password `dev-password`, then enter the 6-digit code that pforte sends by e-mail (in development
+you find it in Mailpit at <http://localhost:8026>, or in the pforte log when `SMTP_URL` is not set).
+The seed registers this application as the public client `demo-web`
 with the redirect `http://localhost:3400/callback`.
 
 ## Settings

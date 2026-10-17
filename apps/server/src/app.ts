@@ -11,9 +11,8 @@ export interface AppDependencies {
   /** Returns the current time as reported by the database. */
   getDatabaseTime: () => Promise<Date>
   /** The OpenID Connect provider and its login. Omitted in tests that do not need them. */
-  oidc?: {
+  oidc?: Omit<InteractionDependencies, 'provider'> & {
     provider: Pick<ProviderHolder, 'handle' | 'issuer' | 'current'>
-    authenticate: InteractionDependencies['authenticate']
   }
 }
 

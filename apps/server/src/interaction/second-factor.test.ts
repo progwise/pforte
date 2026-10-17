@@ -1,0 +1,232 @@
+import { createHmac } from 'node:crypto'
+import { hasDatabase } from '@progwise/pforte-db/testing'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { NotifierUnavailableError } from '../notifications/notifier.js'
+import { type AdminHarness, createAdminHarness } from '../test/admin-harness.js'
+import { Browser, pkcePair, signIn, verifyJwt } from '../test/browser.js'
+
+const WEB = { clientId: 'demo-web', redirectUri: 'http://localhost:3400/callback' }
+
+describe.skipIf(!hasDatabase)('second factor at sign-in', () => {
+  let h: AdminHarness
+
+  beforeAll(async () => {
+    h = await createAdminHarness()
+  })
+
+  afterAll(async () => {
+    await h?.close()
+  })
+
+  beforeEach(async () => {
+    h.notifications.length = 0
+    h.notifier.failWith = undefined
+    // Every test starts from users who have never signed in with a code and have no phone number.
+    await h.database.pool.query(`delete from otp_codes`)
+    await h.database.pool.query(`update users set phone = null, email_verified_at = null, last_login_at = null, status = 'active' where password_hash is not null`)
+  })
+
+  const query = () => {
+    const { challenge, verifier } = pkcePair()
+    return {
+      verifier,
+      query: new URLSearchParams({
+        client_id: WEB.clientId,
+        redirect_uri: WEB.redirectUri,
+        response_type: 'code',
+        scope: 'openid',
+        state: 's',
+        nonce: 'n',
+        code_challenge: challenge,
+        code_challenge_method: 'S256',
+      }),
+    }
+  }
+
+  /** Authorizes and enters the password. Returns where the browser is sent next. */
+  const passwordStep = async (email: string, { password = 'dev-password' } = {}) => {
+    const browser = new Browser(h.app)
+    const { query: params, verifier } = query()
+    const authorize = await browser.request('GET', `/auth?${params}`)
+    const interaction = authorize.headers.location as string
+    await browser.request('GET', interaction)
+    const login = await browser.request('POST', `${interaction}/login`, { form: { email, password } })
+    return { browser, interaction, login, verifier }
+  }
+
+  const codeFor = (email: string) => h.notifications.findLast((n) => n.kind === 'login-code' && n.user.email === email)!.code!
+  const user = (email: string) => h.database.pool.query(`select * from users where email = $1`, [email]).then((result) => result.rows[0])
+
+  it('sends a code after the right password and asks for it before signing in', async () => {
+    const { browser, interaction, login } = await passwordStep('felix.brandt@example.com')
+
+    expect(login.statusCode).toBe(303)
+    expect(login.headers.location).toBe(`${interaction}/code`)
+    expect(h.notifications).toEqual([expect.objectContaining({ kind: 'login-code', user: expect.objectContaining({ email: 'felix.brandt@example.com' }) })])
+    expect(codeFor('felix.brandt@example.com')).toMatch(/^\d{6}$/)
+
+    // Not signed in yet: the authorization request still needs the interaction.
+    const silent = await browser.request('GET', `/auth?${query().query}&prompt=none`)
+    expect(silent.headers.location).toContain('error=login_required')
+    expect((await user('felix.brandt@example.com')).last_login_at).toBeNull()
+  })
+
+  it('does not send a code for a wrong password', async () => {
+    const { login } = await passwordStep('greta.lang@example.com', { password: 'wrong' })
+    expect(login.statusCode).toBe(401)
+    expect(h.notifications).toEqual([])
+  })
+
+  it('shows the masked address and the hint to add a phone number', async () => {
+    const { browser, interaction } = await passwordStep('hans.weber@example.com')
+    const page = await browser.request('GET', `${interaction}/code`)
+
+    expect(page.statusCode).toBe(200)
+    expect(page.body).toContain('h***@example.com')
+    expect(page.body).not.toContain('hans.weber@example.com')
+    expect(page.body).toContain('no mobile number is on file')
+  })
+
+  it('leaves out the hint for a user who has a phone number', async () => {
+    await h.database.pool.query(`update users set phone = '+4915112345678' where email = 'ben.keller@example.com'`)
+    const { browser, interaction } = await passwordStep('ben.keller@example.com')
+    expect((await browser.request('GET', `${interaction}/code`)).body).not.toContain('no mobile number')
+  })
+
+  it('signs in with the right code and tells the application how: acr, amr and email_verified', async () => {
+    const email = 'anna.schmidt@example.com'
+    expect((await user(email)).email_verified_at).toBeNull()
+    const { browser, interaction, verifier } = await passwordStep(email)
+
+    const entered = await browser.request('POST', `${interaction}/code`, { form: { code: codeFor(email) } })
+    expect(entered.statusCode).toBe(303)
+    const resumed = await browser.request('GET', entered.headers.location as string)
+    const code = new URL(resumed.headers.location as string).searchParams.get('code')!
+    const tokens = (
+      await browser.request('POST', '/token', {
+        form: { grant_type: 'authorization_code', code, redirect_uri: WEB.redirectUri, client_id: WEB.clientId, code_verifier: verifier },
+      })
+    ).json()
+    const { claims } = await verifyJwt(h.app, tokens.id_token)
+
+    expect(claims).toMatchObject({ acr: 'urn:pforte:acr:mfa', amr: ['pwd', 'otp'], email_verified: true, email })
+    const row = await user(email)
+    expect(row.email_verified_at).not.toBeNull()
+    expect(row.last_login_at).not.toBeNull()
+  })
+
+  it('uses a code only once', async () => {
+    const email = 'ben.keller@example.com'
+    const { browser, interaction } = await passwordStep(email)
+    const code = codeFor(email)
+
+    expect((await browser.request('POST', `${interaction}/code`, { form: { code } })).statusCode).toBe(303)
+    // The step is over: a second attempt with the same code starts again at the password.
+    const again = await browser.request('POST', `${interaction}/code`, { form: { code } })
+    expect(again.headers.location).toBe(interaction)
+  })
+
+  it('refuses a wrong code, lets the user try again, and invalidates the code at the sixth attempt', async () => {
+    const email = 'greta.lang@example.com'
+    const { browser, interaction } = await passwordStep(email)
+    const right = codeFor(email)
+    const wrong = right === '000000' ? '000001' : '000000'
+
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      const response = await browser.request('POST', `${interaction}/code`, { form: { code: wrong } })
+      expect(response.statusCode).toBe(401)
+      expect(response.body).toContain('The code is not correct.')
+    }
+    const sixth = await browser.request('POST', `${interaction}/code`, { form: { code: right } })
+    expect(sixth.statusCode).toBe(401)
+    expect(sixth.body).toContain('Too many wrong attempts')
+  })
+
+  it('treats input that is not six digits as wrong, and ignores spaces', async () => {
+    const email = 'felix.brandt@example.com'
+    const { browser, interaction } = await passwordStep(email)
+    expect((await browser.request('POST', `${interaction}/code`, { form: { code: 'abcdef' } })).statusCode).toBe(401)
+    const code = codeFor(email)
+    const spaced = `${code.slice(0, 3)} ${code.slice(3)}`
+    expect((await browser.request('POST', `${interaction}/code`, { form: { code: spaced } })).statusCode).toBe(303)
+  })
+
+  it('waits before sending another code, then sends one and drops the old one', async () => {
+    const email = 'hans.weber@example.com'
+    const { browser, interaction } = await passwordStep(email)
+    const first = codeFor(email)
+
+    const tooSoon = await browser.request('POST', `${interaction}/code/resend`)
+    expect(tooSoon.statusCode).toBe(429)
+    expect(Number(tooSoon.headers['retry-after'])).toBeGreaterThan(0)
+    expect(h.notifications).toHaveLength(1)
+
+    await h.database.pool.query(`update otp_codes set created_at = created_at - interval '2 minutes'`)
+    const resent = await browser.request('POST', `${interaction}/code/resend`)
+    expect(resent.statusCode).toBe(200)
+    expect(resent.body).toContain('A new code is on its way.')
+    const second = codeFor(email)
+
+    if (first !== second) {
+      expect((await browser.request('POST', `${interaction}/code`, { form: { code: first } })).statusCode).toBe(401)
+    }
+    expect((await browser.request('POST', `${interaction}/code`, { form: { code: second } })).statusCode).toBe(303)
+  })
+
+  it('goes back to the password when the step cookie is missing, forged or for another sign-in', async () => {
+    const { interaction, browser } = await passwordStep('greta.lang@example.com')
+
+    const noCookie = await new Browser(h.app).request('GET', `${interaction}/code`)
+    expect(noCookie.statusCode).toBe(400) // no interaction session either
+
+    // The same cookie name with a signature made by someone without the key replaces the real one.
+    browser.cookies.set('pforte_second_factor', `e30.${createHmac('sha256', 'x').update('e30').digest('base64url')}`)
+    const forged = await browser.request('GET', `${interaction}/code`)
+    expect(forged.statusCode).toBe(303)
+    expect(forged.headers.location).toBe(interaction)
+
+    // A second sign-in in the same browser cannot use the cookie of the first.
+    const other = await browser.request('GET', `/auth?${query().query}`)
+    const otherInteraction = other.headers.location as string
+    await browser.request('GET', otherInteraction)
+    const stolen = await browser.request('GET', `${otherInteraction}/code`)
+    expect(stolen.statusCode).toBe(303)
+    expect(stolen.headers.location).toBe(otherInteraction)
+  })
+
+  it('does not finish for a user who was locked after the password step', async () => {
+    const email = 'ben.keller@example.com'
+    const { browser, interaction } = await passwordStep(email)
+    const code = codeFor(email)
+    await h.database.pool.query(`update users set status = 'locked' where email = $1`, [email])
+
+    const response = await browser.request('POST', `${interaction}/code`, { form: { code } })
+    expect(response.statusCode).toBe(303)
+    expect(response.headers.location).toBe(interaction)
+    await h.database.pool.query(`update users set status = 'active' where email = $1`, [email])
+  })
+
+  it('says so when the code cannot be sent, and signs nobody in', async () => {
+    h.notifier.failWith = new NotifierUnavailableError('SMTP is down')
+    const { login } = await passwordStep('anna.schmidt@example.com')
+
+    expect(login.statusCode).toBe(503)
+    expect(login.body).toContain('could not be sent')
+    expect(login.body).not.toContain('SMTP')
+    expect(login.headers['set-cookie']).toBeUndefined()
+  })
+
+  it('sets a cookie that scripts cannot read and that stays on this sign-in', async () => {
+    const { login, interaction } = await passwordStep('felix.brandt@example.com')
+    const cookie = [login.headers['set-cookie']].flat().find((header) => header?.startsWith('pforte_second_factor='))!
+    expect(cookie).toContain('HttpOnly')
+    expect(cookie).toContain('SameSite=Strict')
+    expect(cookie).toContain('Secure')
+    expect(cookie).toContain(`Path=${interaction}`)
+  })
+
+  it('still lets the whole flow be driven by the helper', async () => {
+    const result = await signIn(new Browser(h.app), { ...WEB, email: 'felix.brandt@example.com' })
+    expect(result.code).toBeTruthy()
+  })
+})

@@ -40,7 +40,8 @@ export interface CodeOptions {
 /**
  * Creates a code for the user and returns it so it can be sent; only its signature is stored. A new
  * code replaces earlier ones for the same purpose. Limits how often codes can be requested, since
- * every code costs a message and gives an attacker new guesses.
+ * every code costs a message and gives an attacker new guesses. Codes that were used successfully
+ * do not count towards the limits.
  */
 export const issueCode = async (
   db: Database,
@@ -58,6 +59,9 @@ export const issueCode = async (
         and(
           eq(otpCodes.userId, userId),
           eq(otpCodes.purpose, purpose),
+          // Codes that were used count for nothing: signing in to several applications is normal.
+          // Only codes that were sent and not used, which is what abuse looks like, are limited.
+          isNull(otpCodes.consumedAt),
           gt(otpCodes.createdAt, new Date(now.getTime() - 60 * 60 * 1000)),
         ),
       )
@@ -71,10 +75,11 @@ export const issueCode = async (
       throw new CodeLimitError('too_many', Math.ceil((oldest.createdAt.getTime() + 60 * 60 * 1000 - now.getTime()) / 1000))
     }
 
+    // The earlier code stops working, but stays unused: `consumedAt` means "was used successfully".
     await tx
       .update(otpCodes)
-      .set({ consumedAt: now })
-      .where(and(eq(otpCodes.userId, userId), eq(otpCodes.purpose, purpose), isNull(otpCodes.consumedAt)))
+      .set({ expiresAt: now })
+      .where(and(eq(otpCodes.userId, userId), eq(otpCodes.purpose, purpose), isNull(otpCodes.consumedAt), gt(otpCodes.expiresAt, now)))
 
     const code = String(randomInt(0, 10 ** CODE_LENGTH)).padStart(CODE_LENGTH, '0')
     const expiresAt = new Date(now.getTime() + CODE_LIFETIME_MS)

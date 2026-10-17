@@ -135,6 +135,15 @@ describe.skipIf(!hasDatabase)('one-time codes', () => {
     expect((await issue(userId, new Date(start.getTime() + minutes(61)))).code).toMatch(/^\d{6}$/)
   })
 
+  it('does not hold back someone who signs in again after using a code', async () => {
+    const userId = await newUser()
+    for (let index = 0; index < MAX_CODES_PER_HOUR + 2; index++) {
+      const now = new Date(start.getTime() + index * 1000)
+      const { code } = await issue(userId, now)
+      expect((await check(userId, code, now)).ok).toBe(true)
+    }
+  })
+
   it('limits each purpose on its own', async () => {
     const userId = await newUser()
     await issue(userId)

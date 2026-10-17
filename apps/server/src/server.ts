@@ -30,7 +30,7 @@ const notifier = config.mail
     })
 const app = buildApp({
   getDatabaseTime: () => getDatabaseTime(db),
-  oidc: { provider, authenticate },
+  oidc: { provider, authenticate, db, notifier, cookieKeys: config.cookieKeys },
   admin: {
     db,
     provider,

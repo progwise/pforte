@@ -8,6 +8,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { buildApp } from '../app.js'
 import { createAuthenticate } from '../auth/authenticate.js'
 import { basicAuth, Browser, pkcePair, signIn, verifyJwt } from '../test/browser.js'
+import { registerCodeSource } from '../test/browser.js'
+import { createRecordingNotifier } from '../test/recording-notifier.js'
 import { createProviderHolder, type ProviderHolder } from './provider.js'
 
 // https, like every real deployment: the session cookie is then SameSite=None; Secure, which
@@ -25,6 +27,8 @@ describe.skipIf(!hasDatabase)('authorization code flow', () => {
   let database: Awaited<ReturnType<typeof createTestDatabase>>
   let provider: ProviderHolder
   let app: ReturnType<typeof buildApp>
+
+  const recording = createRecordingNotifier()
 
   beforeAll(async () => {
     database = await createTestDatabase()
@@ -47,9 +51,10 @@ describe.skipIf(!hasDatabase)('authorization code flow', () => {
     })
     app = buildApp({
       getDatabaseTime: () => getDatabaseTime(database.db),
-      oidc: { provider, authenticate: await createAuthenticate(database.db) },
+      oidc: { provider, authenticate: await createAuthenticate(database.db), db: database.db, notifier: recording.notifier, cookieKeys: ['k'.repeat(40)] },
     })
     await app.ready()
+    registerCodeSource(app, recording.lastCode)
   })
 
   afterAll(async () => {
@@ -514,7 +519,11 @@ describe.skipIf(!hasDatabase)('authorization code flow', () => {
       const login = await browser.request('POST', `${interaction}/login`, {
         form: { email: 'anna.schmidt@example.com', password: 'dev-password' },
       })
-      const afterLogin = await browser.request('GET', login.headers.location as string)
+      const codeStep = await browser.request('POST', `${interaction}/code`, {
+        form: { code: recording.lastCode('anna.schmidt@example.com')! },
+      })
+      expect(login.headers.location).toBe(`${interaction}/code`)
+      const afterLogin = await browser.request('GET', codeStep.headers.location as string)
       expect(location(afterLogin).pathname, 'consent is asked next').toMatch(/^\/interaction\//)
       const consent = await browser.request('GET', afterLogin.headers.location as string)
       const resumed = await browser.request('GET', consent.headers.location as string)

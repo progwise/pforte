@@ -1,22 +1,50 @@
+import { createHmac } from 'node:crypto'
 import formbody from '@fastify/formbody'
+import type { Database } from '@progwise/pforte-db'
+import { checkCode, CodeLimitError, issueCode, markEmailVerified } from '@progwise/pforte-db/codes'
+import { findActiveUserById } from '@progwise/pforte-db/oidc'
+import { recordLogin } from '@progwise/pforte-db/users'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import { secondFactorAssurance } from '../auth/assurance.js'
 import type { Authenticate } from '../auth/authenticate.js'
+import { type Notifier, NotifierUnavailableError } from '../notifications/notifier.js'
 import { applyIssuerHeaders } from '../oidc/issuer-headers.js'
 import type { ProviderHolder } from '../oidc/provider.js'
-import { contentSecurityPolicy, errorPage, loginPage } from './templates.js'
+import { readCookie, setCookieHeader, sign, unsign } from './signed-cookie.js'
+import { codePage, contentSecurityPolicy, errorPage, loginPage } from './templates.js'
 
 export interface InteractionDependencies {
   provider: Pick<ProviderHolder, 'current' | 'issuer'>
   authenticate: Authenticate
+  db: Database
+  notifier: Notifier
+  /** The cookie keys of the service: they sign the step cookie and, derived, the one-time codes. */
+  cookieKeys: string[]
 }
+
+const STEP_COOKIE = 'pforte_second_factor'
+const STEP_LIFETIME_SECONDS = 15 * 60
+
+interface Step {
+  uid: string
+  userId: string
+  expiresAt: number
+}
+
+/** `anna.schmidt@example.com` → `a***@example.com`: enough to recognise the mailbox, not to harvest it. */
+const maskEmail = (email: string) => `${email.slice(0, 1)}***${email.slice(email.lastIndexOf('@'))}`
 
 const GENERIC_LOGIN_ERROR = 'The e-mail or password is not correct.'
 
 /** The login pages the provider redirects to ("interactions"). */
 export const interactionRoutes =
-  ({ provider, authenticate }: InteractionDependencies) =>
+  ({ provider, authenticate, db, notifier, cookieKeys }: InteractionDependencies) =>
   async (app: FastifyInstance) => {
     await app.register(formbody)
+
+    const secure = provider.issuer.startsWith('https:')
+    const codeSecrets = cookieKeys.map((key) => createHmac('sha256', key).update('one-time-code').digest('hex'))
+    const cookiePath = (uid: string) => `/interaction/${encodeURIComponent(uid)}`
 
     app.addHook('onSend', async (_request, reply) => {
       reply.header('Cache-Control', 'no-store')
@@ -110,17 +138,126 @@ export const interactionRoutes =
             )
         }
 
-        reply.hijack()
-        await provider
-          .current()
-          .interactionFinished(
-            request.raw,
-            reply.raw,
-            { login: { accountId: result.userId } },
-            { mergeWithLastSubmission: false },
-          )
+        return startSecondFactor(request, reply, details.uid, result.userId)
       },
     )
+
+    /** The step cookie, if it is valid, belongs to this interaction and the user can still sign in. */
+    const stepFor = async (request: FastifyRequest, uid: string) => {
+      const step = unsign<Step>(cookieKeys, readCookie(request.headers.cookie, STEP_COOKIE))
+      if (!step || step.uid !== uid || step.expiresAt < Date.now()) return undefined
+      const user = await findActiveUserById(db, step.userId)
+      return user ? { step, user } : undefined
+    }
+
+    const codePageFor = (
+      user: { email: string; phone: string | null },
+      uid: string,
+      extra: { error?: string; notice?: string } = {},
+    ) => codePage({ uid, sentTo: maskEmail(user.email), phoneHint: !user.phone, ...extra })
+
+    /** Sends a fresh code to the user. Returns a message for the page when the limits say to wait. */
+    const sendCode = async (user: NonNullable<Awaited<ReturnType<typeof stepFor>>>['user']) => {
+      const { code, expiresAt } = await issueCode(db, { userId: user.id, channel: 'email', purpose: 'login' }, { secrets: codeSecrets })
+      await notifier.sendLoginCode(user, { code, expiresAt })
+    }
+
+    const limitMessage = (error: CodeLimitError) =>
+      error.reason === 'cooldown'
+        ? `A code was sent a moment ago. You can ask for a new one in ${error.retryAfterSeconds} seconds.`
+        : `Too many codes were requested. Please try again in ${Math.ceil(error.retryAfterSeconds / 60)} minutes.`
+
+    const cannotSend = (reply: FastifyReply, error: NotifierUnavailableError) => {
+      reply.log.error(error, 'the sign-in code could not be sent')
+      return reply.code(503).type('text/html').send(errorPage('Cannot send the code', 'The code could not be sent. Please try again later.'))
+    }
+
+    /** The password was right: send the code and ask for it. */
+    const startSecondFactor = async (request: FastifyRequest, reply: FastifyReply, uid: string, userId: string) => {
+      const user = await findActiveUserById(db, userId)
+      if (!user) return expired(reply)
+
+      try {
+        await sendCode(user)
+      } catch (error) {
+        if (error instanceof NotifierUnavailableError) return cannotSend(reply, error)
+        if (!(error instanceof CodeLimitError)) throw error
+        // Not a fresh sign-in after all, but repeated requests: the code sent earlier still works.
+        if (error.reason === 'too_many') {
+          return reply.code(429).header('Retry-After', error.retryAfterSeconds).type('text/html').send(errorPage('Too many codes', limitMessage(error)))
+        }
+        // A code went out a moment ago and still works.
+      }
+
+      const step: Step = { uid, userId, expiresAt: Date.now() + STEP_LIFETIME_SECONDS * 1000 }
+      reply.header('Set-Cookie', setCookieHeader(STEP_COOKIE, sign(cookieKeys, step), { path: cookiePath(uid), maxAgeSeconds: STEP_LIFETIME_SECONDS, secure }))
+      return reply.redirect(`${cookiePath(uid)}/code`, 303)
+    }
+
+    app.get<{ Params: { uid: string } }>('/interaction/:uid/code', async (request, reply) => {
+      const details = await interactionFor(request, reply, request.params.uid)
+      if (!details) return expired(reply)
+      const current = await stepFor(request, details.uid)
+      if (!current) return reply.redirect(cookiePath(details.uid), 303)
+      return reply.type('text/html').send(codePageFor(current.user, details.uid))
+    })
+
+    app.post<{ Params: { uid: string }; Body: { code?: unknown } }>('/interaction/:uid/code', async (request, reply) => {
+      const details = await interactionFor(request, reply, request.params.uid)
+      if (!details) return expired(reply)
+      const current = await stepFor(request, details.uid)
+      if (!current) return reply.redirect(cookiePath(details.uid), 303)
+      const { user } = current
+
+      const code = typeof request.body?.code === 'string' ? request.body.code.replaceAll(' ', '') : ''
+      const result = /^\d{6}$/.test(code)
+        ? await checkCode(db, { userId: user.id, purpose: 'login', code }, { secrets: codeSecrets })
+        : ({ ok: false, reason: 'wrong' } as const)
+
+      if (!result.ok) {
+        const error = {
+          wrong: 'The code is not correct.',
+          exhausted: 'Too many wrong attempts. Please ask for a new code.',
+          expired: 'The code has expired. Please ask for a new one.',
+          none: 'There is no valid code. Please ask for a new one.',
+        }[result.reason]
+        return reply.code(401).type('text/html').send(codePageFor(user, details.uid, { error }))
+      }
+
+      if (result.channel === 'email') await markEmailVerified(db, user.id)
+      await recordLogin(db, user.id)
+
+      reply.raw.setHeader('Set-Cookie', setCookieHeader(STEP_COOKIE, '', { path: cookiePath(details.uid), maxAgeSeconds: 0, secure }))
+      reply.hijack()
+      await provider
+        .current()
+        .interactionFinished(
+          request.raw,
+          reply.raw,
+          { login: { accountId: user.id, ...secondFactorAssurance(result.channel) } },
+          { mergeWithLastSubmission: false },
+        )
+    })
+
+    app.post<{ Params: { uid: string } }>('/interaction/:uid/code/resend', async (request, reply) => {
+      const details = await interactionFor(request, reply, request.params.uid)
+      if (!details) return expired(reply)
+      const current = await stepFor(request, details.uid)
+      if (!current) return reply.redirect(cookiePath(details.uid), 303)
+
+      try {
+        await sendCode(current.user)
+      } catch (error) {
+        if (error instanceof NotifierUnavailableError) return cannotSend(reply, error)
+        if (!(error instanceof CodeLimitError)) throw error
+        return reply
+          .code(429)
+          .header('Retry-After', error.retryAfterSeconds)
+          .type('text/html')
+          .send(codePageFor(current.user, details.uid, { error: limitMessage(error) }))
+      }
+      return reply.type('text/html').send(codePageFor(current.user, details.uid, { notice: 'A new code is on its way.' }))
+    })
 
     app.post<{ Params: { uid: string } }>('/interaction/:uid/abort', async (request, reply) => {
       const details = await interactionFor(request, reply, request.params.uid)

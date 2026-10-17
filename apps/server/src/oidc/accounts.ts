@@ -4,9 +4,9 @@ import type { FindAccount } from 'oidc-provider'
 
 /** Standard OpenID claims kept per scope. Claim types from the database are added to `openid`. */
 export const standardClaims = {
-  openid: ['sub', 'email'],
+  openid: ['sub', 'email', 'email_verified'],
   // Clients always get the e-mail with `openid`; the scope exists so that requesting it is valid.
-  email: ['email'],
+  email: ['email', 'email_verified'],
   profile: ['name', 'given_name', 'family_name', 'locale'],
   phone: ['phone_number', 'phone_number_verified'],
 } as const
@@ -31,6 +31,7 @@ export const createFindAccount =
         return {
           sub: user.id,
           email: user.email,
+          email_verified: user.emailVerifiedAt !== null,
           name: `${user.firstName} ${user.lastName}`,
           given_name: user.firstName,
           family_name: user.lastName,

@@ -33,7 +33,9 @@ pnpm dev:example   # optional: example application on http://localhost:3400
 
 The seed is safe to run again and refuses to run when `NODE_ENV=production`. All seeded users
 have the password `dev-password`; the confidential client `demo-backend` uses the secret
-`dev-secret`. After changing the schema in `packages/db/src/schema`, run `pnpm db:generate`
+`dev-secret`. Signing in asks for a second factor: the 6-digit code arrives as an e-mail, which you
+read in Mailpit at <http://localhost:8026> (without `SMTP_URL` the code is written to the server
+log instead). After changing the schema in `packages/db/src/schema`, run `pnpm db:generate`
 and commit the new migration.
 
 Check it works: `curl http://localhost:3300/health` returns `{"status":"ok","databaseTime":"…"}`.

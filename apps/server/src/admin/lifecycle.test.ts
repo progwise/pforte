@@ -218,7 +218,7 @@ describe.skipIf(!hasDatabase)('admin API: user lifecycle', () => {
       const response = await act(user.id, 'reset-password')
 
       expect(response.statusCode).toBe(200)
-      expect(h.notifications).toEqual([expect.objectContaining({ kind: 'password-reset', user: expect.objectContaining({ email: user.email }) })])
+      expect(h.notifications.filter((n) => n.kind !== 'login-code')).toEqual([expect.objectContaining({ kind: 'password-reset', user: expect.objectContaining({ email: user.email }) })])
       expect(await hasSession(browser)).toBe(false)
       expect((await refresh(browser, tokens.refresh_token)).statusCode).toBe(400)
       expect((await h.audit('user.password_reset.request', user.id))[0].details.sessionsEnded).toBeGreaterThan(0)
