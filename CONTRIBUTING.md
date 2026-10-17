@@ -59,6 +59,12 @@ curl -H "authorization: Bearer $TOKEN" 'http://localhost:3300/admin/users?search
 
 Every change is recorded in the audit log with the client that made it.
 
+Users have a lifecycle: `POST /admin/users/{id}/lock`, `unlock`, `activate`, `deactivate`,
+`reset-password` and `end-sessions`. Locking, deactivating, deleting and resetting the password
+end the user's sessions and refresh tokens. Activation links and reset requests go through a
+notifier; until e-mail and SMS exist, the development notifier writes them to the server log
+(and refuses to run with `NODE_ENV=production`, so secrets never reach production logs).
+
 ### Ports
 
 - The development Postgres is published on port **5433**, so it does not clash with a Postgres

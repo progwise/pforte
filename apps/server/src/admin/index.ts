@@ -1,21 +1,25 @@
 import type { Database } from '@progwise/pforte-db'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { hasZodFastifySchemaValidationErrors, serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod'
+import type { Notifier } from '../notifications/notifier.js'
 import type { ProviderHolder } from '../oidc/provider.js'
 import { createAdminAuth } from './auth.js'
 import { claimTypesRoutes } from './claim-types-routes.js'
 import { claimsRoutes } from './claims-routes.js'
+import { lifecycleRoutes } from './lifecycle-routes.js'
 import { problem } from './problem.js'
 import { usersRoutes } from './users-routes.js'
 
 export interface AdminDependencies {
   db: Database
-  provider: Pick<ProviderHolder, 'current' | 'reload'>
+  provider: Pick<ProviderHolder, 'current' | 'reload' | 'issuer'>
+  /** Sends activation links and password reset codes. */
+  notifier: Notifier
 }
 
 /** The admin API, mounted under /admin. */
 export const adminRoutes =
-  ({ db, provider }: AdminDependencies) =>
+  ({ db, provider, notifier }: AdminDependencies) =>
   async (app: FastifyInstance) => {
     app.setValidatorCompiler(validatorCompiler)
     app.setSerializerCompiler(serializerCompiler)
@@ -57,5 +61,6 @@ export const adminRoutes =
 
     await app.register(usersRoutes({ db, auth }))
     await app.register(claimsRoutes({ db, auth }))
+    await app.register(lifecycleRoutes({ db, auth, notifier, issuer: provider.issuer }))
     await app.register(claimTypesRoutes({ db, auth, reloadProvider }))
   }

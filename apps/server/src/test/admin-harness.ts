@@ -5,6 +5,7 @@ import { createTestDatabase } from '@progwise/pforte-db/testing'
 import { expect } from 'vitest'
 import { buildApp } from '../app.js'
 import { createAuthenticate } from '../auth/authenticate.js'
+import { type NotifiableUser, type Notifier } from '../notifications/notifier.js'
 import { createProviderHolder } from '../oidc/provider.js'
 import { basicAuth } from './browser.js'
 
@@ -24,10 +25,22 @@ export const createAdminHarness = async () => {
     },
     db: database.db,
   })
+  /** Everything the admin API asked the notifier to send, and a switch to make sending fail. */
+  const notifications: { kind: 'activation' | 'password-reset'; user: NotifiableUser; url?: string; expiresAt?: Date }[] = []
+  const notifier: Notifier & { failWith?: Error } = {
+    async sendActivationLink(user, link) {
+      if (notifier.failWith) throw notifier.failWith
+      notifications.push({ kind: 'activation', user, url: link.url, expiresAt: link.expiresAt })
+    },
+    async requestPasswordReset(user) {
+      if (notifier.failWith) throw notifier.failWith
+      notifications.push({ kind: 'password-reset', user })
+    },
+  }
   const app = buildApp({
     getDatabaseTime: () => getDatabaseTime(database.db),
     oidc: { provider, authenticate: await createAuthenticate(database.db) },
-    admin: { db: database.db, provider },
+    admin: { db: database.db, provider, notifier },
   })
   await app.ready()
 
@@ -71,6 +84,8 @@ export const createAdminHarness = async () => {
     app,
     database,
     provider,
+    notifier,
+    notifications,
     api,
     tokenFor,
     adminToken,

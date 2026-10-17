@@ -25,7 +25,7 @@ const phone = z.string().regex(/^\+[1-9]\d{6,14}$/, 'Use the E.164 format, e.g. 
 const language = z.string().regex(/^[a-z]{2,3}$/, 'Use a language code such as de or en')
 const name = z.string().trim().min(1).max(200)
 
-const userSchema = z.object({
+export const userSchema = z.object({
   id: z.uuid(),
   email: z.string(),
   firstName: z.string(),
