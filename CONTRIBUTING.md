@@ -72,6 +72,9 @@ to `/activate`, where they choose their first password (at least 10 characters).
 /admin/users/{id}/reset-password` e-mails a code for `/reset/code`; users can also ask for one themselves
 at `/reset`, linked from the login page. In development both mails land in Mailpit.
 
+Codes can also go by SMS; see [docs/sms.md](docs/sms.md). To try it without a provider, set `SMS_PROVIDER=http`
+and any `SMS_URL`/`SMS_BODY`: without `SMTP_URL` the development notifier then writes the SMS codes to the log.
+
 Every change is recorded in the audit log with the client that made it.
 
 The API describes itself: `GET /admin/openapi.json` (with a token) returns an OpenAPI 3.1 document

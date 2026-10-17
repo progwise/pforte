@@ -1,20 +1,36 @@
 import formbody from '@fastify/formbody'
 import { hash } from '@node-rs/argon2'
 import type { Database } from '@progwise/pforte-db'
-import { checkCode, CodeLimitError, markEmailVerified } from '@progwise/pforte-db/codes'
+import { checkCode, CodeLimitError, issueCode, markEmailVerified, markPhoneVerified } from '@progwise/pforte-db/codes'
+import { findActiveUserById } from '@progwise/pforte-db/oidc'
 import { completeActivation, completePasswordReset, findPendingActivation } from '@progwise/pforte-db/credentials'
 import { findUserByEmail } from '@progwise/pforte-db/users'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import { maskPhone } from '../auth/channels.js'
 import { checkPassword } from '../auth/password-policy.js'
 import type { SendPasswordResetCode } from '../auth/password-reset.js'
-import { NotifierUnavailableError } from '../notifications/notifier.js'
-import { activationPage, addPageHeaders, errorPage, forgotPasswordPage, resetCodePage } from '../interaction/templates.js'
+import { readCookie, setCookieHeader, sign, unsign } from '../interaction/signed-cookie.js'
+import { activationPage, addPageHeaders, errorPage, forgotPasswordPage, phoneConfirmPage, resetCodePage } from '../interaction/templates.js'
+import { type Notifier, NotifierUnavailableError } from '../notifications/notifier.js'
 
 export interface AccountDependencies {
   db: Database
   sendPasswordResetCode: SendPasswordResetCode
   /** The secrets that sign one-time codes (see `deriveCodeSecrets`). */
   codeSecrets: string[]
+  /** Sends the code that confirms a phone number. */
+  notifier: Pick<Notifier, 'smsAvailable' | 'sendPhoneCode'>
+  /** Sign the cookie that carries the phone confirmation step. */
+  cookieKeys: string[]
+  /** Whether the service is reached over https, which makes cookies `Secure`. */
+  secure: boolean
+}
+
+const PHONE_COOKIE = 'pforte_phone_step'
+const PHONE_STEP_SECONDS = 30 * 60
+interface PhoneStep {
+  userId: string
+  expiresAt: number
 }
 
 const text = (value: unknown) => (typeof value === 'string' ? value : '')
@@ -25,7 +41,7 @@ const BAD_CODE = 'The code is not correct or has expired. You can ask for a new 
 
 /** Pages that are not part of a sign-in: choosing the first password, and choosing a new one after forgetting it. */
 export const accountRoutes =
-  ({ db, sendPasswordResetCode, codeSecrets }: AccountDependencies) =>
+  ({ db, sendPasswordResetCode, codeSecrets, notifier, cookieKeys, secure }: AccountDependencies) =>
   async (app: FastifyInstance) => {
     await app.register(formbody)
     addPageHeaders(app)
@@ -58,8 +74,78 @@ export const accountRoutes =
 
       const user = await completeActivation(db, { token, passwordHash: await hash(text(request.body?.password)), ...origin(request) })
       if (!user) return html(reply, 400, errorPage('Link not valid', INVALID_LINK))
-      return html(reply, 200, errorPage('Your account is active', 'Your password is set. You can now sign in from the application you came from.'))
+
+      // With SMS available, the number the back office entered is confirmed now, so that codes can go to it.
+      if (notifier.smsAvailable && user.phone && !user.phoneVerifiedAt) {
+        try {
+          await sendPhoneCode(user)
+          reply.header('Set-Cookie', phoneCookie(user.id))
+          return html(reply, 200, phoneConfirmPage({ sentTo: maskPhone(user.phone) }))
+        } catch (error) {
+          if (!(error instanceof NotifierUnavailableError)) throw error
+          request.log.error(error, 'the code to confirm the phone number could not be sent')
+        }
+      }
+      return html(reply, 200, activeAccountPage)
     })
+
+    const activeAccountPage = errorPage('Your account is active', 'Your password is set. You can now sign in from the application you came from.')
+
+    const phoneCookie = (userId: string) =>
+      setCookieHeader(PHONE_COOKIE, sign(cookieKeys, { userId, expiresAt: Date.now() + PHONE_STEP_SECONDS * 1000 } satisfies PhoneStep), {
+        path: '/activate',
+        maxAgeSeconds: PHONE_STEP_SECONDS,
+        secure,
+      })
+
+    const sendPhoneCode = async (user: { id: string; email: string; firstName: string; lastName: string; language: string; phone: string | null }) => {
+      const { code, expiresAt } = await issueCode(db, { userId: user.id, channel: 'sms', purpose: 'activation' }, { secrets: codeSecrets })
+      await notifier.sendPhoneCode(user, { code, expiresAt })
+    }
+
+    /** The user in the middle of confirming their phone, from the cookie set when the password was chosen. */
+    const phoneStep = async (request: FastifyRequest) => {
+      const step = unsign<PhoneStep>(cookieKeys, readCookie(request.headers.cookie, PHONE_COOKIE))
+      if (!step || step.expiresAt < Date.now()) return undefined
+      const user = await findActiveUserById(db, step.userId)
+      return user?.phone && !user.phoneVerifiedAt ? user : undefined
+    }
+
+    const finishedPhoneStep = (reply: FastifyReply, page: string) => {
+      reply.header('Set-Cookie', setCookieHeader(PHONE_COOKIE, '', { path: '/activate', maxAgeSeconds: 0, secure }))
+      return html(reply, 200, page)
+    }
+
+    app.post<{ Body: Record<string, unknown> }>('/activate/phone', async (request, reply) => {
+      const user = await phoneStep(request)
+      if (!user) return html(reply, 200, activeAccountPage)
+
+      const code = text(request.body?.code).replaceAll(' ', '')
+      const result = /^\d{6}$/.test(code) ? await checkCode(db, { userId: user.id, purpose: 'activation', code }, { secrets: codeSecrets }) : undefined
+      if (!result?.ok) {
+        return html(reply, 401, phoneConfirmPage({ sentTo: maskPhone(user.phone!), error: 'The code is not correct or has expired. You can ask for a new one below.' }))
+      }
+      await markPhoneVerified(db, user.id)
+      return finishedPhoneStep(reply, errorPage('Phone number confirmed', 'Your account is active and your sign-in codes will come by SMS. You can now sign in from the application you came from.'))
+    })
+
+    app.post('/activate/phone/resend', async (request, reply) => {
+      const user = await phoneStep(request)
+      if (!user) return html(reply, 200, activeAccountPage)
+      try {
+        await sendPhoneCode(user)
+      } catch (error) {
+        if (error instanceof CodeLimitError) {
+          return html(reply, 429, phoneConfirmPage({ sentTo: maskPhone(user.phone!), error: `Please wait ${error.retryAfterSeconds} seconds before asking for another code.` }))
+        }
+        if (!(error instanceof NotifierUnavailableError)) throw error
+        request.log.error(error, 'the code to confirm the phone number could not be sent')
+        return html(reply, 503, phoneConfirmPage({ sentTo: maskPhone(user.phone!), error: 'The code could not be sent. You can skip this step and confirm later.' }))
+      }
+      return html(reply, 200, phoneConfirmPage({ sentTo: maskPhone(user.phone!), notice: 'A new code is on its way.' }))
+    })
+
+    app.post('/activate/phone/skip', async (_request, reply) => finishedPhoneStep(reply, activeAccountPage))
 
     // --- Forgotten password
 

@@ -135,11 +135,46 @@ export const checkCode = async (
   return used ? { ok: true, channel: current.channel } : { ok: false, reason: 'none' }
 }
 
+/** The code that is currently valid for the user and purpose, if any: through which channel it went and until when. */
+export const currentCode = async (
+  db: Database,
+  { userId, purpose }: { userId: string; purpose: Purpose },
+  now = new Date(),
+) => {
+  const [code] = await db
+    .select({ channel: otpCodes.channel, expiresAt: otpCodes.expiresAt })
+    .from(otpCodes)
+    .where(and(eq(otpCodes.userId, userId), eq(otpCodes.purpose, purpose), isNull(otpCodes.consumedAt), gt(otpCodes.expiresAt, now)))
+    .orderBy(sql`${otpCodes.createdAt} desc`)
+    .limit(1)
+  return code
+}
+
+/** Records that the current code went out by another channel, e.g. because the SMS could not be sent. */
+export const changeCodeChannel = async (
+  db: Database,
+  { userId, purpose, channel }: { userId: string; purpose: Purpose; channel: Channel },
+  now = new Date(),
+) => {
+  await db
+    .update(otpCodes)
+    .set({ channel })
+    .where(and(eq(otpCodes.userId, userId), eq(otpCodes.purpose, purpose), isNull(otpCodes.consumedAt), gt(otpCodes.expiresAt, now)))
+}
+
 /** Marks the e-mail address as confirmed. Keeps the first time if it was confirmed before. */
 export const markEmailVerified = async (db: Database, userId: string, now = new Date()) => {
   await db
     .update(users)
     .set({ emailVerifiedAt: sql`coalesce(${users.emailVerifiedAt}, ${now.toISOString()}::timestamptz)` })
+    .where(eq(users.id, userId))
+}
+
+/** Marks the phone number as confirmed. Keeps the first time if it was confirmed before. */
+export const markPhoneVerified = async (db: Database, userId: string, now = new Date()) => {
+  await db
+    .update(users)
+    .set({ phoneVerifiedAt: sql`coalesce(${users.phoneVerifiedAt}, ${now.toISOString()}::timestamptz)` })
     .where(eq(users.id, userId))
 }
 

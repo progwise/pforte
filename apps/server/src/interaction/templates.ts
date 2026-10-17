@@ -85,19 +85,22 @@ export const errorPage = (title: string, message: string) =>
 
 export interface CodePageOptions {
   uid: string
+  channel: 'email' | 'sms'
   /** Where the code went, already masked. */
   sentTo: string
+  /** Offer to send the code by e-mail instead of SMS. */
+  canUseEmail?: boolean
   error?: string
   notice?: string
   /** Shown to users without a phone number, who therefore get codes by e-mail. */
   phoneHint?: boolean
 }
 
-export const codePage = ({ uid, sentTo, error, notice, phoneHint }: CodePageOptions) =>
+export const codePage = ({ uid, channel, sentTo, canUseEmail, error, notice, phoneHint }: CodePageOptions) =>
   page(
     'Enter your code',
     `<h1>Enter your code</h1>
-<p>We sent a 6-digit code to ${escapeHtml(sentTo)}. It is valid for 10 minutes.</p>
+<p>We sent a 6-digit code by ${channel === 'sms' ? 'SMS' : 'e-mail'} to ${escapeHtml(sentTo)}. It is valid for 10 minutes.</p>
 ${notice ? `<p role="status">${escapeHtml(notice)}</p>` : ''}
 ${error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : ''}
 <form method="post" action="/interaction/${encodeURIComponent(uid)}/code">
@@ -109,6 +112,14 @@ ${error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : ''}
 <form method="post" action="/interaction/${encodeURIComponent(uid)}/code/resend">
 <button type="submit" class="secondary">Send a new code</button>
 </form>
+${
+  canUseEmail
+    ? `<form method="post" action="/interaction/${encodeURIComponent(uid)}/code/resend">
+<input type="hidden" name="channel" value="email">
+<button type="submit" class="secondary">Send the code by e-mail instead</button>
+</form>`
+    : ''
+}
 <form method="post" action="/interaction/${encodeURIComponent(uid)}/abort">
 <button type="submit" class="secondary">Cancel</button>
 </form>
@@ -162,4 +173,24 @@ ${passwordFields(PASSWORD_HINT)}
 <button type="submit">Change my password</button>
 </form>
 <p><a href="/reset?email=${encodeURIComponent(email)}">Send a new code</a></p>`,
+  )
+
+export const phoneConfirmPage = ({ sentTo, error, notice }: { sentTo: string; error?: string; notice?: string }) =>
+  page(
+    'Confirm your phone number',
+    `<h1>Confirm your phone number</h1>
+<p>Your account is active. We sent a 6-digit code by SMS to ${escapeHtml(sentTo)}. Enter it to receive your sign-in codes by SMS from now on.</p>
+${notice ? `<p role="status">${escapeHtml(notice)}</p>` : ''}
+${error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : ''}
+<form method="post" action="/activate/phone">
+<label for="code">Code</label>
+<input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]*" maxlength="7" required autofocus>
+<button type="submit">Confirm</button>
+</form>
+<form method="post" action="/activate/phone/resend">
+<button type="submit" class="secondary">Send a new code</button>
+</form>
+<form method="post" action="/activate/phone/skip">
+<button type="submit" class="secondary">Skip for now (codes come by e-mail)</button>
+</form>`,
   )

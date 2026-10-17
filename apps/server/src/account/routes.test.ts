@@ -22,6 +22,8 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
   beforeEach(() => {
     h.notifications.length = 0
     h.notifier.failWith = undefined
+    h.notifier.failSms = false
+    h.notifier.smsAvailable = false
   })
 
   const browser = () => new Browser(h.app)
@@ -324,4 +326,128 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
       expect((await verifyJwt(h.app, tokens.id_token)).claims).toMatchObject({ email: user.email, email_verified: true })
     })
   })
+
+  describe('with SMS', () => {
+    const NUMBER = '+4915112345678'
+
+    /** A user with a phone number, invited by an administrator. */
+    const invitedWithPhone = async () => {
+      const email = `phone${++counter}@example.com`
+      const created = (await h.api('POST', '/users', { body: { email, firstName: 'Pia', lastName: 'Phone', phone: NUMBER } })).json()
+      await h.api('POST', `/users/${created.id}/activate`)
+      const token = tokenOf(h.notifications.findLast((n) => n.kind === 'activation')!.url!)
+      h.notifications.length = 0
+      return { email, id: created.id as string, token }
+    }
+    const activateWith = (token: string) => browser().request('POST', '/activate', { form: { token, password: GOOD, confirm: GOOD } })
+    const cookieOf = (response: Awaited<ReturnType<typeof activateWith>>) =>
+      [response.headers['set-cookie']].flat().find((header) => header?.startsWith('pforte_phone_step='))?.split(';')[0]
+
+    it('confirms the phone number after the password, and uses it for the codes from then on', async () => {
+      h.notifier.smsAvailable = true
+      const user = await invitedWithPhone()
+      const done = await activateWith(user.token)
+
+      expect(done.body).toContain('Confirm your phone number')
+      expect(done.body).not.toContain(NUMBER)
+      expect(h.notifications).toEqual([expect.objectContaining({ kind: 'phone-code', channel: 'sms' })])
+      const cookie = cookieOf(done)!
+      expect(cookie).toBeDefined()
+      expect([done.headers['set-cookie']].flat().join()).toMatch(/pforte_phone_step=[^;]+; Path=\/activate; .*HttpOnly; SameSite=Strict/)
+
+      const wrong = await browser().request('POST', '/activate/phone', { form: { code: '000000' }, headers: { cookie } })
+      expect(wrong.statusCode).toBe(401)
+      const right = await browser().request('POST', '/activate/phone', { form: { code: h.lastPhoneCode(user.email)! }, headers: { cookie } })
+      expect(right.statusCode).toBe(200)
+      expect(right.body).toContain('Phone number confirmed')
+      expect((await row(user.email)).phone_verified_at).not.toBeNull()
+
+      h.notifications.length = 0
+      await signIn(browser(), { ...WEB, email: user.email, password: GOOD })
+      expect(h.notifications.findLast((n) => n.kind === 'login-code')).toMatchObject({ channel: 'sms' })
+    })
+
+    it('lets the user skip the confirmation: the account works, the codes come by e-mail', async () => {
+      h.notifier.smsAvailable = true
+      const user = await invitedWithPhone()
+      const cookie = cookieOf(await activateWith(user.token))!
+      const skipped = await browser().request('POST', '/activate/phone/skip', { headers: { cookie } })
+      expect(skipped.statusCode).toBe(200)
+      expect(skipped.body).toContain('Your account is active')
+
+      expect((await row(user.email)).phone_verified_at).toBeNull()
+      h.notifications.length = 0
+      await signIn(browser(), { ...WEB, email: user.email, password: GOOD })
+      expect(h.notifications.findLast((n) => n.kind === 'login-code')).toMatchObject({ channel: 'email' })
+    })
+
+    it('does not ask when SMS is not available, or when there is no number', async () => {
+      const without = await invitedWithPhone()
+      expect((await activateWith(without.token)).body).toContain('Your account is active')
+      expect(h.notifications).toEqual([])
+
+      h.notifier.smsAvailable = true
+      const noNumber = await invited()
+      expect((await activateWith(noNumber.token)).body).toContain('Your account is active')
+    })
+
+    it('stays active when the confirmation SMS cannot be sent', async () => {
+      h.notifier.smsAvailable = true
+      h.notifier.failSms = true
+      const user = await invitedWithPhone()
+      const done = await activateWith(user.token)
+      expect(done.statusCode).toBe(200)
+      expect(done.body).toContain('Your account is active')
+      expect((await row(user.email)).status).toBe('active')
+    })
+
+    it('needs the cookie of the step, and cannot be used for somebody else', async () => {
+      h.notifier.smsAvailable = true
+      const user = await invitedWithPhone()
+      await activateWith(user.token)
+      const code = h.lastPhoneCode(user.email)!
+
+      const noCookie = await browser().request('POST', '/activate/phone', { form: { code } })
+      expect(noCookie.body).toContain('Your account is active')
+      expect((await row(user.email)).phone_verified_at).toBeNull()
+
+      const forged = await browser().request('POST', '/activate/phone', { form: { code }, headers: { cookie: 'pforte_phone_step=e30.forged' } })
+      expect(forged.body).toContain('Your account is active')
+      expect((await row(user.email)).phone_verified_at).toBeNull()
+    })
+
+    it('waits before sending another confirmation code', async () => {
+      h.notifier.smsAvailable = true
+      const user = await invitedWithPhone()
+      const cookie = cookieOf(await activateWith(user.token))!
+      const again = await browser().request('POST', '/activate/phone/resend', { headers: { cookie } })
+      expect(again.statusCode).toBe(429)
+      expect(again.body).toContain('Please wait')
+    })
+
+    it('sends the password reset code by SMS to a confirmed number, otherwise by e-mail', async () => {
+      h.notifier.smsAvailable = true
+      const confirmed = await activated()
+      await h.database.pool.query(`update users set phone = $2, phone_verified_at = now() where id = $1`, [confirmed.id, NUMBER])
+      await requestReset(confirmed.email)
+      expect(h.notifications.findLast((n) => n.kind === 'reset-code')).toMatchObject({ channel: 'sms' })
+      expect((await submitReset(confirmed.email, resetCode(confirmed.email))).statusCode).toBe(200)
+
+      const unconfirmed = await activated()
+      await h.database.pool.query(`update users set phone = $2 where id = $1`, [unconfirmed.id, NUMBER])
+      h.notifications.length = 0
+      await requestReset(unconfirmed.email)
+      expect(h.notifications.findLast((n) => n.kind === 'reset-code')).toMatchObject({ channel: 'email' })
+    })
+
+    it('does not mark the e-mail verified when the reset code came by SMS', async () => {
+      h.notifier.smsAvailable = true
+      const user = await activated()
+      await h.database.pool.query(`update users set phone = $2, phone_verified_at = now(), email_verified_at = null where id = $1`, [user.id, NUMBER])
+      await requestReset(user.email)
+      await submitReset(user.email, resetCode(user.email))
+      expect((await row(user.email)).email_verified_at).toBeNull()
+    })
+  })
 })
+

@@ -1,14 +1,15 @@
 import formbody from '@fastify/formbody'
 import type { Database } from '@progwise/pforte-db'
-import { checkCode, CodeLimitError, issueCode, markEmailVerified } from '@progwise/pforte-db/codes'
+import { changeCodeChannel, checkCode, CodeLimitError, currentCode, issueCode, markEmailVerified } from '@progwise/pforte-db/codes'
 import { DEVICE_LIFETIME_MS, findRememberedDevice, rememberDevice } from '@progwise/pforte-db/devices'
 import { findActiveUserById } from '@progwise/pforte-db/oidc'
 import { recordLogin } from '@progwise/pforte-db/users'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { ACR_PASSWORD, ACR_SECOND_FACTOR, secondFactorAssurance } from '../auth/assurance.js'
+import { channelFor, maskEmail, maskPhone } from '../auth/channels.js'
 import { deriveCodeSecrets } from '../auth/code-secrets.js'
 import type { Authenticate } from '../auth/authenticate.js'
-import { type Notifier, NotifierUnavailableError } from '../notifications/notifier.js'
+import { type Channel, type Notifier, NotifierUnavailableError } from '../notifications/notifier.js'
 import { applyIssuerHeaders } from '../oidc/issuer-headers.js'
 import type { ProviderHolder } from '../oidc/provider.js'
 import { readCookie, setCookieHeader, sign, unsign } from './signed-cookie.js'
@@ -36,8 +37,6 @@ interface Step {
   expiresAt: number
 }
 
-/** `anna.schmidt@example.com` → `a***@example.com`: enough to recognise the mailbox, not to harvest it. */
-const maskEmail = (email: string) => `${email.slice(0, 1)}***${email.slice(email.lastIndexOf('@'))}`
 
 const GENERIC_LOGIN_ERROR = 'The e-mail or password is not correct.'
 
@@ -171,16 +170,38 @@ export const interactionRoutes =
       return user ? { step, user } : undefined
     }
 
-    const codePageFor = (
-      user: { email: string; phone: string | null },
-      uid: string,
-      extra: { error?: string; notice?: string } = {},
-    ) => codePage({ uid, sentTo: maskEmail(user.email), phoneHint: !user.phone, ...extra })
+    type StepUser = NonNullable<Awaited<ReturnType<typeof stepFor>>>['user']
 
-    /** Sends a fresh code to the user. Returns a message for the page when the limits say to wait. */
-    const sendCode = async (user: NonNullable<Awaited<ReturnType<typeof stepFor>>>['user']) => {
-      const { code, expiresAt } = await issueCode(db, { userId: user.id, channel: 'email', purpose: 'login' }, { secrets: codeSecrets })
-      await notifier.sendLoginCode(user, { code, expiresAt })
+    /** The code page, telling where the code that is valid now was sent. */
+    const codePageFor = async (user: StepUser, uid: string, extra: { error?: string; notice?: string } = {}) => {
+      const channel = (await currentCode(db, { userId: user.id, purpose: 'login' }))?.channel ?? 'email'
+      return codePage({
+        uid,
+        channel,
+        sentTo: channel === 'sms' && user.phone ? maskPhone(user.phone) : maskEmail(user.email),
+        canUseEmail: channel === 'sms',
+        // Only worth saying when codes could go by SMS at all.
+        phoneHint: !user.phone && notifier.smsAvailable,
+        ...extra,
+      })
+    }
+
+    /**
+     * Sends a fresh code, by SMS if the user can receive one and `wanted` allows it. When the SMS cannot be
+     * sent the same code goes by e-mail, so a provider outage does not lock people out. Returns the channel used.
+     */
+    const sendCode = async (user: StepUser, wanted: Channel): Promise<Channel> => {
+      const { code, expiresAt } = await issueCode(db, { userId: user.id, channel: wanted, purpose: 'login' }, { secrets: codeSecrets })
+      try {
+        await notifier.sendLoginCode(user, { code, expiresAt, channel: wanted })
+        return wanted
+      } catch (error) {
+        if (wanted !== 'sms' || !(error instanceof NotifierUnavailableError)) throw error
+        app.log.warn(error, 'the sign-in code could not be sent by SMS; sent by e-mail instead')
+        await changeCodeChannel(db, { userId: user.id, purpose: 'login', channel: 'email' })
+        await notifier.sendLoginCode(user, { code, expiresAt, channel: 'email' })
+        return 'email'
+      }
     }
 
     const limitMessage = (error: CodeLimitError) =>
@@ -213,7 +234,7 @@ export const interactionRoutes =
       }
 
       try {
-        await sendCode(user)
+        await sendCode(user, channelFor(user, notifier))
       } catch (error) {
         if (error instanceof NotifierUnavailableError) return cannotSend(reply, error)
         if (!(error instanceof CodeLimitError)) throw error
@@ -234,7 +255,7 @@ export const interactionRoutes =
       if (!details) return expired(reply)
       const current = await stepFor(request, details.uid)
       if (!current) return reply.redirect(cookiePath(details.uid), 303)
-      return reply.type('text/html').send(codePageFor(current.user, details.uid))
+      return reply.type('text/html').send(await codePageFor(current.user, details.uid))
     })
 
     app.post<{ Params: { uid: string }; Body: { code?: unknown; remember?: unknown } }>('/interaction/:uid/code', async (request, reply) => {
@@ -256,7 +277,7 @@ export const interactionRoutes =
           expired: 'The code has expired. Please ask for a new one.',
           none: 'There is no valid code. Please ask for a new one.',
         }[result.reason]
-        return reply.code(401).type('text/html').send(codePageFor(user, details.uid, { error }))
+        return reply.code(401).type('text/html').send(await codePageFor(user, details.uid, { error }))
       }
 
       if (result.channel === 'email') await markEmailVerified(db, user.id)
@@ -273,14 +294,16 @@ export const interactionRoutes =
       return finishLogin(request, reply, user.id, secondFactorAssurance(result.channel), cookies)
     })
 
-    app.post<{ Params: { uid: string } }>('/interaction/:uid/code/resend', async (request, reply) => {
+    app.post<{ Params: { uid: string }; Body: { channel?: unknown } }>('/interaction/:uid/code/resend', async (request, reply) => {
       const details = await interactionFor(request, reply, request.params.uid)
       if (!details) return expired(reply)
       const current = await stepFor(request, details.uid)
       if (!current) return reply.redirect(cookiePath(details.uid), 303)
 
+      // "Send it by e-mail instead" asks for the e-mail even where an SMS would be the usual way.
+      const wanted = request.body?.channel === 'email' ? 'email' : channelFor(current.user, notifier)
       try {
-        await sendCode(current.user)
+        await sendCode(current.user, wanted)
       } catch (error) {
         if (error instanceof NotifierUnavailableError) return cannotSend(reply, error)
         if (!(error instanceof CodeLimitError)) throw error
@@ -288,9 +311,9 @@ export const interactionRoutes =
           .code(429)
           .header('Retry-After', error.retryAfterSeconds)
           .type('text/html')
-          .send(codePageFor(current.user, details.uid, { error: limitMessage(error) }))
+          .send(await codePageFor(current.user, details.uid, { error: limitMessage(error) }))
       }
-      return reply.type('text/html').send(codePageFor(current.user, details.uid, { notice: 'A new code is on its way.' }))
+      return reply.type('text/html').send(await codePageFor(current.user, details.uid, { notice: 'A new code is on its way.' }))
     })
 
     app.post<{ Params: { uid: string } }>('/interaction/:uid/abort', async (request, reply) => {

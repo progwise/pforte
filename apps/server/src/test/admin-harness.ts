@@ -29,12 +29,19 @@ export const createAdminHarness = async () => {
     db: database.db,
   })
   /** Everything the app asked the notifier to send, and a switch to make sending fail. */
-  const { notifier, notifications, lastCode, lastResetCode } = createRecordingNotifier()
+  const { notifier, notifications, lastCode, lastResetCode, lastPhoneCode } = createRecordingNotifier()
   const sendPasswordResetCode = createPasswordResetSender({ db: database.db, notifier, codeSecrets: deriveCodeSecrets(COOKIE_KEYS), issuer: ISSUER })
   const app = buildApp({
     getDatabaseTime: () => getDatabaseTime(database.db),
     oidc: { provider, authenticate: await createAuthenticate(database.db), db: database.db, notifier, cookieKeys: COOKIE_KEYS },
-    account: { db: database.db, sendPasswordResetCode, codeSecrets: deriveCodeSecrets(COOKIE_KEYS) },
+    account: {
+      db: database.db,
+      sendPasswordResetCode,
+      codeSecrets: deriveCodeSecrets(COOKIE_KEYS),
+      notifier,
+      cookieKeys: COOKIE_KEYS,
+      secure: true,
+    },
     admin: {
       db: database.db,
       provider,
@@ -88,6 +95,7 @@ export const createAdminHarness = async () => {
     notifier,
     notifications,
     lastResetCode,
+    lastPhoneCode,
     api,
     tokenFor,
     adminToken,

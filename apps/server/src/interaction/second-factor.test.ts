@@ -21,6 +21,7 @@ describe.skipIf(!hasDatabase)('second factor at sign-in', () => {
   beforeEach(async () => {
     h.notifications.length = 0
     h.notifier.failWith = undefined
+    h.notifier.smsAvailable = false
     // Every test starts from users who have never signed in with a code and have no phone number.
     await h.database.pool.query(`delete from otp_codes`)
     await h.database.pool.query(`update users set phone = null, email_verified_at = null, last_login_at = null, status = 'active' where password_hash is not null`)
@@ -77,14 +78,20 @@ describe.skipIf(!hasDatabase)('second factor at sign-in', () => {
     expect(h.notifications).toEqual([])
   })
 
-  it('shows the masked address and the hint to add a phone number', async () => {
+  it('shows the masked address, and the hint to add a phone number where SMS is possible', async () => {
+    h.notifier.smsAvailable = true
     const { browser, interaction } = await passwordStep('hans.weber@example.com')
     const page = await browser.request('GET', `${interaction}/code`)
 
     expect(page.statusCode).toBe(200)
-    expect(page.body).toContain('h***@example.com')
+    expect(page.body).toContain('by e-mail to h***@example.com')
     expect(page.body).not.toContain('hans.weber@example.com')
     expect(page.body).toContain('no mobile number is on file')
+  })
+
+  it('leaves out the hint where SMS cannot be sent anyway', async () => {
+    const { browser, interaction } = await passwordStep('hans.weber@example.com')
+    expect((await browser.request('GET', `${interaction}/code`)).body).not.toContain('no mobile number')
   })
 
   it('leaves out the hint for a user who has a phone number', async () => {
@@ -427,5 +434,140 @@ describe.skipIf(!hasDatabase)('remembered devices at sign-in', () => {
     const id = await userId('ben.keller@example.com')
     expect((await h.api('DELETE', `/users/${id}/devices/${unknown}`)).statusCode).toBe(404)
     expect((await h.api('GET', `/users/${id}/devices`, { token: null })).statusCode).toBe(401)
+  })
+})
+
+
+describe.skipIf(!hasDatabase)('second factor by SMS', () => {
+  let h: AdminHarness
+  const NUMBER = '+4915112345678'
+
+  beforeAll(async () => {
+    h = await createAdminHarness()
+  })
+
+  afterAll(async () => {
+    await h?.close()
+  })
+
+  beforeEach(async () => {
+    h.notifications.length = 0
+    h.notifier.failWith = undefined
+    h.notifier.failSms = false
+    h.notifier.smsAvailable = true
+    await h.database.pool.query(`delete from otp_codes`)
+    await h.database.pool.query(`delete from devices`)
+    await h.database.pool.query(
+      `update users set phone = $1, phone_verified_at = now(), email_verified_at = null, status = 'active' where password_hash is not null`,
+      [NUMBER],
+    )
+  })
+
+  const passwordStep = async (email: string) => {
+    const browser = new Browser(h.app)
+    const { challenge, verifier } = pkcePair()
+    const params = new URLSearchParams({
+      client_id: WEB.clientId,
+      redirect_uri: WEB.redirectUri,
+      response_type: 'code',
+      scope: 'openid',
+      state: 's',
+      nonce: 'n',
+      code_challenge: challenge,
+      code_challenge_method: 'S256',
+    })
+    const interaction = (await browser.request('GET', `/auth?${params}`)).headers.location as string
+    await browser.request('GET', interaction)
+    const login = await browser.request('POST', `${interaction}/login`, { form: { email, password: 'dev-password' } })
+    return { browser, interaction, login, verifier }
+  }
+  const lastLoginCode = () => h.notifications.findLast((n) => n.kind === 'login-code')!
+
+  it('sends the code by SMS to a confirmed number and says where it went, without the full number', async () => {
+    const { browser, interaction } = await passwordStep('anna.schmidt@example.com')
+    expect(lastLoginCode()).toMatchObject({ channel: 'sms', user: expect.objectContaining({ phone: NUMBER }) })
+
+    const page = await browser.request('GET', `${interaction}/code`)
+    expect(page.body).toContain('by SMS to +49')
+    expect(page.body).toContain('78')
+    expect(page.body).not.toContain(NUMBER)
+    expect(page.body).toContain('Send the code by e-mail instead')
+  })
+
+  it('signs in with the SMS code: amr says sms, and the e-mail is not claimed to be verified', async () => {
+    const email = 'ben.keller@example.com'
+    const { browser, interaction, verifier } = await passwordStep(email)
+    const entered = await browser.request('POST', `${interaction}/code`, { form: { code: lastLoginCode().code! } })
+    const resumed = await browser.request('GET', entered.headers.location as string)
+    const code = new URL(resumed.headers.location as string).searchParams.get('code')!
+    const tokens = (
+      await browser.request('POST', '/token', {
+        form: { grant_type: 'authorization_code', code, redirect_uri: WEB.redirectUri, client_id: WEB.clientId, code_verifier: verifier },
+      })
+    ).json()
+
+    const { claims } = await verifyJwt(h.app, tokens.id_token)
+    expect(claims).toMatchObject({ acr: 'urn:pforte:acr:mfa', amr: ['pwd', 'sms'], email_verified: false })
+    expect((await h.database.pool.query(`select email_verified_at from users where email = $1`, [email])).rows[0].email_verified_at).toBeNull()
+  })
+
+  it('uses e-mail when the number was never confirmed, or when SMS is not available', async () => {
+    await h.database.pool.query(`update users set phone_verified_at = null where email = 'felix.brandt@example.com'`)
+    await passwordStep('felix.brandt@example.com')
+    expect(lastLoginCode().channel).toBe('email')
+
+    h.notifications.length = 0
+    h.notifier.smsAvailable = false
+    await h.database.pool.query(`delete from otp_codes`)
+    await passwordStep('greta.lang@example.com')
+    expect(lastLoginCode().channel).toBe('email')
+  })
+
+  it('sends the same code by e-mail when the SMS provider is down', async () => {
+    h.notifier.failSms = true
+    const email = 'hans.weber@example.com'
+    const { browser, interaction } = await passwordStep(email)
+
+    expect(h.notifications).toHaveLength(1)
+    expect(lastLoginCode().channel).toBe('email')
+    const page = await browser.request('GET', `${interaction}/code`)
+    expect(page.body).toContain('by e-mail to')
+    expect(page.body).not.toContain('e-mail instead')
+    const entered = await browser.request('POST', `${interaction}/code`, { form: { code: lastLoginCode().code! } })
+    expect(entered.statusCode).toBe(303)
+    expect((await h.database.pool.query(`select email_verified_at from users where email = $1`, [email])).rows[0].email_verified_at).not.toBeNull()
+  })
+
+  it('fails clearly when neither SMS nor e-mail can be sent', async () => {
+    h.notifier.failWith = new NotifierUnavailableError('everything is down')
+    const { login } = await passwordStep('anna.schmidt@example.com')
+    expect(login.statusCode).toBe(503)
+  })
+
+  it('sends the code by e-mail on request, after the wait, and drops the SMS code', async () => {
+    const email = 'felix.brandt@example.com'
+    const { browser, interaction } = await passwordStep(email)
+    const smsCode = lastLoginCode().code!
+
+    const tooSoon = await browser.request('POST', `${interaction}/code/resend`, { form: { channel: 'email' } })
+    expect(tooSoon.statusCode).toBe(429)
+
+    await h.database.pool.query(`update otp_codes set created_at = created_at - interval '2 minutes'`)
+    const switched = await browser.request('POST', `${interaction}/code/resend`, { form: { channel: 'email' } })
+    expect(switched.statusCode).toBe(200)
+    expect(switched.body).toContain('by e-mail to')
+    expect(lastLoginCode().channel).toBe('email')
+
+    if (smsCode !== lastLoginCode().code) {
+      expect((await browser.request('POST', `${interaction}/code`, { form: { code: smsCode } })).statusCode).toBe(401)
+    }
+    expect((await browser.request('POST', `${interaction}/code`, { form: { code: lastLoginCode().code! } })).statusCode).toBe(303)
+  })
+
+  it('sends the next code the usual way when no channel is asked for', async () => {
+    const { browser, interaction } = await passwordStep('greta.lang@example.com')
+    await h.database.pool.query(`update otp_codes set created_at = created_at - interval '2 minutes'`)
+    await browser.request('POST', `${interaction}/code/resend`)
+    expect(lastLoginCode().channel).toBe('sms')
   })
 })

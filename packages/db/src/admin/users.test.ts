@@ -85,6 +85,25 @@ describe.skipIf(!hasDatabase)('admin user queries', () => {
     expect(await count('audit_events')).toBe(events)
   })
 
+  it('forgets the confirmation of a phone number or address when it changes, and keeps it otherwise', async () => {
+    const created = await database.db.transaction((tx) =>
+      createUser(tx, context, { email: 'confirmed@example.com', firstName: 'Con', lastName: 'Firmed', phone: '+4915112345678' }),
+    )
+    await database.pool.query(`update users set phone_verified_at = now(), email_verified_at = now() where id = $1`, [created.id])
+    const confirmed = (await findUserByEmail(database.db, 'confirmed@example.com'))!
+
+    const renamed = await database.db.transaction((tx) => updateUser(tx, context, confirmed, { firstName: 'Conny' }))
+    expect(renamed.user.phoneVerifiedAt).not.toBeNull()
+    expect(renamed.user.emailVerifiedAt).not.toBeNull()
+
+    const newNumber = await database.db.transaction((tx) => updateUser(tx, context, renamed.user, { phone: '+4915198765432' }))
+    expect(newNumber.user.phoneVerifiedAt).toBeNull()
+    expect(newNumber.user.emailVerifiedAt).not.toBeNull()
+
+    const newAddress = await database.db.transaction((tx) => updateUser(tx, context, newNumber.user, { email: 'moved@example.com' }))
+    expect(newAddress.user.emailVerifiedAt).toBeNull()
+  })
+
   it('keeps who a deleted user was in the audit log', async () => {
     const user = await database.db.transaction((tx) =>
       createUser(tx, context, { email: 'gone@example.com', firstName: 'Gone', lastName: 'Soon' }),

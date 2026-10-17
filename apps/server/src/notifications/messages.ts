@@ -47,3 +47,22 @@ export const languageFor = (language: string): Language => (language.toLowerCase
 export const loginCodeMessage = (language: string, values: MessageValues) => texts[languageFor(language)].loginCode(values)
 export const activationMessage = (language: string, values: MessageValues) => texts[languageFor(language)].activation(values)
 export const resetCodeMessage = (language: string, values: MessageValues) => texts[languageFor(language)].resetCode(values)
+
+type SmsKind = 'login' | 'reset' | 'phone'
+
+const smsTexts: Record<Language, Record<SmsKind, (organisation: string, code: string, minutes: number) => string>> = {
+  en: {
+    login: (organisation, code, minutes) => `${code} is your sign-in code for ${organisation}. Valid for ${minutes} minutes. Do not share it.`,
+    reset: (organisation, code, minutes) => `${code} is your code to choose a new password for ${organisation}. Valid for ${minutes} minutes. Do not share it.`,
+    phone: (organisation, code, minutes) => `${code} is your code to confirm this phone number for ${organisation}. Valid for ${minutes} minutes.`,
+  },
+  de: {
+    login: (organisation, code, minutes) => `${code} ist Ihr Anmeldecode für ${organisation}. Gültig ${minutes} Minuten. Nicht weitergeben.`,
+    reset: (organisation, code, minutes) => `${code} ist Ihr Code für ein neues Passwort bei ${organisation}. Gültig ${minutes} Minuten. Nicht weitergeben.`,
+    phone: (organisation, code, minutes) => `${code} ist Ihr Code, um diese Telefonnummer bei ${organisation} zu bestätigen. Gültig ${minutes} Minuten.`,
+  },
+}
+
+/** The text of an SMS: short, with the code first so it shows in the notification. */
+export const smsMessage = (kind: SmsKind, language: string, values: { organisation: string; code: string; minutes: number }) =>
+  smsTexts[languageFor(language)][kind](values.organisation, values.code, values.minutes)

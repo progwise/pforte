@@ -1,11 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   checkCode,
+  currentCode,
   CodeLimitError,
   CODE_LIFETIME_MS,
   deleteOldCodes,
   issueCode,
   markEmailVerified,
+  markPhoneVerified,
   MAX_CODES_PER_HOUR,
   RESEND_COOLDOWN_MS,
 } from './codes.js'
@@ -156,6 +158,25 @@ describe.skipIf(!hasDatabase)('one-time codes', () => {
     await markEmailVerified(database.db, userId, new Date(start.getTime() + minutes(5)))
     const { rows } = await database.pool.query(`select email_verified_at from users where id = $1`, [userId])
     expect(rows[0].email_verified_at).toEqual(start)
+  })
+
+  it('tells which code is valid right now and how it was sent', async () => {
+    const userId = await newUser()
+    expect(await currentCode(database.db, { userId, purpose: 'login' }, start)).toBeUndefined()
+    await issueCode(database.db, { userId, channel: 'sms', purpose: 'login' }, { secrets, now: start })
+    expect(await currentCode(database.db, { userId, purpose: 'login' }, start)).toMatchObject({ channel: 'sms' })
+    expect(await currentCode(database.db, { userId, purpose: 'password_reset' }, start)).toBeUndefined()
+    expect(await currentCode(database.db, { userId, purpose: 'login' }, new Date(start.getTime() + CODE_LIFETIME_MS))).toBeUndefined()
+    await issueCode(database.db, { userId, channel: 'email', purpose: 'login' }, { secrets, now: new Date(start.getTime() + RESEND_COOLDOWN_MS) })
+    expect(await currentCode(database.db, { userId, purpose: 'login' }, new Date(start.getTime() + RESEND_COOLDOWN_MS))).toMatchObject({ channel: 'email' })
+  })
+
+  it('confirms the phone number once and keeps the first time', async () => {
+    const userId = await newUser()
+    await markPhoneVerified(database.db, userId, start)
+    await markPhoneVerified(database.db, userId, new Date(start.getTime() + minutes(5)))
+    const { rows } = await database.pool.query(`select phone_verified_at from users where id = $1`, [userId])
+    expect(rows[0].phone_verified_at).toEqual(start)
   })
 
   it('deletes codes that are long expired', async () => {

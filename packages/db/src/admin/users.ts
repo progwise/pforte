@@ -139,7 +139,10 @@ export const updateUser = async (
     return { user, changed: false as const, changes }
   }
 
-  const values = Object.fromEntries(Object.entries(changes).map(([field, { to }]) => [field, to]))
+  const values: Record<string, unknown> = Object.fromEntries(Object.entries(changes).map(([field, { to }]) => [field, to]))
+  // A confirmation belongs to the address or number that was confirmed, not to the user.
+  if (changes.phone) values.phoneVerifiedAt = null
+  if (changes.email) values.emailVerifiedAt = null
   const [updated] = await tx.update(users).set(values).where(eq(users.id, user.id)).returning()
   await recordAuditEvent(
     tx,

@@ -57,7 +57,7 @@ export const lifecycleRoutes =
         `${error.message} The change itself was saved; repeat the call once messages can be sent.`,
       )
 
-    const asUser = (user: Parameters<typeof toUserDto>[0]) => ({ id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, language: user.language })
+    const asUser = (user: Parameters<typeof toUserDto>[0]) => ({ id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, language: user.language, phone: user.phone })
 
     app.post(
       '/users/:id/lock',
@@ -200,7 +200,7 @@ export const lifecycleRoutes =
             return found ? requestPasswordReset(tx, requestContext(request), found) : undefined
           })
           if (!user) return noUser(reply)
-          await sendPasswordResetCode(asUser(user))
+          await sendPasswordResetCode(user)
           return toUserDto(user)
         } catch (error) {
           if (error instanceof LifecycleError) return refused(reply, error)

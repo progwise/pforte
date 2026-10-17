@@ -7,6 +7,7 @@ import { deriveCodeSecrets } from './auth/code-secrets.js'
 import { createPasswordResetSender } from './auth/password-reset.js'
 import { loadConfig } from './config.js'
 import { createSmtpMailer } from './notifications/mailer.js'
+import { createHttpSmsSender } from './notifications/sms.js'
 import { createLogNotifier, createMailNotifier } from './notifications/notifier.js'
 import { createProviderHolder } from './oidc/provider.js'
 
@@ -26,11 +27,13 @@ const authenticate = await createAuthenticate(db)
 const notifier = config.mail
   ? createMailNotifier({
       mailer: createSmtpMailer({ url: config.mail.smtpUrl, from: config.mail.from }),
+      sms: config.sms && createHttpSmsSender(config.sms),
       organisation: config.organisationName,
     })
   : createLogNotifier({
       log: (message) => app.log.info(message),
       production: process.env.NODE_ENV === 'production',
+      smsAvailable: Boolean(config.sms),
     })
 const sendPasswordResetCode = createPasswordResetSender({
   db,
@@ -41,7 +44,14 @@ const sendPasswordResetCode = createPasswordResetSender({
 const app = buildApp({
   getDatabaseTime: () => getDatabaseTime(db),
   oidc: { provider, authenticate, db, notifier, cookieKeys: config.cookieKeys },
-  account: { db, sendPasswordResetCode, codeSecrets: deriveCodeSecrets(config.cookieKeys) },
+  account: {
+    db,
+    sendPasswordResetCode,
+    codeSecrets: deriveCodeSecrets(config.cookieKeys),
+    notifier,
+    cookieKeys: config.cookieKeys,
+    secure: config.issuer.startsWith('https:'),
+  },
   admin: {
     db,
     provider,
