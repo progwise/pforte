@@ -1,4 +1,6 @@
 export * from './claims.js'
+export * from './clients.js'
+export * from './errors.js'
 export * from './lifecycle.js'
 export * from './users.js'
 export { recordAuditEvent } from '../audit.js'

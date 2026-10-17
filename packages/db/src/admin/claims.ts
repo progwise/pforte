@@ -8,22 +8,12 @@ export type ClaimValues = Record<string, string[]>
 
 type ClaimTypeRow = typeof claimTypes.$inferSelect
 
-export interface ClaimProblem {
-  /** JSON pointer to the offending part of the request, e.g. `/claims/partner_no`. */
-  path: string
-  message: string
-}
+import { AdminError, type Problem } from './errors.js'
 
-/** Thrown when claim values or claim types cannot be applied. `conflict` means "valid, but not in the current state". */
-export class ClaimsError extends Error {
-  constructor(
-    message: string,
-    readonly kind: 'invalid' | 'conflict' | 'not_found',
-    readonly problems: ClaimProblem[] = [],
-  ) {
-    super(message)
-  }
-}
+export type ClaimProblem = Problem
+
+/** Thrown when claim values or claim types cannot be applied. */
+export class ClaimsError extends AdminError {}
 
 /** Names that tokens already use for something else. A claim type may not shadow them. */
 export const RESERVED_CLAIM_NAMES = new Set([
