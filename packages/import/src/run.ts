@@ -33,6 +33,8 @@ export interface RowResult {
 export interface ImportReport {
   dryRun: boolean
   delimiter: ',' | ';'
+  /** The column names of the file as written, to write rejected rows back out in the same layout. */
+  header: string[]
   /** Rows in the file, not counting the header and empty rows. */
   totalRows: number
   counts: Record<'created' | 'updated' | 'unchanged' | 'rejected' | 'failed', number>
@@ -186,6 +188,7 @@ export const runImport = async (bytes: Uint8Array, api: AdminApi, options: Impor
   return {
     dryRun,
     delimiter: file.delimiter,
+    header: file.header,
     totalRows: file.rows.length,
     counts,
     warnings: columns.warnings,

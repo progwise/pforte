@@ -1,0 +1,21 @@
+{
+  "name": "@progwise/pforte-cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Command line tools for pforte administrators.",
+  "bin": {
+    "pforte": "./src/cli.ts"
+  },
+  "scripts": {
+    "start": "tsx src/cli.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@progwise/pforte-import": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "4.23.15"
+  }
+}

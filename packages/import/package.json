@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Reads user files (CSV) and imports them into pforte through the admin API.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
