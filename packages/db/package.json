@@ -9,6 +9,7 @@
     "./admin": "./src/admin/index.ts",
     "./seed": "./src/seed.ts",
     "./users": "./src/users.ts",
+    "./codes": "./src/codes.ts",
     "./testing": "./src/test/test-database.ts"
   },
   "scripts": {

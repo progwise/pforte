@@ -15,6 +15,8 @@ export const users = pgTable(
     /** E.164, e.g. +4915112345678. */
     phone: text(),
     phoneVerifiedAt: timestamptz(),
+    /** Set when the user proves they own the address: with the activation link or a code sent by e-mail. */
+    emailVerifiedAt: timestamptz(),
     firstName: text().notNull(),
     lastName: text().notNull(),
     language: text().notNull().default('en'),
