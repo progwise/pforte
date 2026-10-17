@@ -23,6 +23,7 @@ export const createOidcPayloadStore = (db: Database) => {
         grantId: optionalString(payload.grantId),
         userCode: optionalString(payload.userCode),
         uid: optionalString(payload.uid),
+        accountId: optionalString(payload.accountId),
         expiresAt: expiresInSeconds ? new Date(Date.now() + expiresInSeconds * 1000) : null,
       }
       await db

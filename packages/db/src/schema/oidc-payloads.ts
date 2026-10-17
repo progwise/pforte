@@ -14,6 +14,8 @@ export const oidcPayloads = pgTable(
     grantId: text(),
     userCode: text(),
     uid: text(),
+    /** The user a session, grant or token belongs to. Lets an administrator end all of a user's sessions. */
+    accountId: text(),
     expiresAt: timestamptz(),
     consumedAt: timestamptz(),
     ...timestamps(),
@@ -23,6 +25,7 @@ export const oidcPayloads = pgTable(
     index('oidc_payloads_grant_id').on(table.grantId),
     index('oidc_payloads_user_code').on(table.userCode),
     index('oidc_payloads_uid').on(table.uid),
+    index('oidc_payloads_account_id').on(table.accountId),
     index('oidc_payloads_expires_at').on(table.expiresAt),
   ],
 )

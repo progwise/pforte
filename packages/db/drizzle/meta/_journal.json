@@ -29,6 +29,13 @@
       "when": 1792183805857,
       "tag": "0003_add_client_scopes",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792185016168,
+      "tag": "0004_add_oidc_account_id",
+      "breakpoints": true
     }
   ]
 }

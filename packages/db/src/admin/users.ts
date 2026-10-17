@@ -1,6 +1,7 @@
 import { and, asc, eq, exists, gt, ilike, or, sql } from 'drizzle-orm'
 import { type AuditEventInput, type DatabaseOrTransaction, recordAuditEvent } from '../audit.js'
 import { userClaims, users } from '../schema/index.js'
+import { endUserSessions } from './lifecycle.js'
 
 type UserRow = typeof users.$inferSelect
 
@@ -151,14 +152,15 @@ export const updateUser = async (
   return { user: updated!, changed: true as const }
 }
 
-/** Deletes a user and everything that hangs on them. The audit event keeps who they were. */
+/** Deletes a user and everything that hangs on them, including sessions and tokens. The audit event keeps who they were. */
 export const deleteUser = async (tx: DatabaseOrTransaction, context: RequestContext, user: UserRow) => {
+  const sessionsEnded = await endUserSessions(tx, user.id)
   await recordAuditEvent(
     tx,
     audit(context, {
       action: 'user.delete',
       target: { type: 'user', id: user.id },
-      details: { email: user.email, firstName: user.firstName, lastName: user.lastName },
+      details: { email: user.email, firstName: user.firstName, lastName: user.lastName, sessionsEnded },
     }),
   )
   await tx.delete(users).where(eq(users.id, user.id))
