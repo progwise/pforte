@@ -4,7 +4,7 @@ import type { FastifyInstance } from 'fastify'
 import type { ZodTypeProvider } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 import type { AdminAuth } from './auth.js'
-import { answeringClaimsErrors } from './claims-errors.js'
+import { answeringAdminErrors } from './admin-errors.js'
 import { problem, problemSchema } from './problem.js'
 import { requestContext } from './users-routes.js'
 
@@ -56,7 +56,7 @@ export const claimsRoutes =
         },
       },
       async (request, reply) =>
-        answeringClaimsErrors(reply, () =>
+        answeringAdminErrors(reply, () =>
           db.transaction(async (tx) => {
             const user = await findUserById(tx, request.params.id)
             return user ? setUserClaims(tx, requestContext(request), user, request.body.claims) : undefined
@@ -77,7 +77,7 @@ export const claimsRoutes =
         },
       },
       async (request, reply) =>
-        answeringClaimsErrors(reply, () =>
+        answeringAdminErrors(reply, () =>
           db.transaction(async (tx) => {
             const user = await findUserById(tx, request.params.id)
             return user
@@ -101,7 +101,7 @@ export const claimsRoutes =
         },
       },
       async (request, reply) =>
-        answeringClaimsErrors(reply, () =>
+        answeringAdminErrors(reply, () =>
           db.transaction(async (tx) => {
             const user = await findUserById(tx, request.params.id)
             return user ? addUserClaim(tx, requestContext(request), user, request.params.type, request.body.value) : undefined
@@ -122,7 +122,7 @@ export const claimsRoutes =
         },
       },
       async (request, reply) =>
-        answeringClaimsErrors(reply, () =>
+        answeringAdminErrors(reply, () =>
           db.transaction(async (tx) => {
             const user = await findUserById(tx, request.params.id)
             return user ? removeUserClaim(tx, requestContext(request), user, request.params.type, request.params.value) : undefined

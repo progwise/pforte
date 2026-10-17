@@ -5,6 +5,7 @@ import type { Notifier } from '../notifications/notifier.js'
 import type { ProviderHolder } from '../oidc/provider.js'
 import { createAdminAuth } from './auth.js'
 import { claimTypesRoutes } from './claim-types-routes.js'
+import { clientsRoutes } from './clients-routes.js'
 import { claimsRoutes } from './claims-routes.js'
 import { lifecycleRoutes } from './lifecycle-routes.js'
 import { problem } from './problem.js'
@@ -63,4 +64,5 @@ export const adminRoutes =
     await app.register(claimsRoutes({ db, auth }))
     await app.register(lifecycleRoutes({ db, auth, notifier, issuer: provider.issuer }))
     await app.register(claimTypesRoutes({ db, auth, reloadProvider }))
+    await app.register(clientsRoutes({ db, auth, reloadProvider }))
   }

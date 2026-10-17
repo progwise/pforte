@@ -14,8 +14,9 @@ import type { FastifyInstance, FastifyRequest } from 'fastify'
 import type { ZodTypeProvider } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 import { type AdminAuth, hasScope } from './auth.js'
-import { answeringClaimsErrors } from './claims-errors.js'
+import { answeringAdminErrors } from './admin-errors.js'
 import { claimValues } from './claims-routes.js'
+import { isUniqueViolation } from './db-errors.js'
 import { problem, problemSchema } from './problem.js'
 
 const USER_STATUSES = ['created', 'active', 'locked', 'deactivated'] as const
@@ -57,11 +58,6 @@ export const toUserDto = (user: UserRow): z.infer<typeof userSchema> => ({
   createdAt: user.createdAt.toISOString(),
   updatedAt: user.updatedAt.toISOString(),
 })
-
-const isUniqueViolation = (error: unknown): boolean => {
-  const candidate = error as { code?: string; cause?: unknown } | undefined
-  return candidate?.code === '23505' || (candidate?.cause !== undefined && isUniqueViolation(candidate.cause))
-}
 
 export const requestContext = (request: FastifyRequest): RequestContext => ({
   actor: { type: 'client', id: request.admin?.clientId },
@@ -278,7 +274,7 @@ export const usersRoutes =
             return { outcome, user, claims }
           })
 
-        return answeringClaimsErrors(reply, async () => {
+        return answeringAdminErrors(reply, async () => {
           let result
           try {
             result = await upsert()

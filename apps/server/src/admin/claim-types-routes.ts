@@ -1,6 +1,6 @@
 import type { Database } from '@progwise/pforte-db'
 import {
-  ClaimsError,
+  AdminError,
   createClaimType,
   deleteClaimType,
   getClaimType,
@@ -15,8 +15,9 @@ import type { FastifyInstance, FastifyRequest } from 'fastify'
 import type { ZodTypeProvider } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 import type { AdminAuth } from './auth.js'
-import { answeringClaimsErrors, sendClaimsError } from './claims-errors.js'
+import { answeringAdminErrors, sendAdminError } from './admin-errors.js'
 import { claimTypeKey } from './claims-routes.js'
+import { isUniqueViolation } from './db-errors.js'
 import { problem, problemSchema } from './problem.js'
 import { requestContext } from './users-routes.js'
 
@@ -35,11 +36,6 @@ const claimTypeSchema = z.object({
   /** The clients that receive this claim type in their tokens. */
   clients: z.array(z.string()),
 })
-
-const isUniqueViolation = (error: unknown): boolean => {
-  const candidate = error as { code?: string; cause?: unknown } | undefined
-  return candidate?.code === '23505' || (candidate?.cause !== undefined && isUniqueViolation(candidate.cause))
-}
 
 export interface ClaimTypeDependencies {
   db: Database
@@ -102,7 +98,7 @@ export const claimTypesRoutes =
           return reply.code(201).header('Location', `/admin/claim-types/${created.key}`).send(toDto(await asDto(created.key)))
         } catch (error) {
           if (isUniqueViolation(error)) return problem(reply, 409, 'Conflict', 'A claim type with this key already exists.')
-          if (error instanceof ClaimsError) return sendClaimsError(reply, error)
+          if (error instanceof AdminError) return sendAdminError(reply, error)
           throw error
         }
       },
@@ -130,7 +126,7 @@ export const claimTypesRoutes =
         },
       },
       async (request, reply) =>
-        answeringClaimsErrors(reply, async () => {
+        answeringAdminErrors(reply, async () => {
           const found = await db.transaction(async (tx) => {
             const claimType = await getClaimType(tx, request.params.key)
             if (!claimType) return false
@@ -157,7 +153,7 @@ export const claimTypesRoutes =
         },
       },
       async (request, reply) =>
-        answeringClaimsErrors(reply, async () => {
+        answeringAdminErrors(reply, async () => {
           const found = await db.transaction(async (tx) => {
             const claimType = await getClaimType(tx, request.params.key)
             if (!claimType) return false
@@ -201,7 +197,7 @@ export const claimTypesRoutes =
         },
       },
       async (request, reply) =>
-        answeringClaimsErrors(reply, async () => {
+        answeringAdminErrors(reply, async () => {
           const result = await db.transaction((tx) =>
             setClientClaimTypes(tx, requestContext(request), request.params.clientId, request.body.claimTypes),
           )

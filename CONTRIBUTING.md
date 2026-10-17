@@ -59,6 +59,11 @@ curl -H "authorization: Bearer $TOKEN" 'http://localhost:3300/admin/users?search
 
 Every change is recorded in the audit log with the client that made it.
 
+Clients are managed under `/admin/clients` (admin scope): register an application or a machine,
+change it, rotate its secret, delete it. The secret is returned once, when the client is created
+or rotated. An application signs users in and has OpenID scopes and https redirect URIs; a machine
+uses the `client_credentials` grant with only the scopes `admin` and/or `directory`.
+
 Users have a lifecycle: `POST /admin/users/{id}/lock`, `unlock`, `activate`, `deactivate`,
 `reset-password` and `end-sessions`. Locking, deactivating, deleting and resetting the password
 end the user's sessions and refresh tokens. Activation links and reset requests go through a
