@@ -66,10 +66,29 @@ release.
 4. Run the tests one by one. Read the blue box at the top of each test; most only need you to
    sign in on pforte's login page with the printed test user. Some tests need a screenshot.
 
+   Signing in has a second step: pforte asks for a 6-digit code. The conformance instance has no
+   mail or SMS, so it writes the code to the terminal where `pnpm conformance:start` runs, in a
+   line with `[development notifier] Sign-in code for …`. Copy the code from there. To find it
+   among the other log lines, start pforte through a filter instead:
+
+   ```sh
+   pnpm conformance:start 2>&1 | grep --line-buffered 'development notifier'
+   ```
+
+   Tick **Remember this device** when you enter the first code (`conformance:start` ticks it by
+   default). The suite runs all tests in the same browser, so later sign-ins ask for the password
+   only. If you delete the cookies of `conformance.pforte.dev`, the next sign-in asks for a code
+   again.
+
 5. Stop the tunnel and pforte when you are done. The conformance instance has no rate limiting
    yet, so do not leave it running.
 
 ## Tips for a run
+
+- The second factor is part of every sign-in, including the tests that need a new sign-in
+  (`oidcc-prompt-login`, `oidcc-max-age-1`): with a remembered device they ask for the password
+  only, the others show the code step. The ID token then carries `acr` `urn:pforte:acr:pwd` and
+  `amr` `["pwd"]` for a remembered device, and `urn:pforte:acr:mfa` and `["pwd","otp"]` after a code.
 
 - The suite runs all tests in the same browser, so pforte's session cookie stays between tests.
   This is intended for most tests, but `oidcc-prompt-none-not-logged-in` asks you to remove the
@@ -85,8 +104,8 @@ release.
 Warnings are accepted for certification. These are known and intended:
 
 - `oidcc-scope-profile`, `oidcc-scope-email`: not all standard claims of the scope are returned.
-  pforte only returns claims it holds (for example no `picture`, `birthdate` or
-  `email_verified`); inventing values would be wrong.
+  pforte only returns claims it holds (for example no `picture` or `birthdate`); inventing values
+  would be wrong. (`email_verified` is returned since #6.)
 - `oidcc-scope-email`: the e-mail is also in the ID token. Claims for the granted scopes are
   deliberately placed in the ID token so applications can read them without a second request.
 - `oidcc-claims-essential`: `name` is not in the userinfo, because pforte does not support the
@@ -94,9 +113,10 @@ Warnings are accepted for certification. These are known and intended:
   allowed. Applications get claims through scopes.
 - `oidcc-alternate-happy-flow`: the same two warnings as `oidcc-scope-email` (the e-mail is also in
   the ID token; not all standard claims of the scope are returned).
-- `oidcc-ensure-request-with-acr-values-succeeds`: the request succeeds, but pforte returns no
-  `acr` claim although `acr_values` were requested. This is a SHOULD. pforte does not advertise
-  `acr_values_supported`; the second factor (#6) is the natural place to add `acr` and `amr`.
+- `oidcc-ensure-request-with-acr-values-succeeds`: in the run below the request succeeded, but pforte
+  returned no `acr` claim although `acr_values` were requested (a SHOULD). Since #6 pforte returns `acr`
+  and `amr` and advertises `acr_values_supported`, so this warning is expected to be gone in the next
+  run. If it is not, record why here.
 - `oidcc-scope-address`, `oidcc-scope-all`: skipped, because pforte does not support the
   `address` scope (`scope-all` includes it).
 - `oidcc-unsigned-request-object-supported-correctly-or-rejected-as-unsupported`: skipped,
@@ -127,6 +147,9 @@ Keep the link to each test's log. Record the outcome of each run below.
 ## Results
 
 ### Run of 2026-10-16: no failures
+
+This run predates the second factor (#6). The sign-in now has a code step, and the ID token has `acr`,
+`amr` and `email_verified`, so the next run should be a full one; update the lists above with what it shows.
 
 Plan `oidcc-basic-certification-test-plan`, suite version 5.3.3, variant
 `server_metadata=discovery, client_registration=static_client`, alias `progwise-pforte`,

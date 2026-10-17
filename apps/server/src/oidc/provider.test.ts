@@ -67,6 +67,14 @@ describe.skipIf(!hasDatabase)('OpenID Connect provider', () => {
     )
   })
 
+  it('tells which assurance levels, sign-in claims and page languages it has', async () => {
+    const document = await discovery()
+
+    expect(document.acr_values_supported).toEqual(['urn:pforte:acr:pwd', 'urn:pforte:acr:mfa'])
+    expect(document.claims_supported).toEqual(expect.arrayContaining(['email_verified', 'acr', 'amr']))
+    expect(document.ui_locales_supported).toEqual(expect.arrayContaining(['en', 'de', 'fr', 'hu']))
+  })
+
   it('offers only the authorization code flow with S256 PKCE', async () => {
     const document = await discovery()
 
