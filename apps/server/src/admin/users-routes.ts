@@ -67,6 +67,18 @@ export const requestContext = (request: FastifyRequest): RequestContext => ({
 
 const ERROR_RESPONSES = { 400: problemSchema, 401: problemSchema, 403: problemSchema, 404: problemSchema, 409: problemSchema }
 
+const dryRunChanges = z.object({
+  profile: z.record(z.string(), z.object({ from: z.unknown(), to: z.unknown() })),
+  claims: z.record(z.string(), z.object({ from: z.array(z.string()), to: z.array(z.string()) })),
+})
+
+/** Thrown inside a transaction to take a dry run back, carrying what would have happened. */
+class DryRunRollback extends Error {
+  constructor(readonly result: { outcome: 'created' | 'updated' | 'unchanged'; changes: z.infer<typeof dryRunChanges> }) {
+    super('dry run')
+  }
+}
+
 export const usersRoutes =
   ({ db, auth }: { db: Database; auth: AdminAuth }) =>
   async (instance: FastifyInstance) => {
@@ -232,8 +244,12 @@ export const usersRoutes =
             'Idempotent, so an hourly import can call it blindly. Updates names, phone and language; never the ' +
             'password, status or administrator rights. With `claims`, replaces the values of exactly the claim types ' +
             'given (see PUT /users/{id}/claims). Writes nothing and says `unchanged` when nothing differs. ' +
-            'Everything happens in one transaction: if a claim is invalid, the user is not created or changed either.',
+            'Everything happens in one transaction: if a claim is invalid, the user is not created or changed either.\n\n' +
+            'With `dryRun=true` the same checks and the same diff run, then everything is rolled back: nothing is ' +
+            'written and no audit event is recorded. The answer says what would happen (`created`, `updated`, ' +
+            '`unchanged`) and what would change, so a dry run cannot disagree with the real call.',
           params: z.object({ email }),
+          querystring: z.object({ dryRun: z.enum(['true', 'false']).default('false') }),
           body: z.object({
             firstName: name,
             lastName: name,
@@ -242,14 +258,18 @@ export const usersRoutes =
             claims: claimValues.optional(),
           }),
           response: {
-            200: z.object({ outcome: z.enum(['updated', 'unchanged']), user: userSchema, claims: claimValues }),
-            201: z.object({ outcome: z.literal('created'), user: userSchema, claims: claimValues }),
+            200: z.union([
+              z.object({ dryRun: z.literal(false), outcome: z.enum(['updated', 'unchanged']), user: userSchema, claims: claimValues }),
+              z.object({ dryRun: z.literal(true), outcome: z.enum(['created', 'updated', 'unchanged']), changes: dryRunChanges }),
+            ]),
+            201: z.object({ dryRun: z.literal(false), outcome: z.literal('created'), user: userSchema, claims: claimValues }),
             ...ERROR_RESPONSES,
           },
         },
       },
       async (request, reply) => {
         const { email: address } = request.params
+        const dryRun = request.query.dryRun === 'true'
         const { phone: wantedPhone, claims: wantedClaims, ...rest } = request.body
         const profile = { ...rest, ...(wantedPhone !== undefined && { phone: wantedPhone }) }
 
@@ -257,34 +277,53 @@ export const usersRoutes =
           db.transaction(async (tx) => {
             const context = requestContext(request)
             const existing = await findUserByEmail(tx, address)
-            const { user, profileChanged } = existing
-              ? await updateUser(tx, context, existing, profile).then((result) => ({
-                  user: result.user,
-                  profileChanged: result.changed,
-                }))
-              : {
-                  user: await createUser(tx, context, { email: address, ...profile, phone: profile.phone ?? undefined }),
-                  profileChanged: true,
-                }
-            const { changed: claimsChanged, claims } = wantedClaims
-              ? await setUserClaims(tx, context, user, wantedClaims)
-              : { changed: false, claims: await getUserClaims(tx, user.id) }
 
-            const outcome = !existing ? ('created' as const) : profileChanged || claimsChanged ? ('updated' as const) : ('unchanged' as const)
-            return { outcome, user, claims }
+            let user: UserRow
+            let profileChanges: Record<string, { from: unknown; to: unknown }>
+            if (existing) {
+              const result = await updateUser(tx, context, existing, profile)
+              user = result.user
+              profileChanges = result.changes
+            } else {
+              user = await createUser(tx, context, { email: address, ...profile, phone: profile.phone ?? undefined })
+              profileChanges = Object.fromEntries(
+                Object.entries({ email: address, ...profile }).map(([field, to]) => [field, { from: null, to }]),
+              )
+            }
+            const claimsResult = wantedClaims
+              ? await setUserClaims(tx, context, user, wantedClaims)
+              : { changed: false, changes: {}, claims: await getUserClaims(tx, user.id) }
+
+            const outcome = !existing
+              ? ('created' as const)
+              : Object.keys(profileChanges).length > 0 || claimsResult.changed
+                ? ('updated' as const)
+                : ('unchanged' as const)
+            const result = { outcome, user, claims: claimsResult.claims, changes: { profile: profileChanges, claims: claimsResult.changes } }
+
+            // A dry run did all the work, with all the checks, and now takes it back.
+            if (dryRun) throw new DryRunRollback(result)
+            return result
           })
 
         return answeringAdminErrors(reply, async () => {
           let result
           try {
-            result = await upsert()
+            try {
+              result = await upsert()
+            } catch (error) {
+              // Two imports creating the same user at once: the loser finds it on the second try.
+              if (!isUniqueViolation(error)) throw error
+              result = await upsert()
+            }
           } catch (error) {
-            // Two imports creating the same user at once: the loser finds it on the second try.
-            if (!isUniqueViolation(error)) throw error
-            result = await upsert()
+            if (error instanceof DryRunRollback) {
+              return reply.send({ dryRun: true, outcome: error.result.outcome, changes: error.result.changes } as never)
+            }
+            throw error
           }
 
-          const body = { outcome: result.outcome, user: toUserDto(result.user), claims: result.claims }
+          const body = { dryRun: false, outcome: result.outcome, user: toUserDto(result.user), claims: result.claims }
           return result.outcome === 'created' ? reply.code(201).send(body as never) : reply.send(body as never)
         })
       },

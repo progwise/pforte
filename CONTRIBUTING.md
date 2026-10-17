@@ -57,6 +57,9 @@ curl -X PUT -H "authorization: Bearer $TOKEN" -H 'content-type: application/json
 curl -H "authorization: Bearer $TOKEN" 'http://localhost:3300/admin/users?search=ada'
 ```
 
+Add `?dryRun=true` to the upsert to see what it would do (`created`, `updated` or `unchanged`, and
+what would change) without writing anything or recording an audit event.
+
 Every change is recorded in the audit log with the client that made it.
 
 The API describes itself: `GET /admin/openapi.json` (with a token) returns an OpenAPI 3.1 document

@@ -306,6 +306,92 @@ describe.skipIf(!hasDatabase)('admin API: users', () => {
     })
   })
 
+  describe('dry run of the upsert', () => {
+    const dryRun = (email: string, body: Record<string, unknown>, token?: string) =>
+      api('PUT', `/users/by-email/${encodeURIComponent(email)}?dryRun=true`, { body, token })
+    const upsert = (email: string, body: Record<string, unknown>) =>
+      api('PUT', `/users/by-email/${encodeURIComponent(email)}`, { body })
+
+    it('says what would be created and what would be set, and creates nothing', async () => {
+      const users = await count('users')
+      const claims = await count('user_claims')
+      const events = await count('audit_events')
+
+      const response = await dryRun('dry-new@example.com', { firstName: 'Dry', lastName: 'New', language: 'de', claims: { partner_no: ['00501'] } })
+
+      expect(response.statusCode).toBe(200)
+      expect(response.json()).toMatchObject({
+        dryRun: true,
+        outcome: 'created',
+        changes: {
+          profile: { email: { from: null, to: 'dry-new@example.com' }, firstName: { from: null, to: 'Dry' }, language: { from: null, to: 'de' } },
+          claims: { partner_no: { from: [], to: ['00501'] } },
+        },
+      })
+      expect(response.json()).not.toHaveProperty('user')
+      expect(await count('users')).toBe(users)
+      expect(await count('user_claims')).toBe(claims)
+      expect(await count('audit_events')).toBe(events)
+    })
+
+    it('leaves nothing behind, so the real call afterwards still creates the user', async () => {
+      await dryRun('dry-then-real@example.com', { firstName: 'Dry', lastName: 'Real' })
+
+      const real = await upsert('dry-then-real@example.com', { firstName: 'Dry', lastName: 'Real' })
+
+      expect(real.statusCode).toBe(201)
+      expect(real.json()).toMatchObject({ dryRun: false, outcome: 'created' })
+    })
+
+    it('shows what would change for an existing user, without changing it', async () => {
+      await upsert('dry-update@example.com', { firstName: 'Up', lastName: 'Date', claims: { partner_no: ['00001'], branch_code: ['MUC'] } })
+      const events = await count('audit_events')
+
+      const response = await dryRun('dry-update@example.com', { firstName: 'Up', lastName: 'Dated', claims: { partner_no: ['00002'] } })
+
+      expect(response.json()).toMatchObject({
+        dryRun: true,
+        outcome: 'updated',
+        changes: { profile: { lastName: { from: 'Date', to: 'Dated' } }, claims: { partner_no: { from: ['00001'], to: ['00002'] } } },
+      })
+      expect(Object.keys(response.json().changes.profile)).toEqual(['lastName'])
+      const after = (await api('GET', `/users?search=dry-update`)).json().items[0]
+      expect(after.lastName).toBe('Date')
+      expect(await count('audit_events')).toBe(events)
+    })
+
+    it('says unchanged, with no changes, when the call would change nothing', async () => {
+      await upsert('dry-same@example.com', { firstName: 'Same', lastName: 'Same', claims: { partner_no: ['00003'] } })
+
+      const response = await dryRun('dry-same@example.com', { firstName: 'Same', lastName: 'Same', claims: { partner_no: ['00003'] } })
+
+      expect(response.json()).toEqual({ dryRun: true, outcome: 'unchanged', changes: { profile: {}, claims: {} } })
+    })
+
+    it('applies the same checks as the real call', async () => {
+      const dry = await dryRun('dry-invalid@example.com', { firstName: 'In', lastName: 'Valid', claims: { partner_no: ['abc'], nonsense: ['x'] } })
+      const real = await upsert('dry-invalid@example.com', { firstName: 'In', lastName: 'Valid', claims: { partner_no: ['abc'], nonsense: ['x'] } })
+
+      expect(dry.statusCode).toBe(400)
+      expect(dry.json()).toEqual(real.json())
+      expect((await dryRun('dry-invalid@example.com', { firstName: '', lastName: 'x' })).statusCode).toBe(400)
+      expect((await api('PUT', '/users/by-email/x@example.com?dryRun=maybe', { body: { firstName: 'A', lastName: 'B' } })).statusCode).toBe(400)
+    })
+
+    it('can be done with the directory scope', async () => {
+      const response = await dryRun('dry-dir@example.com', { firstName: 'Di', lastName: 'Rectory' }, directoryToken)
+
+      expect(response.statusCode).toBe(200)
+      expect(response.json().dryRun).toBe(true)
+    })
+
+    it('answers an ordinary call with dryRun false', async () => {
+      const response = await upsert('plain@example.com', { firstName: 'Plain', lastName: 'Call' })
+
+      expect(response.json().dryRun).toBe(false)
+    })
+  })
+
   describe('list', () => {
     it('pages through every user once, in order', async () => {
       const everyone = await count('users')

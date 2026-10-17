@@ -136,7 +136,7 @@ export const updateUser = async (
 ) => {
   const changes = profileChanges(user, wanted)
   if (Object.keys(changes).length === 0) {
-    return { user, changed: false as const }
+    return { user, changed: false as const, changes }
   }
 
   const values = Object.fromEntries(Object.entries(changes).map(([field, { to }]) => [field, to]))
@@ -149,7 +149,7 @@ export const updateUser = async (
       details: { email: updated!.email, changes },
     }),
   )
-  return { user: updated!, changed: true as const }
+  return { user: updated!, changed: true as const, changes }
 }
 
 /** Deletes a user and everything that hangs on them, including sessions and tokens. The audit event keeps who they were. */

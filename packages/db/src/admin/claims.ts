@@ -124,7 +124,7 @@ export const setUserClaims = async (
       details: { email: user.email, changes },
     })
   }
-  return { changed, claims: await getUserClaims(tx, user.id) }
+  return { changed, changes, claims: await getUserClaims(tx, user.id) }
 }
 
 /** Adds one value. Valid for single-valued types only while the user holds no other value. */
@@ -155,7 +155,7 @@ export const removeUserClaim = async (
 ) => {
   const existing = (await getUserClaims(tx, user.id))[type] ?? []
   const remaining = existing.filter((held) => held !== value)
-  if (remaining.length === existing.length) return { changed: false, claims: await getUserClaims(tx, user.id) }
+  if (remaining.length === existing.length) return { changed: false, changes: {}, claims: await getUserClaims(tx, user.id) }
   return setUserClaims(tx, context, user, { [type]: remaining }, 'user.claims.remove')
 }
 
