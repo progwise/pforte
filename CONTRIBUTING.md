@@ -59,6 +59,10 @@ curl -H "authorization: Bearer $TOKEN" 'http://localhost:3300/admin/users?search
 
 Every change is recorded in the audit log with the client that made it.
 
+The API describes itself: `GET /admin/openapi.json` (with a token) returns an OpenAPI 3.1 document
+generated from the route schemas. `GET /admin/audit-events` lists the audit log (admin scope), newest
+first, with filters for actor, action (`user.*` matches a prefix), target and time.
+
 Clients are managed under `/admin/clients` (admin scope): register an application or a machine,
 change it, rotate its secret, delete it. The secret is returned once, when the client is created
 or rotated. An application signs users in and has OpenID scopes and https redirect URIs; a machine

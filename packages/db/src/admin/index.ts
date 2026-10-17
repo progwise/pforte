@@ -1,3 +1,4 @@
+export * from './audit.js'
 export * from './claims.js'
 export * from './clients.js'
 export * from './errors.js'

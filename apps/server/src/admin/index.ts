@@ -1,9 +1,16 @@
+import swagger from '@fastify/swagger'
 import type { Database } from '@progwise/pforte-db'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
-import { hasZodFastifySchemaValidationErrors, serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod'
+import {
+  hasZodFastifySchemaValidationErrors,
+  jsonSchemaTransform,
+  serializerCompiler,
+  validatorCompiler,
+} from 'fastify-type-provider-zod'
 import type { Notifier } from '../notifications/notifier.js'
 import type { ProviderHolder } from '../oidc/provider.js'
 import { createAdminAuth } from './auth.js'
+import { auditRoutes } from './audit-routes.js'
 import { claimTypesRoutes } from './claim-types-routes.js'
 import { clientsRoutes } from './clients-routes.js'
 import { claimsRoutes } from './claims-routes.js'
@@ -24,6 +31,41 @@ export const adminRoutes =
   async (app: FastifyInstance) => {
     app.setValidatorCompiler(validatorCompiler)
     app.setSerializerCompiler(serializerCompiler)
+
+    // The OpenAPI document is generated from the route schemas, so it cannot drift from the code.
+    await app.register(swagger, {
+      openapi: {
+        openapi: '3.1.0',
+        info: {
+          title: 'pforte admin API',
+          version: '0.0.0',
+          description:
+            'Manage users, claims, clients and the audit log of a pforte identity service. Authenticate with an access ' +
+            'token from the OAuth `client_credentials` grant of a client registered with the scope `admin` (everything) ' +
+            'or `directory` (users and claims only). Errors are RFC 9457 `application/problem+json` documents.',
+        },
+        servers: [{ url: provider.issuer }],
+        tags: [
+          { name: 'Users', description: 'Create, find, change and delete users; idempotent upsert by e-mail for imports.' },
+          { name: 'Lifecycle', description: 'Lock, unlock, activate, deactivate, reset the password and end the sessions of a user.' },
+          { name: 'Claims', description: 'The claim values of a user.' },
+          { name: 'Claim types', description: 'The kinds of claims, and which clients receive them.' },
+          { name: 'Clients', description: 'The applications and machines that use pforte.' },
+          { name: 'Audit', description: 'Who did what, when and to whom.' },
+        ],
+        components: {
+          securitySchemes: {
+            bearerAuth: {
+              type: 'http',
+              scheme: 'bearer',
+              description: 'Access token from the client_credentials grant (POST /token) of an admin client.',
+            },
+          },
+        },
+        security: [{ bearerAuth: [] }],
+      },
+      transform: jsonSchemaTransform,
+    })
 
     app.setErrorHandler((error, request, reply) => {
       if (hasZodFastifySchemaValidationErrors(error)) {
@@ -65,4 +107,11 @@ export const adminRoutes =
     await app.register(lifecycleRoutes({ db, auth, notifier, issuer: provider.issuer }))
     await app.register(claimTypesRoutes({ db, auth, reloadProvider }))
     await app.register(clientsRoutes({ db, auth, reloadProvider }))
+    await app.register(auditRoutes({ db, auth }))
+
+    app.get(
+      '/openapi.json',
+      { onRequest: auth.require('directory', 'admin'), schema: { hide: true } },
+      async () => app.swagger(),
+    )
   }
