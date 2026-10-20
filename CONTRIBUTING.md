@@ -112,6 +112,10 @@ docker run --rm -p 3300:3300 --env-file /tmp/pforte-keys.env \
   pforte:dev
 ```
 
+`scripts/smoke-test-image.sh pforte:dev` is what CI runs on every pull request (workflow `image.yml`): it starts the image against
+a fresh Postgres and checks that it migrates, refuses to start without keys, serves discovery with its published key, runs as
+nobody in particular on a read-only filesystem, and logs no errors. Docker is all it needs.
+
 The image runs in production mode, so it needs the settings production needs (https `ISSUER`, keys, mail, no default database
 password). It applies pending database migrations at start (`MIGRATE_ON_START=false` skips that); `pforte:dev migrate` only
 migrates. `pforte:dev --help` lists the commands.

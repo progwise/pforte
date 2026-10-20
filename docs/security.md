@@ -83,6 +83,10 @@ logs as short as your obligations allow.
 - **Dependabot** proposes updates weekly. A new release waits **14 days** before a pull request is opened, so one that turns
   out to be malicious or broken has time to be found; security fixes are not delayed. The pull requests of Dependabot are
   exempt from the sign-off check, as it cannot sign off.
+- **The image** is built, started against a fresh Postgres and scanned by the workflow `image.yml` on every pull request and
+  push and **every Monday**. The scan (Trivy) fails on high or critical findings that have a fix, in the operating system
+  packages of the base image and in the Node packages. Accepted findings go into `.trivyignore`, each with its reason and a date
+  to look at it again. The base image is pinned by digest, and Dependabot proposes new ones (after the same 14 days).
 - **Accepted advisory:** `GHSA-67mh-4wv8-2f99` (moderate), in `esbuild` through `drizzle-kit`, a tool that writes database
   migrations during development. It is not part of what runs in production. It stays accepted until `drizzle-kit` ships a
   fix, and is checked again each time it is updated.

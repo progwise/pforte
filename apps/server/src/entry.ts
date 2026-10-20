@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { migrateDatabase } from '@progwise/pforte-db/migrate'
 import { HELP, parseCommand, UsageError } from './commands.js'
 import { readSecret } from './config.js'
+import { checkSettings } from './prestart.js'
 import { generateKeys, keysAsEnvironment, writeKeyFiles } from './keys.js'
 
 /** Next to this file in the image; in a checkout, with the database package. */
@@ -45,6 +46,7 @@ const main = async () => {
       await migrate()
       return
     case 'start':
+      checkSettings()
       if (command.migrate) await migrate()
       await import('./server.js')
       return

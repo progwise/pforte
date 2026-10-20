@@ -1,10 +1,10 @@
 # syntax=docker/dockerfile:1
 
-# The base image is pinned by digest; Dependabot proposes new ones.
-ARG NODE_IMAGE=node:22.23.3-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402
+# The base image is pinned by digest, and its version is the one of .nvmrc (a test checks that). Dependabot proposes new
+# ones; both lines change together.
 
 # --- Build: bundle our own code, and install the third-party packages from the lockfile
-FROM ${NODE_IMAGE} AS build
+FROM node:22.23.3-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS build
 WORKDIR /src
 RUN npm install --global pnpm@12.11.2
 COPY . .
@@ -15,7 +15,7 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm --filter @progw
 RUN rm -rf /deploy/node_modules/@progwise
 
 # --- Run
-FROM ${NODE_IMAGE}
+FROM node:22.23.3-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402
 ARG VERSION=development
 ARG REVISION=unknown
 LABEL org.opencontainers.image.title="pforte" \

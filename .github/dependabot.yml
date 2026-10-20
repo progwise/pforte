@@ -23,6 +23,18 @@ updates:
     cooldown:
       default-days: 14
 
+  # The base image of the Dockerfile. Node stays on the major version in .nvmrc and package.json.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 14
+    ignore:
+      - dependency-name: node
+        update-types: ['version-update:semver-major']
+
   # The images of the development setup (Postgres, Mailpit).
   - package-ecosystem: docker-compose
     directory: /

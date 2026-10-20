@@ -1,0 +1,49 @@
+name: Image
+
+# Builds the Docker image, starts it against a fresh Postgres and scans it. New vulnerabilities appear without a commit,
+# so this also runs every Monday.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '41 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Build the image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: pforte:ci
+          build-args: |
+            VERSION=0.0.0-ci
+            REVISION=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test
+        run: scripts/smoke-test-image.sh pforte:ci 0.0.0-ci
+      # Fails on high and critical findings that have a fix. Accepted ones go into .trivyignore, each with its reason.
+      # Pinned to a commit: this action runs with access to the build.
+      - name: Scan for known vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: pforte:ci
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          trivyignores: .trivyignore

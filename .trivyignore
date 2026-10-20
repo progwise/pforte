@@ -1,0 +1,3 @@
+# Vulnerabilities in the image that are accepted for now, one per line, each with the reason and a date to look again.
+# Example:
+#   CVE-2026-12345  # not reachable: the affected function is never called. Check again 2026-12-01.
