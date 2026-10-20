@@ -86,6 +86,18 @@ describe.skipIf(!hasDatabase)('migrating the database', () => {
     await expect(migrateDatabase('postgres://nobody:nothing@127.0.0.1:1/none', { migrationsFolder })).rejects.toThrow()
   })
 
+  it('does not crash when the database is dropped the moment it is done', async () => {
+    // pool.end() can return before the connections have closed; a forced drop then reaches the closing ones.
+    // Vitest fails the run on an uncaught error, so this test passes only if there is none.
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const url = await emptyDatabase()
+      await migrateDatabase(url, { migrationsFolder })
+      const name = new URL(url).pathname.slice(1)
+      await admin.query(`drop database ${name} with (force)`)
+    }
+    await new Promise((resolve) => setTimeout(resolve, 300))
+  })
+
   it('does not leave its lock behind: the next run is not blocked', async () => {
     const url = await emptyDatabase()
     await migrateDatabase(url, { migrationsFolder })

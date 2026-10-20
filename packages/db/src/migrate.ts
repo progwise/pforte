@@ -21,6 +21,9 @@ const appliedCount = async (pool: Pool) => {
  */
 export const migrateDatabase = async (connectionString: string, { migrationsFolder }: { migrationsFolder: string }) => {
   const pool = new Pool({ connectionString, max: 2, connectionTimeoutMillis: 5000 })
+  // A connection that closes while it is idle, or while the pool is shutting down, must not crash the process. A query that
+  // is running when its connection fails still rejects, so a real failure is not hidden.
+  pool.on('error', () => {})
   const lock = await pool.connect().catch(async (error: Error) => {
     await pool.end()
     throw error
