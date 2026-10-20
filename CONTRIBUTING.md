@@ -140,6 +140,9 @@ migrates. `pforte:dev --help` lists the commands.
 `compose.dev.yaml` is for local development only. Its credentials are public; never use them
 anywhere else.
 
+Maintainers cut releases as described in [docs/releasing.md](docs/releasing.md); changes that users should know about go under
+"Unreleased" in [CHANGELOG.md](CHANGELOG.md).
+
 ## Before you push
 
 CI runs the same commands:

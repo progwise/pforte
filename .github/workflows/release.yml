@@ -1,0 +1,178 @@
+name: Release
+
+# Pushing a tag such as v0.1.0 checks the commit, builds the image, tests and scans it, publishes it for amd64 and arm64,
+# and creates the GitHub release with the notes of CHANGELOG.md. Nothing is done by hand.
+# "Run workflow" does everything except publishing, to rehearse a release.
+# Every action here is pinned to a commit: this workflow may write packages and releases.
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The version to rehearse, such as 0.1.0 (nothing is published)
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+  audit:
+    uses: ./.github/workflows/audit.yml
+
+  release:
+    needs: [checks, audit]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # the GitHub release
+      packages: write # the image
+      id-token: write # to sign the attestation
+      attestations: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Version
+        id: version
+        env:
+          EVENT: ${{ github.event_name }}
+          TAG: ${{ github.ref_name }}
+          INPUT: ${{ inputs.version }}
+        run: |
+          if [ "$EVENT" = push ]; then VERSION=${TAG#v}; PUBLISH=true; else VERSION=$INPUT; PUBLISH=false; fi
+          [[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::\"$VERSION\" is not a version such as 0.1.0 or 0.2.0-rc.1"; exit 1; }
+          {
+            echo "version=$VERSION"
+            echo "publish=$PUBLISH"
+            echo "prerelease=$([[ $VERSION == *-* ]] && echo true || echo false)"
+          } >> "$GITHUB_OUTPUT"
+
+      # Only what is on main can be released: a tag on a branch nobody reviewed is refused.
+      - name: The commit is on main
+        if: steps.version.outputs.publish == 'true'
+        run: |
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || { echo "::error::$GITHUB_SHA is not on main"; exit 1; }
+
+      # Before the long work: a release needs its notes.
+      - name: Notes from the changelog
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          PUBLISH: ${{ steps.version.outputs.publish }}
+        run: |
+          if ! node scripts/changelog.mjs notes "$VERSION" > release-notes.md; then
+            # A rehearsal happens before the entry of the version exists: it takes "Unreleased".
+            [ "$PUBLISH" = false ] || exit 1
+            node scripts/changelog.mjs notes Unreleased > release-notes.md
+          fi
+
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # What is tested is built from the same layers as what is published (the cache), and is the amd64 image.
+      - name: Build the image for the tests
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          platforms: linux/amd64
+          tags: pforte:release
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            REVISION=${{ github.sha }}
+          cache-from: type=gha,scope=release
+          cache-to: type=gha,scope=release,mode=max
+      - name: Smoke test of the image
+        run: scripts/smoke-test-image.sh pforte:release "${{ steps.version.outputs.version }}"
+      - name: Smoke test of the production example
+        run: scripts/smoke-test-compose.sh pforte:release
+      - name: Scan for known vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: pforte:release
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          trivyignores: .trivyignore
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        if: steps.version.outputs.publish == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Names and labels of the image
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}},value=v${{ steps.version.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=v${{ steps.version.outputs.version }}
+            type=semver,pattern={{major}},value=v${{ steps.version.outputs.version }}
+      # A rehearsal builds both platforms too, and discards the result.
+      - name: Build both platforms, and publish them
+        id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ steps.version.outputs.publish == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            REVISION=${{ github.sha }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=release
+
+      # What was pushed is what is tested again, by its digest.
+      - name: The published image works
+        if: steps.version.outputs.publish == 'true'
+        env:
+          REFERENCE: ${{ env.IMAGE }}@${{ steps.push.outputs.digest }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          docker pull "$REFERENCE"
+          scripts/smoke-test-image.sh "$REFERENCE" "$VERSION"
+          [ "$(docker run --rm --platform linux/arm64 "$REFERENCE" --version)" = "$VERSION" ]
+      - name: Attestation of where the image comes from
+        if: steps.version.outputs.publish == 'true'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+      - name: GitHub release
+        if: steps.version.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        run: |
+          {
+            echo
+            echo '## Image'
+            echo
+            echo '```sh'
+            echo "docker pull $IMAGE:$VERSION"
+            echo "gh attestation verify oci://$IMAGE:$VERSION --owner ${GITHUB_REPOSITORY_OWNER}"
+            echo '```'
+          } >> release-notes.md
+          flags=(--verify-tag --title "pforte $VERSION" --notes-file release-notes.md)
+          if [ "$PRERELEASE" = true ]; then flags+=(--prerelease --latest=false); fi
+          gh release create "v$VERSION" "${flags[@]}"
