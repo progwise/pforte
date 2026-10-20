@@ -45,7 +45,8 @@ const detectDelimiter = (text: string): ',' | ';' => {
   return semicolons > commas ? ';' : ','
 }
 
-const newlinesIn = (text: string) => text.split('\n').length - 1
+/** Line breaks of any kind. For a file with Windows line ends the parser's `raw` keeps only the `\r` of each `\r\n`. */
+const newlinesIn = (text: string) => text.match(/\r\n|\r|\n/g)?.length ?? 0
 
 /**
  * Reads a CSV file: UTF-8 (with or without BOM) or, on request, Windows-1252, separated by commas or
@@ -80,7 +81,7 @@ export const readCsv = (bytes: Uint8Array, { encoding = 'utf-8' }: { encoding?: 
   // after quoted line breaks, which the parser's own line counter gets wrong.
   let consumed = 0
   const located = records.map((entry) => {
-    const leading = newlinesIn(/^(?:\r?\n)*/.exec(entry.raw)?.[0] ?? '')
+    const leading = newlinesIn(/^(?:\r\n|\r|\n)*/.exec(entry.raw)?.[0] ?? '')
     const line = 1 + consumed + leading
     consumed += newlinesIn(entry.raw)
     return { line, fields: entry.record }

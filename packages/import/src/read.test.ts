@@ -50,6 +50,13 @@ describe('reading a CSV file', () => {
     expect(file.rows).toHaveLength(1)
   })
 
+  it('reports the same lines for a file with Windows line ends, as Excel writes them', () => {
+    const file = readCsv(bytes('email,first_name,last_name\r\na@example.com,"Multi\r\nline",X\r\n\r\nb@example.com,B,Y\r\nc@example.com,C,Z\r\n'))
+
+    expect(file.rows.map((row) => row.line)).toEqual([2, 5, 6])
+    expect(file.rows[0]!.fields[1]).toBe('Multi\r\nline')
+  })
+
   it('keeps a row with the wrong number of cells, to be rejected with its line', () => {
     const file = readCsv(bytes('email,first_name,last_name\na@example.com,A\nb@example.com,B,C,D\n'))
 
