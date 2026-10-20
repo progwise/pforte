@@ -261,7 +261,6 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
       const wrong = code === '000000' ? '000001' : '000000'
       for (let attempt = 0; attempt < 5; attempt++) expect((await submitReset(user.email, wrong)).statusCode).toBe(401)
       expect((await submitReset(user.email, code)).statusCode).toBe(401)
-      expect((await row(user.email)).failed_login_attempts).toBe(0)
     })
 
     it('does not use up an attempt when the new password is not acceptable', async () => {

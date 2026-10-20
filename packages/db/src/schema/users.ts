@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { boolean, check, integer, pgEnum, pgTable, text } from 'drizzle-orm/pg-core'
+import { boolean, check, pgEnum, pgTable, text } from 'drizzle-orm/pg-core'
 import { id, timestamps, timestamptz } from './columns.js'
 
 export const userStatus = pgEnum('user_status', ['created', 'active', 'locked', 'deactivated'])
@@ -22,7 +22,6 @@ export const users = pgTable(
     language: text().notNull().default('en'),
     status: userStatus().notNull().default('created'),
     isAdmin: boolean().notNull().default(false),
-    failedLoginAttempts: integer().notNull().default(0),
     lockedAt: timestamptz(),
     lastLoginAt: timestamptz(),
     /** Hash of the activation token; the token itself is only sent by e-mail. */

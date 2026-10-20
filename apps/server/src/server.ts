@@ -1,10 +1,12 @@
 import { createDb, deleteExpiredOidcPayloads, getDatabaseTime } from '@progwise/pforte-db'
+import { deleteOldLoginEvents } from '@progwise/pforte-db/admin'
 import { deleteOldCodes } from '@progwise/pforte-db/codes'
 import { deleteOldDevices } from '@progwise/pforte-db/devices'
 import { deleteOldRateLimits } from '@progwise/pforte-db/rate-limits'
 import { buildApp } from './app.js'
 import { createAuthenticate } from './auth/authenticate.js'
 import { deriveCodeSecrets } from './auth/code-secrets.js'
+import { createLoginAudit } from './auth/login-audit.js'
 import { createRateLimiter } from './auth/rate-limiter.js'
 import { createPasswordResetSender } from './auth/password-reset.js'
 import { loadConfig } from './config.js'
@@ -54,6 +56,11 @@ const notifier = config.mail
       smsAvailable: Boolean(config.sms),
     })
 const limiter = createRateLimiter({ db, secret: deriveCodeSecrets(config.cookieKeys)[0]! })
+const audit = createLoginAudit({
+  db,
+  secret: deriveCodeSecrets(config.cookieKeys)[0]!,
+  onError: (error) => app.log.error(error, 'a sign-in event could not be written to the audit log'),
+})
 const sendPasswordResetCode = createPasswordResetSender({
   db,
   notifier,
@@ -64,7 +71,7 @@ const app = buildApp({
   ui,
   trustProxy: config.trustProxy,
   getDatabaseTime: () => getDatabaseTime(db),
-  oidc: { provider, authenticate, db, notifier, cookieKeys: config.cookieKeys, ui, limiter },
+  oidc: { provider, authenticate, db, notifier, cookieKeys: config.cookieKeys, ui, limiter, audit },
   account: {
     db,
     sendPasswordResetCode,
@@ -74,6 +81,7 @@ const app = buildApp({
     secure: config.issuer.startsWith('https:'),
     ui,
     limiter,
+    audit,
   },
   admin: {
     db,
@@ -89,6 +97,9 @@ for (const warning of warnings) app.log.warn(warning)
 const cleanup = setInterval(() => {
   deleteExpiredOidcPayloads(db).catch((error) => app.log.error(error, 'cleanup of expired OIDC payloads failed'))
   deleteOldCodes(db).catch((error) => app.log.error(error, 'cleanup of old one-time codes failed'))
+  if (config.loginAuditRetentionDays > 0) {
+    deleteOldLoginEvents(db, config.loginAuditRetentionDays).catch((error) => app.log.error(error, 'cleanup of old sign-in events failed'))
+  }
   deleteOldRateLimits(db).catch((error) => app.log.error(error, 'cleanup of old rate limit counters failed'))
   deleteOldDevices(db).catch((error) => app.log.error(error, 'cleanup of old devices failed'))
 }, CLEANUP_INTERVAL_MS)

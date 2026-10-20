@@ -21,13 +21,15 @@ export const ACTIVATION_VALIDITY_MS = 7 * 24 * 60 * 60 * 1000
  *
  *  created ──activate (sends the link; the user sets a password)──▶ active
  *  created / active ──lock──▶ locked ──unlock──▶ active (created if no password yet)
+ * `unlock` also works for an active user, who is not locked: it changes nothing but lets them sign in again
+ * after too many mistakes (the caller forgets the failed attempts).
  *  created / active / locked ──deactivate──▶ deactivated ──activate──▶ active (created if no password yet)
  *
  * `reset-password` and `end-sessions` need an active user and change no state.
  */
 const ALLOWED: Record<LifecycleAction, Status[]> = {
   lock: ['created', 'active'],
-  unlock: ['locked'],
+  unlock: ['locked', 'active'],
   activate: ['created', 'deactivated'],
   deactivate: ['created', 'active', 'locked'],
   'reset-password': ['active'],
@@ -78,8 +80,12 @@ export const lockUser = async (tx: DatabaseOrTransaction, context: RequestContex
 
 export const unlockUser = async (tx: DatabaseOrTransaction, context: RequestContext, user: UserRow) => {
   assertAllowed(user, 'unlock')
+  if (user.status === 'active') {
+    await recordAuditEvent(tx, audit(context, 'user.unlock', user, { from: 'active', to: 'active' }))
+    return user
+  }
   const to = restoredStatus(user)
-  const updated = await setStatus(tx, user, { status: to, lockedAt: null, failedLoginAttempts: 0 })
+  const updated = await setStatus(tx, user, { status: to, lockedAt: null })
   await recordAuditEvent(tx, audit(context, 'user.unlock', user, { from: 'locked', to }))
   return updated
 }

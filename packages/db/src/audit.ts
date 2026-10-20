@@ -1,3 +1,4 @@
+import { and, like, lt } from 'drizzle-orm'
 import type { Database } from './index.js'
 import { auditEvents } from './schema/index.js'
 
@@ -31,4 +32,18 @@ export const recordAuditEvent = async (db: DatabaseOrTransaction, event: AuditEv
     ip: event.ip,
     userAgent: event.userAgent,
   })
+}
+
+/**
+ * Deletes sign-in events (`login.*`) older than the given number of days; administrative events stay. Sign-in
+ * events pile up (every attempt writes one) and say little after a while, unlike who changed what.
+ * Returns how many went.
+ */
+export const deleteOldLoginEvents = async (db: DatabaseOrTransaction, days: number, now = new Date()) => {
+  const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000)
+  const deleted = await db
+    .delete(auditEvents)
+    .where(and(like(auditEvents.action, 'login.%'), lt(auditEvents.createdAt, cutoff)))
+    .returning({ id: auditEvents.id })
+  return deleted.length
 }

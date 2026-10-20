@@ -39,6 +39,8 @@ export interface Config {
   mail?: { smtpUrl: string; from: string }
   /** How to send SMS. Without it, codes go by e-mail only. */
   sms?: HttpSmsSettings
+  /** Sign-in events (`login.*`) older than this many days are deleted; 0 keeps them. Administrative events are always kept. */
+  loginAuditRetentionDays: number
 }
 
 type Env = Record<string, string | undefined>
@@ -204,6 +206,15 @@ const parseTrustProxy = (value: string | undefined) => {
   return hops
 }
 
+const parseRetention = (value: string | undefined) => {
+  if (value === undefined || value.trim() === '') return 180
+  const days = Number(value)
+  if (!Number.isInteger(days) || days < 0 || days > 3650) {
+    throw new Error('AUDIT_LOGIN_RETENTION_DAYS must be a number of days from 1 to 3650, or 0 to keep sign-in events for ever')
+  }
+  return days
+}
+
 export const loadConfig = (env: Env = process.env): Config => ({
   port: Number(env.PORT ?? 3300),
   databaseUrl: requireSecret(env, 'DATABASE_URL'),
@@ -216,6 +227,7 @@ export const loadConfig = (env: Env = process.env): Config => ({
   defaultLanguage: env.DEFAULT_LANGUAGE?.trim().toLowerCase() || 'en',
   rememberDeviceDefault: env.REMEMBER_DEVICE_DEFAULT === 'true',
   trustProxy: parseTrustProxy(env.TRUST_PROXY),
+  loginAuditRetentionDays: parseRetention(env.AUDIT_LOGIN_RETENTION_DAYS),
   mail: parseMail(env),
   sms: parseSms(env),
 })

@@ -43,7 +43,6 @@ export const completeActivation = (
         activationTokenHash: null,
         activationExpiresAt: null,
         emailVerifiedAt: sql`coalesce(${users.emailVerifiedAt}, ${now.toISOString()}::timestamptz)`,
-        failedLoginAttempts: 0,
       })
       .where(
         and(
@@ -74,7 +73,7 @@ export const completePasswordReset = (db: Database, { userId, passwordHash, ip, 
   db.transaction(async (tx) => {
     const [user] = await tx
       .update(users)
-      .set({ passwordHash, failedLoginAttempts: 0 })
+      .set({ passwordHash })
       .where(and(eq(users.id, userId), eq(users.status, 'active')))
       .returning()
     if (!user) return false

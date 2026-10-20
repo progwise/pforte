@@ -1,5 +1,5 @@
-import { createHmac } from 'node:crypto'
 import type { Database } from '@progwise/pforte-db'
+import { hashAddress } from './address-hash.js'
 import { blockedFor, clear, clearPrefix, consume, count, type Rule } from '@progwise/pforte-db/rate-limits'
 
 const FIFTEEN_MINUTES = 15 * 60
@@ -71,7 +71,7 @@ export interface RateLimiterOptions {
 }
 
 export const createRateLimiter = ({ db, secret, now = () => new Date() }: RateLimiterOptions): RateLimiter => {
-  const address = (email: string) => createHmac('sha256', secret).update(`rate-limit:${email.trim().toLowerCase()}`).digest('hex').slice(0, 24)
+  const address = (email: string) => hashAddress(secret, 'rate-limit', email)
   const rule = (key: string, limit: { max: number; windowSeconds: number }): Rule => ({ key, ...limit })
 
   const passwordRules = (email: string, ip: string | undefined) => {

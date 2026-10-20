@@ -8,7 +8,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { ACR_PASSWORD, ACR_SECOND_FACTOR, secondFactorAssurance } from '../auth/assurance.js'
 import { channelFor, maskEmail, maskPhone } from '../auth/channels.js'
 import { deriveCodeSecrets } from '../auth/code-secrets.js'
-import type { Authenticate } from '../auth/authenticate.js'
+import type { Authenticate, AuthResult } from '../auth/authenticate.js'
+import type { LoginAudit, Origin } from '../auth/login-audit.js'
 import type { RateLimiter } from '../auth/rate-limiter.js'
 import { type Channel, type Notifier, NotifierUnavailableError } from '../notifications/notifier.js'
 import { applyIssuerHeaders } from '../oidc/issuer-headers.js'
@@ -30,6 +31,8 @@ export interface InteractionDependencies {
   ui: Ui
   /** Says when somebody has tried too often. */
   limiter: RateLimiter
+  /** Tells the audit log what happened to attempts to sign in. */
+  audit: LoginAudit
 }
 
 const STEP_COOKIE = 'pforte_second_factor'
@@ -49,10 +52,11 @@ interface Step {
 
 /** The login pages the provider redirects to ("interactions"). */
 export const interactionRoutes =
-  ({ provider, authenticate, db, notifier, cookieKeys, ui, limiter }: InteractionDependencies) =>
+  ({ provider, authenticate, db, notifier, cookieKeys, ui, limiter, audit }: InteractionDependencies) =>
   async (app: FastifyInstance) => {
     await app.register(formbody)
 
+    const originOf = (request: FastifyRequest): Origin => ({ ip: request.ip, userAgent: request.headers['user-agent'] })
     const secure = provider.issuer.startsWith('https:')
     const codeSecrets = deriveCodeSecrets(cookieKeys)
     const cookiePath = (uid: string) => `/interaction/${encodeURIComponent(uid)}`
@@ -142,13 +146,19 @@ export const interactionRoutes =
 
         // Before the password is looked at, so a blocked address learns nothing from a right or wrong guess.
         const wait = await limiter.passwordBlockedFor(address, request.ip)
-        if (wait > 0) return tooManyRequests(reply, view, wait)
+        if (wait > 0) {
+          await audit.blocked(originOf(request), { scope: 'password', email: address })
+          return tooManyRequests(reply, view, wait)
+        }
 
-        const result =
-          typeof email === 'string' && typeof password === 'string' ? await authenticate(email, password) : undefined
+        const result: AuthResult =
+          typeof email === 'string' && typeof password === 'string'
+            ? await authenticate(email, password)
+            : { ok: false, reason: 'wrong_password' }
 
-        if (!result) {
+        if (!result.ok) {
           await limiter.passwordFailed(address, request.ip)
+          await audit.passwordFailed(originOf(request), { email: address, reason: result.reason, userId: result.userId })
           const client = await provider.current().Client.find(String(details.params.client_id))
           return reply
             .code(401)
@@ -259,13 +269,16 @@ export const interactionRoutes =
       const requested = typeof acrValues === 'string' ? acrValues.split(' ') : []
       if (!requested.includes(ACR_SECOND_FACTOR) && (await isRemembered(request, user.id))) {
         await recordLogin(db, user.id)
+        await audit.succeeded(originOf(request), { userId: user.id, method: 'remembered_device', acr: ACR_PASSWORD })
         return finishLogin(request, reply, user.id, { acr: ACR_PASSWORD, amr: ['pwd'] })
       }
 
       // The first code needs no limit per IP: it only goes out after the right password, and per user
       // a code can be sent once a minute. Only asking again is counted (see the resend route).
       try {
-        await sendCode(user, channelFor(user, notifier))
+        const wanted = channelFor(user, notifier)
+        const used = await sendCode(user, wanted)
+        await audit.codeSent(originOf(request), { userId: user.id, purpose: 'login', channel: used, fellBack: used !== wanted })
       } catch (error) {
         if (error instanceof NotifierUnavailableError) return cannotSend(reply, view, error)
         if (!(error instanceof CodeLimitError)) throw error
@@ -297,7 +310,10 @@ export const interactionRoutes =
       const { user } = current
 
       const wait = await limiter.codeBlockedFor(request.ip)
-      if (wait > 0) return tooManyRequests(reply, ui.pages.for(current.step.language), wait)
+      if (wait > 0) {
+        await audit.blocked(originOf(request), { scope: 'code' })
+        return tooManyRequests(reply, ui.pages.for(current.step.language), wait)
+      }
 
       const code = typeof request.body?.code === 'string' ? request.body.code.replaceAll(' ', '') : ''
       const result = /^\d{6}$/.test(code)
@@ -306,12 +322,14 @@ export const interactionRoutes =
 
       if (!result.ok) {
         if (result.reason === 'wrong' || result.reason === 'exhausted') await limiter.codeFailed(request.ip)
+        await audit.codeFailed(originOf(request), { userId: user.id, purpose: 'login', reason: result.reason })
         const error = ui.pages.for(current.step.language).t(`code.${result.reason}`)
         return reply.code(401).type('text/html').send(await codePageFor(user, details.uid, current.step.language, { error }))
       }
 
       if (result.channel === 'email') await markEmailVerified(db, user.id)
       await recordLogin(db, user.id)
+      await audit.succeeded(originOf(request), { userId: user.id, method: 'code', channel: result.channel, acr: secondFactorAssurance(result.channel).acr })
 
       const cookies = [setCookieHeader(STEP_COOKIE, '', { path: cookiePath(details.uid), maxAgeSeconds: 0, secure })]
       if (request.body?.remember === 'on') {
@@ -331,12 +349,16 @@ export const interactionRoutes =
       if (!current) return reply.redirect(cookiePath(details.uid), 303)
 
       const sendWait = await limiter.codeResend(request.ip)
-      if (sendWait > 0) return tooManyRequests(reply, ui.pages.for(current.step.language), sendWait)
+      if (sendWait > 0) {
+        await audit.blocked(originOf(request), { scope: 'code_resend' })
+        return tooManyRequests(reply, ui.pages.for(current.step.language), sendWait)
+      }
 
       // "Send it by e-mail instead" asks for the e-mail even where an SMS would be the usual way.
       const wanted = request.body?.channel === 'email' ? 'email' : channelFor(current.user, notifier)
       try {
-        await sendCode(current.user, wanted)
+        const used = await sendCode(current.user, wanted)
+        await audit.codeSent(originOf(request), { userId: current.user.id, purpose: 'login', channel: used, fellBack: used !== wanted })
       } catch (error) {
         const view = ui.pages.for(current.step.language)
         if (error instanceof NotifierUnavailableError) return cannotSend(reply, view, error)

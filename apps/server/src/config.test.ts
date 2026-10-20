@@ -187,3 +187,19 @@ describe('TRUST_PROXY', () => {
     expect(() => loadConfig({ ...validEnv, TRUST_PROXY: value })).toThrow(/TRUST_PROXY must be the number of proxies/)
   })
 })
+
+describe('AUDIT_LOGIN_RETENTION_DAYS', () => {
+  it('is 180 days unless set', () => {
+    expect(loadConfig(validEnv).loginAuditRetentionDays).toBe(180)
+    expect(loadConfig({ ...validEnv, AUDIT_LOGIN_RETENTION_DAYS: ' ' }).loginAuditRetentionDays).toBe(180)
+  })
+
+  it('can be changed, and 0 keeps sign-in events for ever', () => {
+    expect(loadConfig({ ...validEnv, AUDIT_LOGIN_RETENTION_DAYS: '90' }).loginAuditRetentionDays).toBe(90)
+    expect(loadConfig({ ...validEnv, AUDIT_LOGIN_RETENTION_DAYS: '0' }).loginAuditRetentionDays).toBe(0)
+  })
+
+  it.each(['forever', '-5', '1.5', '4000'])('refuses %s', (value) => {
+    expect(() => loadConfig({ ...validEnv, AUDIT_LOGIN_RETENTION_DAYS: value })).toThrow(/AUDIT_LOGIN_RETENTION_DAYS must be/)
+  })
+})

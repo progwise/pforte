@@ -236,7 +236,6 @@ describe.skipIf(!hasDatabase)('admin API: user lifecycle', () => {
 
   describe('requests', () => {
     it.each([
-      ['unlock', 'active', /unlock a user who is active/],
       ['lock', 'locked', /lock a user who is locked/],
       ['activate', 'active', /activate a user who is active/],
     ])('refuses %s for a user who is %s, with the reason', async (action, _status, reason) => {

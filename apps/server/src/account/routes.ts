@@ -7,6 +7,7 @@ import { completeActivation, completePasswordReset, findPendingActivation } from
 import { findUserByEmail } from '@progwise/pforte-db/users'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { maskPhone } from '../auth/channels.js'
+import type { LoginAudit } from '../auth/login-audit.js'
 import type { RateLimiter } from '../auth/rate-limiter.js'
 import { checkPassword } from '../auth/password-policy.js'
 import type { SendPasswordResetCode } from '../auth/password-reset.js'
@@ -32,6 +33,8 @@ export interface AccountDependencies {
   ui: Ui
   /** Says when somebody has tried too often. */
   limiter: RateLimiter
+  /** Tells the audit log what happened. */
+  audit: LoginAudit
 }
 
 const PHONE_COOKIE = 'pforte_phone_step'
@@ -46,7 +49,7 @@ const normalizeEmail = (value: unknown) => text(value).trim().toLowerCase()
 
 /** Pages that are not part of a sign-in: choosing the first password, and choosing a new one after forgetting it. */
 export const accountRoutes =
-  ({ db, sendPasswordResetCode, codeSecrets, notifier, cookieKeys, secure, ui, limiter }: AccountDependencies) =>
+  ({ db, sendPasswordResetCode, codeSecrets, notifier, cookieKeys, secure, ui, limiter, audit }: AccountDependencies) =>
   async (app: FastifyInstance) => {
     await app.register(formbody)
     ui.pages.addHeaders(app)
@@ -79,7 +82,10 @@ export const accountRoutes =
     app.get<{ Querystring: { token?: string; lang?: string } }>('/activate', async (request, reply) => {
       const token = text(request.query.token)
       const wait = await limiter.activationBlockedFor(request.ip)
-      if (wait > 0) return tooManyRequests(reply, ui.pages.for(languageOf(request, request.query.lang)), wait)
+      if (wait > 0) {
+        await audit.blocked(origin(request), { scope: 'activation' })
+        return tooManyRequests(reply, ui.pages.for(languageOf(request, request.query.lang)), wait)
+      }
 
       const user = token ? await findPendingActivation(db, token) : undefined
       const view = ui.pages.for(languageOf(request, request.query.lang, user?.language))
@@ -93,7 +99,10 @@ export const accountRoutes =
     app.post<{ Body: Record<string, unknown> }>('/activate', async (request, reply) => {
       const token = text(request.body?.token)
       const wait = await limiter.activationBlockedFor(request.ip)
-      if (wait > 0) return tooManyRequests(reply, ui.pages.for(languageOf(request, request.body?.lang)), wait)
+      if (wait > 0) {
+        await audit.blocked(origin(request), { scope: 'activation' })
+        return tooManyRequests(reply, ui.pages.for(languageOf(request, request.body?.lang)), wait)
+      }
 
       const pending = token ? await findPendingActivation(db, token) : undefined
       const view = ui.pages.for(languageOf(request, request.body?.lang, pending?.language))
@@ -153,12 +162,16 @@ export const accountRoutes =
       if (!user) return html(reply, 200, activeAccount(view))
 
       const wait = await limiter.codeBlockedFor(request.ip)
-      if (wait > 0) return tooManyRequests(reply, view, wait)
+      if (wait > 0) {
+        await audit.blocked(origin(request), { scope: 'phone_code' })
+        return tooManyRequests(reply, view, wait)
+      }
 
       const code = text(request.body?.code).replaceAll(' ', '')
       const result = /^\d{6}$/.test(code) ? await checkCode(db, { userId: user.id, purpose: 'activation', code }, { secrets: codeSecrets }) : undefined
       if (!result?.ok) {
         await limiter.codeFailed(request.ip)
+        await audit.codeFailed(origin(request), { userId: user.id, purpose: 'activation', reason: result?.reason ?? 'malformed' })
         return html(reply, 401, view.phoneConfirm({ sentTo: maskPhone(user.phone!), error: view.t('code.badOrExpired') }))
       }
       await markPhoneVerified(db, user.id)
@@ -171,7 +184,10 @@ export const accountRoutes =
       if (!user) return html(reply, 200, activeAccount(view))
 
       const sendWait = await limiter.codeResend(request.ip)
-      if (sendWait > 0) return tooManyRequests(reply, view, sendWait)
+      if (sendWait > 0) {
+        await audit.blocked(origin(request), { scope: 'code_resend' })
+        return tooManyRequests(reply, view, sendWait)
+      }
 
       try {
         await sendPhoneCode(user)
@@ -204,14 +220,19 @@ export const accountRoutes =
 
       // Every address is counted, existing or not, so being over the limit says nothing about an account.
       const wait = await limiter.resetRequest(email, request.ip)
-      if (wait > 0) return tooManyRequests(reply, view, wait)
+      if (wait > 0) {
+        await audit.blocked(origin(request), { scope: 'reset', email })
+        return tooManyRequests(reply, view, wait)
+      }
 
       // The answer is the same whether or not the address belongs to someone, so the page cannot be
       // used to find out who has an account.
       const user = await findUserByEmail(db, email)
       if (user?.status === 'active' && user.passwordHash) {
         try {
-          await sendPasswordResetCode(user)
+          const channel = await sendPasswordResetCode(user)
+          await audit.resetRequested(origin(request), { userId: user.id })
+          await audit.codeSent(origin(request), { userId: user.id, purpose: 'password_reset', channel })
         } catch (error) {
           if (error instanceof NotifierUnavailableError) request.log.error(error, 'the password reset code could not be sent')
           else if (!(error instanceof CodeLimitError)) throw error
@@ -232,22 +253,28 @@ export const accountRoutes =
       if (problem) return html(reply, 422, view.resetCode({ email, error: problem }))
 
       const wait = await limiter.codeBlockedFor(request.ip)
-      if (wait > 0) return tooManyRequests(reply, view, wait)
+      if (wait > 0) {
+        await audit.blocked(origin(request), { scope: 'reset_code', email })
+        return tooManyRequests(reply, view, wait)
+      }
 
       const code = text(request.body?.code).replaceAll(' ', '')
       const user = await findUserByEmail(db, email)
       // One answer for every way this can fail, so it reveals nothing about the account; all of them count.
-      const refused = async () => {
+      const refused = async (reason: string) => {
         await limiter.codeFailed(request.ip)
+        await audit.codeFailed(origin(request), { userId: user?.id, email, purpose: 'password_reset', reason })
         return html(reply, 401, view.resetCode({ email, error: view.t('code.badOrExpired') }))
       }
-      if (!user || user.status !== 'active' || !user.passwordHash || !/^\d{6}$/.test(code)) return refused()
+      if (!user) return refused('unknown_user')
+      if (user.status !== 'active' || !user.passwordHash) return refused('not_allowed')
+      if (!/^\d{6}$/.test(code)) return refused('malformed')
 
       const result = await checkCode(db, { userId: user.id, purpose: 'password_reset', code }, { secrets: codeSecrets })
-      if (!result.ok) return refused()
+      if (!result.ok) return refused(result.reason)
 
       const changed = await completePasswordReset(db, { userId: user.id, passwordHash: await hash(text(request.body?.password)), ...origin(request) })
-      if (!changed) return refused()
+      if (!changed) return refused('not_allowed')
       if (result.channel === 'email') await markEmailVerified(db, user.id)
       return html(reply, 200, view.notice(view.t('reset.doneTitle'), view.t('reset.done')))
     })

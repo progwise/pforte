@@ -63,7 +63,7 @@ describe.skipIf(!hasDatabase)('user lifecycle', () => {
   describe('transitions', () => {
     const allowed: Record<LifecycleAction, readonly string[]> = {
       lock: ['created', 'active'],
-      unlock: ['locked'],
+      unlock: ['locked', 'active'],
       activate: ['created', 'deactivated'],
       deactivate: ['created', 'active', 'locked'],
       'reset-password': ['active'],
@@ -84,9 +84,20 @@ describe.skipIf(!hasDatabase)('user lifecycle', () => {
     })
 
     it('names the states in which the action is possible', async () => {
-      const user = await userIn('active')
+      const user = await userIn('deactivated')
 
-      await expect(run('unlock', user)).rejects.toThrow(/unlock a user who is active.*locked/)
+      await expect(run('unlock', user)).rejects.toThrow(/unlock a user who is deactivated.*locked, active/)
+    })
+  })
+
+  describe('unlocking an active user', () => {
+    it('changes nothing but is recorded, so an administrator can let someone in after too many mistakes', async () => {
+      const user = await userIn('active')
+      const unlocked = await run('unlock', user)
+
+      expect(unlocked).toMatchObject({ id: user.id, status: 'active' })
+      const { rows } = await database.pool.query(`select details from audit_events where action = 'user.unlock' and target_id = $1`, [user.id])
+      expect(rows[0].details).toMatchObject({ from: 'active', to: 'active' })
     })
   })
 
@@ -123,13 +134,13 @@ describe.skipIf(!hasDatabase)('user lifecycle', () => {
     it('unlock returns a user with a password to active, and one without to created', async () => {
       const withPassword = await userIn('locked', { password: true })
       const withoutPassword = await userIn('locked', { password: false })
-      await database.pool.query(`update users set failed_login_attempts = 5, locked_at = now() where id = any($1)`, [[withPassword.id, withoutPassword.id]])
+      await database.pool.query(`update users set locked_at = now() where id = any($1)`, [[withPassword.id, withoutPassword.id]])
 
       const a = (await run('unlock', (await findUserById(database.db, withPassword.id))!)) as Awaited<ReturnType<typeof userIn>>
       const b = (await run('unlock', (await findUserById(database.db, withoutPassword.id))!)) as Awaited<ReturnType<typeof userIn>>
 
-      expect(a).toMatchObject({ status: 'active', failedLoginAttempts: 0, lockedAt: null })
-      expect(b).toMatchObject({ status: 'created', failedLoginAttempts: 0, lockedAt: null })
+      expect(a).toMatchObject({ status: 'active', lockedAt: null })
+      expect(b).toMatchObject({ status: 'created', lockedAt: null })
     })
   })
 

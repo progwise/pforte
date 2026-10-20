@@ -113,7 +113,7 @@ export const adminRoutes =
     await app.register(usersRoutes({ db, auth }))
     await app.register(claimsRoutes({ db, auth }))
     await app.register(devicesRoutes({ db, auth }))
-    await app.register(lifecycleRoutes({ db, auth, notifier, sendPasswordResetCode, issuer: provider.issuer }))
+    await app.register(lifecycleRoutes({ db, auth, notifier, sendPasswordResetCode, limiter, issuer: provider.issuer }))
     await app.register(claimTypesRoutes({ db, auth, reloadProvider }))
     await app.register(clientsRoutes({ db, auth, reloadProvider }))
     await app.register(auditRoutes({ db, auth }))

@@ -14,6 +14,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 import { CodeLimitError } from '@progwise/pforte-db/codes'
 import type { SendPasswordResetCode } from '../auth/password-reset.js'
+import type { RateLimiter } from '../auth/rate-limiter.js'
 import { type Notifier, NotifierUnavailableError } from '../notifications/notifier.js'
 import type { AdminAuth } from './auth.js'
 import { problem, problemSchema } from './problem.js'
@@ -35,13 +36,15 @@ export interface LifecycleDependencies {
   notifier: Notifier
   /** Sends the code for choosing a new password. */
   sendPasswordResetCode: SendPasswordResetCode
+  /** Forgets the failed sign-in attempts of a user who is unlocked. */
+  limiter: RateLimiter
   /** The public address of pforte, used to build the activation link. */
   issuer: string
 }
 
 /** Lock, unlock, activate, deactivate, reset the password and end the sessions of a user. */
 export const lifecycleRoutes =
-  ({ db, auth, notifier, sendPasswordResetCode, issuer }: LifecycleDependencies) =>
+  ({ db, auth, notifier, sendPasswordResetCode, limiter, issuer }: LifecycleDependencies) =>
   async (instance: FastifyInstance) => {
     const app = instance.withTypeProvider<ZodTypeProvider>()
     const onRequest = auth.require('directory', 'admin')
@@ -92,7 +95,10 @@ export const lifecycleRoutes =
         schema: {
           tags: ['Lifecycle'],
           summary: 'Unlock a user',
-          description: 'For a locked user. They become active again, or created if they never set a password.',
+          description:
+            'For a locked user: they become active again, or created if they never set a password. For an active user, who is not ' +
+            'locked, nothing changes except that the failed sign-in attempts held against their address are forgotten, so they can ' +
+            'try again at once after too many mistakes.',
           params,
           response: { 200: userSchema, ...ERROR_RESPONSES },
         },
@@ -103,7 +109,9 @@ export const lifecycleRoutes =
             const found = await findUserById(tx, request.params.id)
             return found ? unlockUser(tx, requestContext(request), found) : undefined
           })
-          return user ? toUserDto(user) : noUser(reply)
+          if (!user) return noUser(reply)
+          await limiter.forgetAddress(user.email)
+          return toUserDto(user)
         } catch (error) {
           if (error instanceof LifecycleError) return refused(reply, error)
           throw error
