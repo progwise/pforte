@@ -29,7 +29,7 @@ export class Browser {
   async request(
     method: 'GET' | 'POST',
     url: string,
-    { form, headers, ip }: { form?: Record<string, string>; headers?: Record<string, string>; ip?: string } = {},
+    { form, headers, ip }: { form?: Record<string, string | string[]>; headers?: Record<string, string>; ip?: string } = {},
   ) {
     const target = new URL(url, 'http://localhost:3300')
     const response = await this.app.inject({
@@ -42,7 +42,7 @@ export class Browser {
         ...(form ? { 'content-type': 'application/x-www-form-urlencoded' } : {}),
         ...headers,
       },
-      payload: form ? new URLSearchParams(form).toString() : undefined,
+      payload: form ? new URLSearchParams(Object.entries(form).flatMap(([name, value]) => (Array.isArray(value) ? value : [value]).map((item) => [name, item] as [string, string]))).toString() : undefined,
       remoteAddress: ip,
     })
     this.store(response.headers['set-cookie'])

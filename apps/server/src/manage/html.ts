@@ -53,3 +53,21 @@ export const textarea = (options: { id: string; name?: string; label: string; va
 ${hint ? `<small class="muted">${escapeHtml(hint)}</small>` : ''}${error ? `<small class="field-error">${escapeHtml(error)}</small>` : ''}
 </div>`
 }
+
+/** A group of tick boxes under one name, such as the scopes of a client. */
+export const checks = (options: {
+  legend: string
+  name: string
+  hint?: string
+  error?: string
+  choices: { value: string; label: string; checked?: boolean; disabled?: boolean }[]
+}) => `<fieldset class="group">
+<legend>${escapeHtml(options.legend)}</legend>
+${options.choices
+  .map(
+    (choice) =>
+      `<label class="check"><input type="checkbox" name="${escapeHtml(options.name)}" value="${escapeHtml(choice.value)}"${choice.checked ? ' checked' : ''}${choice.disabled ? ' disabled' : ''}> ${escapeHtml(choice.label)}</label>`,
+  )
+  .join('\n')}
+${options.hint ? `<small class="muted">${escapeHtml(options.hint)}</small>` : ''}${options.error ? `<small class="field-error">${escapeHtml(options.error)}</small>` : ''}
+</fieldset>`

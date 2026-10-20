@@ -193,6 +193,7 @@ a.button, .page button { display: inline-flex; align-items: center; justify-cont
 a.button.secondary, .page button.secondary { background: transparent; color: var(--link); box-shadow: inset 0 0 0 1px var(--input-border); margin-top: 0; }
 .page button.danger { background: var(--danger); color: #fff; }
 .page form.fields { display: grid; gap: 0.25rem 1rem; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); align-items: start; }
+.page form.fields.stack { grid-template-columns: minmax(0, 40rem); }
 .page form.fields .submit { align-self: end; margin-bottom: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .page input:not([type="checkbox"]), .page select { min-height: 3rem; }
 .page small.muted { display: block; margin: -0.25rem 0 1rem; }
@@ -204,6 +205,13 @@ a.button.secondary, .page button.secondary { background: transparent; color: var
 .field-error { display: block; color: var(--danger); }
 .page label.check { align-items: center; min-height: 2.75rem; margin: 0; }
 .page label.check input, .page input[type="checkbox"] { width: 1.25rem; height: 1.25rem; margin: 0; }
+fieldset.group { margin: 0 0 1rem; padding: 0; border: 0; }
+fieldset.group legend { padding: 0; margin-bottom: 0.25rem; font-weight: 600; }
+fieldset.group label.check { min-height: 2.25rem; }
+code.secret { display: block; padding: 0.8rem; margin: 1rem 0; overflow-wrap: anywhere; font: 1rem ui-monospace, monospace; background: var(--background); border: 1px solid var(--border); border-radius: var(--radius-small); user-select: all; }
+.cards { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }
+.cards .panel { margin: 0; }
+.cards h2 { margin-top: 0; }
 dl.facts { display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 1.25rem; margin: 0; }
 dl.facts dt { color: var(--muted); }
 dl.facts dd { margin: 0; }

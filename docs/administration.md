@@ -72,6 +72,30 @@ with the other clients as built in and cannot be changed, rotated or deleted.
   revoked, and the next sign-in there asks for a code again. **Recent sign-ins** shows the last ten sign-in events: successes,
   wrong passwords and codes, codes sent, and sign-ins held back after too many attempts, with the address they came from.
 
+## Clients
+
+**Clients** (`/manage/clients`) are the applications that sign people in with pforte and the machines that call the admin API.
+
+- **New client** first asks what the client does. An **application** (a website, a mobile app, a backend) is *public* when
+  it cannot keep a secret and *confidential* when it can. It has redirect URIs, optional addresses to return to after signing
+  out, an optional back-channel logout address, the scopes it may ask for and whether it may stay signed in with refresh
+  tokens. A **machine** has no person and no redirect URIs, only the rights `admin` (everything in the API) and/or
+  `directory` (users and their claims).
+- **The secret** of a confidential client is shown once, right after creating the client or replacing the secret. pforte keeps
+  only a fingerprint and cannot show it again; if it is lost, replace it. The old secret stops working at once.
+- **Claims**: an application receives only the claim types you tick on its page.
+- **Delete** asks you to type the client ID. It also ends every sign-in and token issued to the client.
+- The client ID and the type cannot be changed after creating; the entries that can be changed come back with what you typed and
+  say what is wrong, as on the user pages.
+
+## Claim types
+
+**Claim types** (`/manage/claim-types`) list the kinds of facts about a person that can exist, such as a customer number. A claim
+type has a key (the claim name in tokens), a description, an optional format (a regular expression every value must match) and
+says whether a person can hold several values. New ones appear on the users' pages at once. Changing the format or going
+from several values to one is refused while existing values would break the rule. Deleting is refused while people hold values,
+unless you tick the box to delete those values too.
+
 Times are shown in the time zone you set with `TIME_ZONE` (default UTC), in the language of the administrator.
 
 ## For those who call the admin API

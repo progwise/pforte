@@ -70,6 +70,8 @@ export const createManageContext = (app: FastifyInstance, { issuer, cookieKeys, 
   const sections = (t: (key: MessageKey) => string, current: string) => [
     { href: MANAGE_PATH, label: t('manage.nav.home'), current: current === 'home' },
     { href: `${MANAGE_PATH}/users`, label: t('manage.nav.users'), current: current === 'users' },
+    { href: `${MANAGE_PATH}/clients`, label: t('manage.nav.clients'), current: current === 'clients' },
+    { href: `${MANAGE_PATH}/claim-types`, label: t('manage.nav.claimTypes'), current: current === 'claim-types' },
   ]
 
   /** A page of the administration for a person who is signed in, with the message the last action left. */
