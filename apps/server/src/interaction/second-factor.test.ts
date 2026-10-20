@@ -416,6 +416,20 @@ describe.skipIf(!hasDatabase)('remembered devices at sign-in', () => {
     expect((await signInOn(browser, email, { extra: { acr_values: 'urn:pforte:acr:pwd' } })).askedForCode).toBe(false)
   })
 
+  it('keeps one device per browser when the code is entered again with "remember" ticked', async () => {
+    const email = 'hans.weber@example.com'
+    const browser = new Browser(h.app)
+    await signInOn(browser, email, { remember: true })
+
+    // The stronger assurance asks for the code even on a remembered device; ticking the box again must not add a second device.
+    await signInOn(browser, email, { remember: true, extra: { acr_values: 'urn:pforte:acr:mfa' } })
+
+    expect(await h.count('devices', `user_id = '${await userId(email)}'`)).toBe(1)
+    // Another browser is another device.
+    await signInOn(new Browser(h.app), email, { remember: true })
+    expect(await h.count('devices', `user_id = '${await userId(email)}'`)).toBe(2)
+  })
+
   it('does not let a remembered device sign in a user who is locked', async () => {
     const email = 'anna.schmidt@example.com'
     const browser = new Browser(h.app)

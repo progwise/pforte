@@ -340,7 +340,8 @@ export const interactionRoutes =
       await audit.succeeded(originOf(request), { userId: user.id, method: 'code', channel: result.channel, acr: secondFactorAssurance(result.channel).acr })
 
       const cookies = [setCookieHeader(STEP_COOKIE, '', { path: cookiePath(details.uid), maxAgeSeconds: 0, secure })]
-      if (request.body?.remember === 'on') {
+      // A browser that is already remembered for this person stays one device, however often they tick the box.
+      if (request.body?.remember === 'on' && !(await findRememberedDevice(db, user.id, deviceTokens(request)))) {
         const { token } = await rememberDevice(db, { userId: user.id, userAgent: request.headers['user-agent'] })
         const tokens = [...deviceTokens(request), token].slice(-MAX_DEVICE_TOKENS)
         cookies.push(
