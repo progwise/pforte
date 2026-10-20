@@ -72,6 +72,7 @@ export const createManageContext = (app: FastifyInstance, { issuer, cookieKeys, 
     { href: `${MANAGE_PATH}/users`, label: t('manage.nav.users'), current: current === 'users' },
     { href: `${MANAGE_PATH}/clients`, label: t('manage.nav.clients'), current: current === 'clients' },
     { href: `${MANAGE_PATH}/claim-types`, label: t('manage.nav.claimTypes'), current: current === 'claim-types' },
+    { href: `${MANAGE_PATH}/audit`, label: t('manage.nav.audit'), current: current === 'audit' },
   ]
 
   /** A page of the administration for a person who is signed in, with the message the last action left. */
@@ -107,10 +108,10 @@ export const createManageContext = (app: FastifyInstance, { issuer, cookieKeys, 
     return Object.fromEntries(errors.map((error) => [error.path.replace(/^\//, '').split('/')[0] ?? '', error.message]))
   }
 
-  const formatTime = (iso: string | null | undefined, language: string) => {
+  const formatTime = (iso: string | null | undefined, language: string, { seconds = false } = {}) => {
     if (!iso) return ''
     try {
-      return new Intl.DateTimeFormat(language, { dateStyle: 'medium', timeStyle: 'short', timeZone }).format(new Date(iso))
+      return new Intl.DateTimeFormat(language, { dateStyle: 'medium', timeStyle: seconds ? 'medium' : 'short', timeZone }).format(new Date(iso))
     } catch {
       return iso
     }
@@ -121,6 +122,7 @@ export const createManageContext = (app: FastifyInstance, { issuer, cookieKeys, 
     cookieKeys,
     ui,
     organisation,
+    timeZone,
     secure,
     acceptedLanguages,
     languageOf,

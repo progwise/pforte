@@ -212,6 +212,23 @@ code.secret { display: block; padding: 0.8rem; margin: 1rem 0; overflow-wrap: an
 .cards { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }
 .cards .panel { margin: 0; }
 .cards h2 { margin-top: 0; }
+.events { background: var(--surface); border-radius: var(--radius-small); box-shadow: 0 1px 3px rgb(0 0 0 / 12%); overflow: hidden; }
+.events .cols { display: grid; grid-template-columns: 13rem 1.2fr 1.2fr 1.2fr 8rem; gap: 0.25rem 1rem; align-items: start; padding: 0.7rem 0.85rem; }
+.events .head { font: 600 0.85rem var(--font-heading); color: var(--muted); }
+.events .event { border-top: 1px solid var(--border); }
+.events summary { cursor: pointer; list-style: none; }
+.events summary::-webkit-details-marker { display: none; }
+.events summary > span:first-child::before { content: "▸"; display: inline-block; width: 1rem; color: var(--link); }
+.events details[open] > summary > span:first-child::before { content: "▾"; }
+.events .event:not(details) .cols > span:first-child { padding-left: 1rem; }
+.events summary:hover { background: var(--background); }
+.events .body { padding: 0 0.85rem 0.85rem 2.35rem; }
+.events .body pre { margin: 0; padding: 0.7rem; overflow-x: auto; font: 0.85rem/1.4 ui-monospace, monospace; background: var(--background); border-radius: var(--radius-small); }
+.events .body p { margin: 0.5rem 0 0; }
+.events small { display: block; }
+@media (max-width: 50rem) { .events .head { display: none; } .events .cols { grid-template-columns: 1fr; } }
+.nowrap { white-space: nowrap; }
+table.list small { display: block; }
 dl.facts { display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 1.25rem; margin: 0; }
 dl.facts dt { color: var(--muted); }
 dl.facts dd { margin: 0; }

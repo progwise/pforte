@@ -7,16 +7,18 @@ export const field = (options: {
   name?: string
   label: string
   value?: string | null
-  type?: 'text' | 'email' | 'tel' | 'search'
+  type?: 'text' | 'email' | 'tel' | 'search' | 'date'
+  /** The id of a `<datalist>` with suggestions. */
+  list?: string
   hint?: string
   error?: string
   required?: boolean
   maxLength?: number
 }) => {
-  const { id, name = id, label, value = '', type = 'text', hint, error, required, maxLength } = options
+  const { id, name = id, label, value = '', type = 'text', list, hint, error, required, maxLength } = options
   return `<div>
 <label for="${escapeHtml(id)}">${escapeHtml(label)}</label>
-<input id="${escapeHtml(id)}" name="${escapeHtml(name)}" type="${type}" value="${escapeHtml(value ?? '')}"${required ? ' required' : ''}${maxLength ? ` maxlength="${maxLength}"` : ''}${error ? ' aria-invalid="true"' : ''}>
+<input id="${escapeHtml(id)}" name="${escapeHtml(name)}" type="${type}" value="${escapeHtml(value ?? '')}"${list ? ` list="${escapeHtml(list)}"` : ''}${required ? ' required' : ''}${maxLength ? ` maxlength="${maxLength}"` : ''}${error ? ' aria-invalid="true"' : ''}>
 ${hint ? `<small class="muted">${escapeHtml(hint)}</small>` : ''}${error ? `<small class="field-error">${escapeHtml(error)}</small>` : ''}
 </div>`
 }

@@ -7,6 +7,7 @@ import { refuseForeignPosts } from '../security/origin-check.js'
 import { escapeHtml } from '../ui/pages.js'
 import { ADMIN_UI_CLIENT_ID, MANAGE_PATH } from './constants.js'
 import { createManageContext, type ManageDependencies, type ManageSession, SESSION_COOKIE } from './context.js'
+import { registerAudit } from './audit.js'
 import { registerClaimTypes } from './claim-types.js'
 import { registerClients } from './clients.js'
 import { registerUsers } from './users.js'
@@ -171,4 +172,5 @@ export const manageRoutes =
     registerUsers(app, ctx)
     registerClients(app, ctx)
     registerClaimTypes(app, ctx)
+    registerAudit(app, ctx)
   }

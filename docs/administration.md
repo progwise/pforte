@@ -96,6 +96,18 @@ says whether a person can hold several values. New ones appear on the users' pag
 from several values to one is refused while existing values would break the rule. Deleting is refused while people hold values,
 unless you tick the box to delete those values too.
 
+## Audit log
+
+**Audit log** (`/manage/audit`) shows who did what, when and to whom, newest first, 50 at a time: every change made in the
+administration or through the API, and the sign-in events. A row shows the person or client who did it, the action, whom it was
+about, the address it came from and, under "Details", everything pforte recorded, including the browser.
+
+Filter by the **person it was about** (their e-mail address), by **who did it** (a person's e-mail address or a client's ID), by
+**action** (an exact one such as `user.lock`, or a start such as `user.*`; the field suggests the known ones), and by a **date
+range**. Days are counted in your `TIME_ZONE`. Like the search on the users page, a filtered view is a link you can bookmark or
+send. A person who was deleted shows with the e-mail address kept in the event. The page of a person links to all events about
+them.
+
 Times are shown in the time zone you set with `TIME_ZONE` (default UTC), in the language of the administrator.
 
 ## For those who call the admin API

@@ -307,6 +307,7 @@ ${recent.map((event) => `<tr><td>${time(event.createdAt)}</td><td>${escapeHtml(e
 </tbody></table></div>`
     : `<p class="muted">${escapeHtml(t('manage.signins.none'))}</p>`
 }
+<p>${link(`${MANAGE_PATH}/audit?${new URLSearchParams({ user: user.email })}`, t('manage.audit.forPerson'))}</p>
 </div>`
     : ''
 
