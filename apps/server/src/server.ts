@@ -7,6 +7,7 @@ import { buildApp } from './app.js'
 import { createAuthenticate } from './auth/authenticate.js'
 import { deriveCodeSecrets } from './auth/code-secrets.js'
 import { checkConfig, checkDevelopmentLeftovers, startupFailure } from './security/startup-checks.js'
+import { createBackground } from './security/background.js'
 import { createLoginAudit } from './auth/login-audit.js'
 import { createRateLimiter } from './auth/rate-limiter.js'
 import { createPasswordResetSender } from './auth/password-reset.js'
@@ -62,6 +63,7 @@ const notifier = config.mail
       production: process.env.NODE_ENV === 'production',
       smsAvailable: Boolean(config.sms),
     })
+const background = createBackground({ onError: (error) => app.log.error(error, 'work after a response failed') })
 const limiter = createRateLimiter({ db, secret: deriveCodeSecrets(config.cookieKeys)[0]! })
 const audit = createLoginAudit({
   db,
@@ -91,6 +93,7 @@ const app = buildApp({
     ui,
     limiter,
     audit,
+    background,
   },
   admin: {
     db,
@@ -118,6 +121,7 @@ const cleanup = setInterval(() => {
 cleanup.unref()
 
 app.addHook('onClose', async () => {
+  await background.idle()
   clearInterval(cleanup)
   await pool.end()
 })

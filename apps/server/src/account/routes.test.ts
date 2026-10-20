@@ -53,7 +53,12 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
     return { ...user, password }
   }
 
-  const requestReset = (email: string) => form('POST', '/reset', { email })
+  /** Asks for a reset and waits for the mail to be sent, which happens after the answer. */
+  const requestReset = async (email: string) => {
+    const response = await form('POST', '/reset', { email })
+    await h.settle()
+    return response
+  }
   const resetCode = (email: string) => h.lastResetCode(email)!
   const submitReset = (email: string, code: string, password = 'a brand new password', confirm = password) =>
     form('POST', '/reset/code', { email, code, password, confirm })
@@ -186,6 +191,25 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
       expect((await requestReset(user.email)).statusCode).toBe(200)
       // the failed attempt left a code behind, so the second request is within the cooldown
       expect(h.notifications).toEqual([])
+    })
+
+    it('answers before it looks for the account or sends anything, so the time says nothing about the account', async () => {
+      const user = await activated()
+      let release!: () => void
+      h.notifier.hold = new Promise<void>((resolve) => (release = resolve))
+
+      // the mail is held back, yet both requests are answered: the answer does not wait for it
+      const known = await form('POST', '/reset', { email: user.email })
+      const unknown = await form('POST', '/reset', { email: 'nobody@example.com' })
+      expect(known.statusCode).toBe(200)
+      expect(unknown.statusCode).toBe(200)
+      expect(h.notifications).toEqual([])
+
+      release()
+      h.notifier.hold = undefined
+      await h.settle()
+      expect(h.notifications).toEqual([expect.objectContaining({ kind: 'reset-code', user: expect.objectContaining({ email: user.email }) })])
+      expect(h.backgroundErrors).toEqual([])
     })
 
     it('rejects a request without an e-mail address', async () => {

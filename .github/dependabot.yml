@@ -1,0 +1,33 @@
+version: 2
+
+# New releases wait 14 days before a pull request is opened, so a release that turns out to be malicious or
+# broken has time to be found. Security fixes are not delayed by this.
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    cooldown:
+      default-days: 14
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 14
+
+  # The images of the development setup (Postgres, Mailpit).
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 14

@@ -12,7 +12,7 @@ export interface Notification {
 /** A notifier that keeps what it was asked to send, and can be told to fail. */
 export const createRecordingNotifier = () => {
   const notifications: Notification[] = []
-  const notifier: Notifier & { failWith?: Error; smsAvailable: boolean; failSms?: boolean } = {
+  const notifier: Notifier & { failWith?: Error; smsAvailable: boolean; failSms?: boolean; hold?: Promise<void> } = {
     smsAvailable: false,
     async sendLoginCode(user, login) {
       if (notifier.failWith) throw notifier.failWith
@@ -29,6 +29,7 @@ export const createRecordingNotifier = () => {
       notifications.push({ kind: 'activation', user, url: link.url, expiresAt: link.expiresAt })
     },
     async sendResetCode(user, reset) {
+      await notifier.hold
       if (notifier.failWith) throw notifier.failWith
       if (reset.channel === 'sms' && notifier.failSms) throw new NotifierUnavailableError('SMS is down')
       notifications.push({ kind: 'reset-code', user, channel: reset.channel, code: reset.code, url: reset.url, expiresAt: reset.expiresAt })

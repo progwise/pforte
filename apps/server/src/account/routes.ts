@@ -15,6 +15,7 @@ import { readCookie, setCookieHeader, sign, unsign } from '../interaction/signed
 import { parseAcceptLanguage } from '../i18n/index.js'
 import { type Notifier, NotifierUnavailableError } from '../notifications/notifier.js'
 import type { Ui } from '../ui/index.js'
+import type { Background } from '../security/background.js'
 import { refuseForeignPosts } from '../security/origin-check.js'
 import type { PageSet } from '../ui/pages.js'
 import { tooManyRequests } from '../ui/too-many.js'
@@ -38,6 +39,8 @@ export interface AccountDependencies {
   limiter: RateLimiter
   /** Tells the audit log what happened. */
   audit: LoginAudit
+  /** Runs what must not delay an answer. */
+  background: Background
 }
 
 const PHONE_COOKIE = 'pforte_phone_step'
@@ -52,7 +55,7 @@ const normalizeEmail = (value: unknown) => text(value).trim().toLowerCase()
 
 /** Pages that are not part of a sign-in: choosing the first password, and choosing a new one after forgetting it. */
 export const accountRoutes =
-  ({ db, sendPasswordResetCode, codeSecrets, notifier, cookieKeys, secure, issuer, ui, limiter, audit }: AccountDependencies) =>
+  ({ db, sendPasswordResetCode, codeSecrets, notifier, cookieKeys, secure, issuer, ui, limiter, audit, background }: AccountDependencies) =>
   async (app: FastifyInstance) => {
     await app.register(formbody)
     ui.pages.addHeaders(app)
@@ -235,19 +238,25 @@ export const accountRoutes =
         return tooManyRequests(reply, view, wait)
       }
 
-      // The answer is the same whether or not the address belongs to someone, so the page cannot be
-      // used to find out who has an account.
-      const user = await findUserByEmail(db, email)
-      if (user?.status === 'active' && user.passwordHash) {
-        try {
-          const channel = await sendPasswordResetCode(user)
-          await audit.resetRequested(origin(request), { userId: user.id })
-          await audit.codeSent(origin(request), { userId: user.id, purpose: 'password_reset', channel })
-        } catch (error) {
-          if (error instanceof NotifierUnavailableError) request.log.error(error, 'the password reset code could not be sent')
-          else if (!(error instanceof CodeLimitError)) throw error
-        }
-      }
+      // The answer is the same whether or not the address belongs to someone, and it is sent before anyone looks
+      // for the account, so neither the page nor the time it takes can be used to find out who has one.
+      const where = origin(request)
+      // Started only once the response is out: while it is being written the lookup and the mail would compete
+      // with it for the server's attention, and for an existing account that would make the answer a little slower.
+      reply.raw.once('finish', () =>
+        background.run(async () => {
+          const user = await findUserByEmail(db, email)
+          if (user?.status !== 'active' || !user.passwordHash) return
+          try {
+            const channel = await sendPasswordResetCode(user)
+            await audit.resetRequested(where, { userId: user.id })
+            await audit.codeSent(where, { userId: user.id, purpose: 'password_reset', channel })
+          } catch (error) {
+            if (error instanceof NotifierUnavailableError) request.log.error(error, 'the password reset code could not be sent')
+            else if (!(error instanceof CodeLimitError)) throw error
+          }
+        }),
+      )
       return html(reply, 200, view.resetCode({ email, notice: view.t('reset.sent') }))
     })
 

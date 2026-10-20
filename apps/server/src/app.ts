@@ -4,6 +4,7 @@ import { type AdminDependencies, adminRoutes } from './admin/index.js'
 import type { InteractionDependencies } from './interaction/routes.js'
 import { interactionRoutes } from './interaction/routes.js'
 import { addSecurityHeaders } from './security/headers.js'
+import { logSerializers } from './security/log-redaction.js'
 import { brandRoutes } from './ui/brand-routes.js'
 import type { Ui } from './ui/index.js'
 import { oidcRoutes } from './oidc/routes.js'
@@ -20,6 +21,8 @@ export interface AppDependencies {
   trustProxy?: number
   /** The public address of pforte. Over https, responses carry HSTS. */
   issuer?: string
+  /** Where the log goes instead of the standard output; for tests. */
+  logStream?: { write(message: string): void }
   /** Returns the current time as reported by the database. */
   getDatabaseTime: () => Promise<Date>
   /** The OpenID Connect provider and its login. Omitted in tests that do not need them. */
@@ -28,10 +31,10 @@ export interface AppDependencies {
   }
 }
 
-export const buildApp = ({ getDatabaseTime, oidc, admin, account, ui, trustProxy = 0, issuer }: AppDependencies) => {
+export const buildApp = ({ getDatabaseTime, oidc, admin, account, ui, trustProxy = 0, issuer, logStream }: AppDependencies) => {
   // "The first N proxies are trusted": the client is what the Nth proxy from the end says it is.
   const options: FastifyServerOptions = {
-    logger: process.env.NODE_ENV !== 'test',
+    logger: logStream ? { stream: logStream, serializers: logSerializers } : process.env.NODE_ENV !== 'test' ? { serializers: logSerializers } : false,
     trustProxy: trustProxy > 0 ? (_address, hop) => hop < trustProxy : false,
   }
   const app = Fastify(options)

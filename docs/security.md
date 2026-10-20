@@ -1,7 +1,8 @@
 # Security measures
 
 What pforte does about the web's usual attacks, and what it asks of the operator. For limits on trying to sign in
-see [rate limits](rate-limiting.md), for what is recorded [the audit log](audit-log.md).
+see [rate limits](rate-limiting.md), for what is recorded [the audit log](audit-log.md), and for what is and is not defended
+the [threat model](threat-model.md).
 
 ## Response headers
 
@@ -64,3 +65,24 @@ can be fixed in one go (the messages say what to change, never what the secret i
 Without `NODE_ENV=production` the same findings are only a warning in the log at startup, so development stays easy.
 
 Secrets come from the environment or from files (`NAME_FILE`, for Docker and Kubernetes secrets). Setting both is an error.
+
+## Logs
+
+The request log hides the values of sensitive parameters in addresses: the token of an activation link, e-mail addresses
+(`email`, `login_hint`), `id_token_hint`, codes and secrets appear as `REDACTED`. Passwords, codes and tokens are not logged
+anywhere else either. Sign-in events in the audit log keep an address that no user has only as a hash.
+
+Everything in pforte's log can contain client addresses (`remoteAddress`), which are personal data in many places. Keep the
+logs as short as your obligations allow.
+
+## Dependencies
+
+- Versions are **pinned exactly** and the lock file is installed as it is in CI (`--frozen-lockfile`).
+- The workflow `audit.yml` runs `pnpm audit` on every push and pull request and **every Monday**. For what pforte ships
+  (`--prod`) it **fails on moderate or worse**. A second run covers the development tools and only informs.
+- **Dependabot** proposes updates weekly. A new release waits **14 days** before a pull request is opened, so one that turns
+  out to be malicious or broken has time to be found; security fixes are not delayed. The pull requests of Dependabot are
+  exempt from the sign-off check, as it cannot sign off.
+- **Accepted advisory:** `GHSA-67mh-4wv8-2f99` (moderate), in `esbuild` through `drizzle-kit`, a tool that writes database
+  migrations during development. It is not part of what runs in production. It stays accepted until `drizzle-kit` ships a
+  fix, and is checked again each time it is updated.

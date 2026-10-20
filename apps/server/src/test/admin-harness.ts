@@ -6,6 +6,7 @@ import { expect } from 'vitest'
 import { buildApp } from '../app.js'
 import { createAuthenticate } from '../auth/authenticate.js'
 import { deriveCodeSecrets } from '../auth/code-secrets.js'
+import { createBackground } from '../security/background.js'
 import { createLoginAudit } from '../auth/login-audit.js'
 import { createRateLimiter } from '../auth/rate-limiter.js'
 import { createPasswordResetSender } from '../auth/password-reset.js'
@@ -25,6 +26,8 @@ export const createAdminHarness = async () => {
   const jwk = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ format: 'jwk' })
   const ui = createUi()
   const limiter = createRateLimiter({ db: database.db, secret: 'rate-limit-test-secret' })
+  const background = createBackground({ onError: (error) => backgroundErrors.push(error) })
+  const backgroundErrors: unknown[] = []
   const loginAudit = createLoginAudit({ db: database.db, secret: 'audit-test-secret' })
   const provider = await createProviderHolder({
     config: {
@@ -52,6 +55,7 @@ export const createAdminHarness = async () => {
       ui,
       limiter,
       audit: loginAudit,
+      background,
     },
     admin: {
       db: database.db,
@@ -115,7 +119,11 @@ export const createAdminHarness = async () => {
     count,
     audit,
     limiter,
+    /** Waits until the work that goes on after responses (the password reset mail) is done. */
+    settle: () => background.idle(),
+    backgroundErrors,
     close: async () => {
+      await background.idle()
       await app.close()
       await database.drop()
     },

@@ -213,6 +213,7 @@ describe.skipIf(!hasDatabase)('the sign-in audit', () => {
       const id = await userId('greta.lang@example.com')
       await new Browser(h.app).request('POST', '/reset', { form: { email: 'greta.lang@example.com', lang: 'en' }, ip: ATTACKER })
       await new Browser(h.app).request('POST', '/reset', { form: { email: 'nobody@example.com', lang: 'en' }, ip: ATTACKER })
+      await h.settle()
 
       const requested = await events('user.password_reset.request')
       expect(requested).toHaveLength(1)
