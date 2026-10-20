@@ -1,6 +1,7 @@
 import { and, asc, eq, exists, gt, ilike, or, sql } from 'drizzle-orm'
 import { type AuditEventInput, type DatabaseOrTransaction, recordAuditEvent } from '../audit.js'
 import { userClaims, users } from '../schema/index.js'
+import { assertAdminStays } from './admins.js'
 import { endUserSessions } from './lifecycle.js'
 
 type UserRow = typeof users.$inferSelect
@@ -139,6 +140,7 @@ export const updateUser = async (
     return { user, changed: false as const, changes }
   }
 
+  if (changes.isAdmin && changes.isAdmin.to === false) await assertAdminStays(tx, context, user, 'take the admin right from')
   const values: Record<string, unknown> = Object.fromEntries(Object.entries(changes).map(([field, { to }]) => [field, to]))
   // A confirmation belongs to the address or number that was confirmed, not to the user.
   if (changes.phone) values.phoneVerifiedAt = null
@@ -157,6 +159,7 @@ export const updateUser = async (
 
 /** Deletes a user and everything that hangs on them, including sessions and tokens. The audit event keeps who they were. */
 export const deleteUser = async (tx: DatabaseOrTransaction, context: RequestContext, user: UserRow) => {
+  await assertAdminStays(tx, context, user, 'delete')
   const { sessionsEnded } = await endUserSessions(tx, user.id)
   await recordAuditEvent(
     tx,

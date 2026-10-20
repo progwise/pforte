@@ -34,11 +34,30 @@ export interface PageSet {
   forgotPassword(options: { email?: string; error?: string }): string
   resetCode(options: { email: string; notice?: string; error?: string }): string
   phoneConfirm(options: { sentTo: string; error?: string; notice?: string }): string
-  /** A page that only says something: a title and a text, both already in the right language. */
-  notice(title: string, message: string): string
+  /** A page that only says something: a title and a text, both already in the right language, and perhaps a button. */
+  notice(title: string, message: string, action?: { href: string; label: string }): string
+  /**
+   * Asks whether to sign out (OpenID Connect RP-initiated logout). `formHtml` is the form the library made, with its
+   * protection against forgery; the buttons belong to it.
+   */
+  logoutConfirm(options: { host: string; formHtml: string }): string
+  /**
+   * A page of the administration: a bar with the sections and the person, a message from the last action, and the
+   * content, which is HTML the caller has already escaped.
+   */
+  manage(options: {
+    title: string
+    nav: { href: string; label: string; current?: boolean }[]
+    person?: { signedInAs: string; signOutLabel: string }
+    flash?: { kind: 'ok' | 'error'; text: string }
+    sectionsLabel: string
+    content: string
+  }): string
 }
 
 export interface Pages {
+  /** The policy of the pages, for the pages that the OpenID library renders and pforte supplies the text of. */
+  readonly contentSecurityPolicy: string
   for(language: string): PageSet
   /** Headers for every page with a form: nothing is cached or sent along as referrer, and only our own styles, fonts and logo load. */
   addHeaders(app: FastifyInstance): void
@@ -53,6 +72,7 @@ export const createPages = (i18n: I18n, { rememberDeviceDefault = false, theme =
   const contentSecurityPolicy = buildContentSecurityPolicy(css, theme)
 
   return {
+  contentSecurityPolicy,
   addHeaders(app) {
     app.addHook('onSend', async (_request, reply) => {
       reply.header('Cache-Control', 'no-store')
@@ -212,7 +232,46 @@ ${codeField}
 </form>`,
         ),
 
-      notice: (title, message) => page(title, `<h1>${escapeHtml(title)}</h1>\n<p>${escapeHtml(message)}</p>`),
+      notice: (title, message, action) =>
+        page(title, `<h1>${escapeHtml(title)}</h1>\n<p>${escapeHtml(message)}</p>${action ? `\n<p><a class="button" href="${escapeHtml(action.href)}">${escapeHtml(action.label)}</a></p>` : ''}`),
+
+      logoutConfirm: ({ host, formHtml }) =>
+        page(
+          t('logout.title'),
+          `<h1>${escapeHtml(t('logout.title'))}</h1>
+<p>${escapeHtml(t('logout.text', { host }))}</p>
+${formHtml}
+<button autofocus type="submit" form="op.logoutForm" name="logout" value="yes">${escapeHtml(t('logout.yes'))}</button>
+<button type="submit" form="op.logoutForm" class="secondary">${escapeHtml(t('logout.no'))}</button>`,
+        ),
+
+      manage: ({ title, nav, person, flash, sectionsLabel, content }) => `<!doctype html>
+<html lang="${escapeHtml(language)}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(title)}${theme.name ? ` · ${escapeHtml(theme.name)}` : ''}</title>
+<style>${css}</style>
+</head>
+<body class="manage">
+<header class="bar">
+${theme.logoUrl ? `<img class="logo" src="${escapeHtml(theme.logoUrl)}" alt="${escapeHtml(theme.name ?? '')}">` : theme.name ? `<span class="brand">${escapeHtml(theme.name)}</span>` : ''}
+<nav class="sections" aria-label="${escapeHtml(sectionsLabel)}">
+${nav.map((item) => `<a href="${escapeHtml(item.href)}"${item.current ? ' aria-current="page"' : ''}>${escapeHtml(item.label)}</a>`).join('\n')}
+</nav>
+${
+  person
+    ? `<div class="who"><span>${escapeHtml(person.signedInAs)}</span>
+<form method="post" action="/manage/logout"><button type="submit" class="secondary">${escapeHtml(person.signOutLabel)}</button></form></div>`
+    : ''
+}
+</header>
+<main class="page" id="content">
+${flash ? `<p class="flash ${flash.kind}" role="${flash.kind === 'error' ? 'alert' : 'status'}">${escapeHtml(flash.text)}</p>` : ''}
+${content}
+</main>
+${footer}</body>
+</html>`,
     }
   },
   }

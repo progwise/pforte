@@ -34,6 +34,13 @@ export const de: Catalog = {
   'limit.title': 'Zu viele Versuche',
   'limit.text': 'Von Ihrem Netzwerk oder für diese Adresse gab es zu viele Versuche. Bitte versuchen Sie es in {minutes} Minuten erneut.',
 
+  'logout.title': 'Abmelden?',
+  'logout.text': 'Möchten Sie sich von {host} abmelden?',
+  'logout.yes': 'Ja, abmelden',
+  'logout.no': 'Nein, angemeldet bleiben',
+  'logout.doneTitle': 'Sie sind abgemeldet',
+  'logout.done': 'Die Abmeldung war erfolgreich.',
+
   'error.title': 'Etwas ist schiefgelaufen',
   'error.generic': 'Die Anfrage konnte nicht abgeschlossen werden.',
   'error.refusedTitle': 'Anfrage abgelehnt',

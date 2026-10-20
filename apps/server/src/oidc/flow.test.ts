@@ -107,7 +107,8 @@ describe.skipIf(!hasDatabase)('authorization code flow', () => {
 
       expect(login.statusCode).toBe(401)
       expect(login.body).toContain('The e-mail or password is not correct.')
-      expect(login.body).not.toMatch(/unknown|locked|no such/i)
+      // the words of the page, not of its stylesheet
+      expect(login.body.replace(/<style>[\s\S]*?<\/style>/, '')).not.toMatch(/unknown|locked|no such/i)
     })
 
     it.each(['locked', 'deactivated', 'created'])('refuses a user with status %s with the same error', async (status) => {

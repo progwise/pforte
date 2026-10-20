@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import { type DatabaseOrTransaction, recordAuditEvent } from '../audit.js'
 import { oidcPayloads, users } from '../schema/index.js'
+import { assertAdminStays } from './admins.js'
 import { revokeUserDevices } from './devices.js'
 import type { RequestContext } from './users.js'
 
@@ -72,6 +73,7 @@ const setStatus = async (tx: DatabaseOrTransaction, user: UserRow, values: Parti
 
 export const lockUser = async (tx: DatabaseOrTransaction, context: RequestContext, user: UserRow) => {
   assertAllowed(user, 'lock')
+  await assertAdminStays(tx, context, user, 'lock')
   const updated = await setStatus(tx, user, { status: 'locked', lockedAt: new Date() })
   const { sessionsEnded, devicesRevoked } = await endUserSessions(tx, user.id)
   await recordAuditEvent(tx, audit(context, 'user.lock', user, { from: user.status, to: 'locked', sessionsEnded, devicesRevoked }))
@@ -92,6 +94,7 @@ export const unlockUser = async (tx: DatabaseOrTransaction, context: RequestCont
 
 export const deactivateUser = async (tx: DatabaseOrTransaction, context: RequestContext, user: UserRow) => {
   assertAllowed(user, 'deactivate')
+  await assertAdminStays(tx, context, user, 'deactivate')
   // A pending activation link must not work for someone who was deactivated.
   const updated = await setStatus(tx, user, { status: 'deactivated', activationTokenHash: null, activationExpiresAt: null })
   const { sessionsEnded, devicesRevoked } = await endUserSessions(tx, user.id)

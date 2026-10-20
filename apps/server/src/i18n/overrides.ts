@@ -1,12 +1,11 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { BUILT_IN, type Catalog } from './index.js'
-import { en, type MessageKey } from './en.js'
+import { ALL_ENGLISH, BUILT_IN, type MessageKey } from './index.js'
 
 const placeholdersOf = (text: string) => new Set([...text.matchAll(/\{(\w+)\}/g)].map((match) => match[1]!))
 
 export interface LocaleOverrides {
-  overrides: Record<string, Partial<Catalog>>
+  overrides: Record<string, Partial<Record<MessageKey, string>>>
   /** Things worth telling the administrator at startup, e.g. a new language that lacks some texts. */
   warnings: string[]
 }
@@ -38,11 +37,11 @@ export const loadLocaleOverrides = (dir: string, read = readFileSync): LocaleOve
       throw new Error(`locales/${file}: must be a JSON object of text keys and texts`)
     }
 
-    const texts: Partial<Catalog> = {}
+    const texts: Partial<Record<MessageKey, string>> = {}
     for (const [key, value] of Object.entries(parsed)) {
-      if (!(key in en)) throw new Error(`locales/${file}: "${key}" is not a text of pforte. See docs/branding-and-languages.md for the list`)
+      if (!(key in ALL_ENGLISH)) throw new Error(`locales/${file}: "${key}" is not a text of pforte. See docs/branding-and-languages.md for the list`)
       if (typeof value !== 'string' || value.trim() === '') throw new Error(`locales/${file}: "${key}" must be a non-empty text`)
-      const wanted = placeholdersOf(en[key as MessageKey])
+      const wanted = placeholdersOf(ALL_ENGLISH[key as MessageKey])
       const given = placeholdersOf(value)
       const unknown = [...given].filter((name) => !wanted.has(name))
       const missing = [...wanted].filter((name) => !given.has(name))
@@ -53,9 +52,9 @@ export const loadLocaleOverrides = (dir: string, read = readFileSync): LocaleOve
     result.overrides[language] = texts
 
     if (!(language in BUILT_IN)) {
-      const absent = (Object.keys(en) as MessageKey[]).filter((key) => !(key in texts))
+      const absent = (Object.keys(ALL_ENGLISH) as MessageKey[]).filter((key) => !(key in texts))
       if (absent.length > 0) {
-        result.warnings.push(`The new language "${language}" lacks ${absent.length} of ${Object.keys(en).length} texts; those appear in English.`)
+        result.warnings.push(`The new language "${language}" lacks ${absent.length} of ${Object.keys(ALL_ENGLISH).length} texts; those appear in English.`)
       }
     }
   }

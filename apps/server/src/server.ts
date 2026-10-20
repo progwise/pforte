@@ -7,6 +7,8 @@ import { buildApp } from './app.js'
 import { createAuthenticate } from './auth/authenticate.js'
 import { deriveCodeSecrets } from './auth/code-secrets.js'
 import { checkConfig, checkDevelopmentLeftovers, startupFailure } from './security/startup-checks.js'
+import { bootstrapAdministrator } from './manage/bootstrap.js'
+import { ensureAdminUiClient } from './manage/setup.js'
 import { createBackground } from './security/background.js'
 import { createLoginAudit } from './auth/login-audit.js'
 import { createRateLimiter } from './auth/rate-limiter.js'
@@ -43,6 +45,8 @@ startupProblems.push(...(await checkDevelopmentLeftovers(db).catch(() => [])))
 if (startupProblems.length > 0 && config.production) {
   throw new Error(startupFailure(startupProblems))
 }
+
+await ensureAdminUiClient(db, config.issuer)
 
 const provider = await createProviderHolder({
   config,
@@ -82,6 +86,7 @@ const app = buildApp({
   issuer: config.issuer,
   getDatabaseTime: () => getDatabaseTime(db),
   oidc: { provider, authenticate, db, notifier, cookieKeys: config.cookieKeys, ui, limiter, audit },
+  manage: { issuer: config.issuer, cookieKeys: config.cookieKeys, ui, organisation: organisationName },
   account: {
     db,
     sendPasswordResetCode,
@@ -105,6 +110,14 @@ const app = buildApp({
 })
 
 for (const warning of warnings) app.log.warn(warning)
+
+if (config.bootstrapAdminEmail) {
+  // A failure here, such as a mail server that is down, must not keep the identity service from starting: nothing was
+  // changed, and the next start tries again.
+  bootstrapAdministrator({ db, email: config.bootstrapAdminEmail, notifier, issuer: config.issuer })
+    .then((message) => message && app.log.info(message))
+    .catch((error) => app.log.error(error, 'BOOTSTRAP_ADMIN_EMAIL: the first administrator could not be set up; it is tried again at the next start'))
+}
 if (startupProblems.length > 0) {
   app.log.warn({ problems: startupProblems }, `${startupProblems.length} thing(s) would stop pforte in production (NODE_ENV=production)`)
 }

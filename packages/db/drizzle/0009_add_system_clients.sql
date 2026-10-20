@@ -1,0 +1,1 @@
+ALTER TABLE "clients" ADD COLUMN "system" boolean DEFAULT false NOT NULL;

@@ -39,6 +39,8 @@ export interface Config {
   mail?: { smtpUrl: string; from: string }
   /** How to send SMS. Without it, codes go by e-mail only. */
   sms?: HttpSmsSettings
+  /** If pforte has no administrator, this address becomes one and is mailed the link to choose a password. */
+  bootstrapAdminEmail?: string
   /** Whether this is a production start (`NODE_ENV=production`), where weak secrets stop it (see `security/startup-checks.ts`). */
   production: boolean
   /** Sign-in events (`login.*`) older than this many days are deleted; 0 keeps them. Administrative events are always kept. */
@@ -217,6 +219,13 @@ const parseRetention = (value: string | undefined) => {
   return days
 }
 
+const parseBootstrapAdmin = (value: string | undefined) => {
+  const email = value?.trim().toLowerCase()
+  if (!email) return undefined
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error(`BOOTSTRAP_ADMIN_EMAIL must be an e-mail address, got "${value}"`)
+  return email
+}
+
 export const loadConfig = (env: Env = process.env): Config => ({
   port: Number(env.PORT ?? 3300),
   databaseUrl: requireSecret(env, 'DATABASE_URL'),
@@ -231,6 +240,7 @@ export const loadConfig = (env: Env = process.env): Config => ({
   trustProxy: parseTrustProxy(env.TRUST_PROXY),
   loginAuditRetentionDays: parseRetention(env.AUDIT_LOGIN_RETENTION_DAYS),
   production: env.NODE_ENV === 'production',
+  bootstrapAdminEmail: parseBootstrapAdmin(env.BOOTSTRAP_ADMIN_EMAIL),
   mail: parseMail(env),
   sms: parseSms(env),
 })

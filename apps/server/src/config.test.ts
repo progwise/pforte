@@ -203,3 +203,15 @@ describe('AUDIT_LOGIN_RETENTION_DAYS', () => {
     expect(() => loadConfig({ ...validEnv, AUDIT_LOGIN_RETENTION_DAYS: value })).toThrow(/AUDIT_LOGIN_RETENTION_DAYS must be/)
   })
 })
+
+describe('BOOTSTRAP_ADMIN_EMAIL', () => {
+  it('is not set unless given, and is tidied up when it is', () => {
+    expect(loadConfig(validEnv).bootstrapAdminEmail).toBeUndefined()
+    expect(loadConfig({ ...validEnv, BOOTSTRAP_ADMIN_EMAIL: ' ' }).bootstrapAdminEmail).toBeUndefined()
+    expect(loadConfig({ ...validEnv, BOOTSTRAP_ADMIN_EMAIL: ' Boss@Example.com ' }).bootstrapAdminEmail).toBe('boss@example.com')
+  })
+
+  it.each(['boss', 'boss@', '@example.com', 'a b@example.com', 'boss@example'])('refuses %s', (value) => {
+    expect(() => loadConfig({ ...validEnv, BOOTSTRAP_ADMIN_EMAIL: value })).toThrow(/BOOTSTRAP_ADMIN_EMAIL must be an e-mail address/)
+  })
+})

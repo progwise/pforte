@@ -37,6 +37,13 @@ export const en = {
   'limit.title': 'Too many attempts',
   'limit.text': 'There were too many attempts from your network or for this address. Please try again in {minutes} minutes.',
 
+  'logout.title': 'Sign out?',
+  'logout.text': 'Do you want to sign out of {host}?',
+  'logout.yes': 'Yes, sign me out',
+  'logout.no': 'No, stay signed in',
+  'logout.doneTitle': 'You are signed out',
+  'logout.done': 'Your sign-out was successful.',
+
   'error.title': 'Something went wrong',
   'error.generic': 'The request could not be completed.',
   'error.refusedTitle': 'Request refused',

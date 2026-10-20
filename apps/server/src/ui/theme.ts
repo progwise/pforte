@@ -157,6 +157,50 @@ input + p { margin: -0.5rem 0 1rem; }
 .error { margin-bottom: 1rem; padding: 0.6rem; color: var(--danger); background: var(--danger-background); border-radius: var(--radius-small); }
 nav.links { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.25rem 1.25rem; font-size: 0.875rem; }
 nav.links a { color: var(--muted); }
+
+/* The administration: a wide layout with a bar and sections, tables and forms. */
+body.manage { display: block; padding: 0; min-height: 100vh; }
+.bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.25rem 1.5rem; padding: 0 1rem;
+  background: var(--surface); border-bottom: 1px solid var(--border); box-shadow: 0 1px 3px rgb(0 0 0 / 8%); }
+.bar .who { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; font-size: 0.9rem; color: var(--muted); }
+.bar form { margin: 0; }
+.bar button { width: auto; padding: 0.5rem 0.9rem; margin: 0; }
+.bar .logo, .bar .brand { margin: 0; max-height: 2.5rem; font-size: 1rem; }
+nav.sections { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+nav.sections a { display: inline-flex; align-items: center; min-height: 3.25rem; padding: 0 0.9rem; border-bottom: 3px solid transparent;
+  color: var(--text); font: 600 0.95rem var(--font-heading); text-decoration: none; }
+nav.sections a:hover { background: var(--background); }
+nav.sections a[aria-current="page"] { border-bottom-color: var(--link); color: var(--link); }
+.page { max-width: 66rem; margin: 1.5rem auto 3rem; padding: 0 1rem; background: transparent; box-shadow: none; border-radius: 0; }
+.page > h1 { margin-bottom: 1.25rem; font-size: 1.7rem; }
+.page h2 { margin: 2rem 0 0.75rem; font: 600 1.15rem var(--font-heading); }
+.flash { margin-bottom: 1rem; padding: 0.75rem 1rem; border-radius: var(--radius-small); border: 1px solid var(--border); background: var(--surface); }
+.flash.ok { border-color: #2e7d32; }
+.flash.error { border-color: var(--danger); color: var(--danger); background: var(--danger-background); }
+.panel { padding: 1rem 1.25rem; margin-bottom: 1rem; background: var(--surface); border-radius: var(--radius); box-shadow: 0 1px 3px rgb(0 0 0 / 12%); }
+table.list { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: var(--radius-small); overflow: hidden; box-shadow: 0 1px 3px rgb(0 0 0 / 12%); }
+table.list th, table.list td { padding: 0.7rem 0.85rem; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); }
+table.list th { font: 600 0.85rem var(--font-heading); color: var(--muted); }
+table.list tr:last-child td { border-bottom: 0; }
+.scroll { overflow-x: auto; }
+.badge { display: inline-block; padding: 0.1rem 0.55rem; border-radius: 999px; border: 1px solid var(--border); font-size: 0.8rem; background: var(--background); }
+.badge.active { border-color: #2e7d32; color: #2e7d32; }
+.badge.locked, .badge.deactivated { border-color: var(--danger); color: var(--danger); }
+.actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0; }
+.actions form { margin: 0; }
+a.button, .page button { display: inline-flex; align-items: center; justify-content: center; width: auto; min-height: 2.75rem; padding: 0 1.1rem; margin: 0;
+  border: 0; border-radius: var(--radius-small); background: var(--primary); color: var(--primary-text); font: 600 1rem var(--font-heading); text-decoration: none; cursor: pointer; }
+a.button.secondary, .page button.secondary { background: transparent; color: var(--link); box-shadow: inset 0 0 0 1px var(--input-border); margin-top: 0; }
+.page button.danger { background: var(--danger); color: #fff; }
+.page form.fields { display: grid; gap: 0.25rem 1rem; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); align-items: end; }
+.page form.fields > label, .page form.fields > div { margin: 0; }
+.page form.fields input, .page form.fields select { margin-bottom: 0.75rem; }
+.page select { width: 100%; padding: 0.7rem; font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--input-border); border-radius: var(--radius-small); }
+.muted { color: var(--muted); }
+dl.facts { display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 1.25rem; margin: 0; }
+dl.facts dt { color: var(--muted); }
+dl.facts dd { margin: 0; }
+@media (max-width: 40rem) { dl.facts { grid-template-columns: 1fr; } dl.facts dt { margin-top: 0.5rem; } }
 `
 }
 

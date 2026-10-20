@@ -7,12 +7,14 @@ import { buildApp } from '../app.js'
 import { createAuthenticate } from '../auth/authenticate.js'
 import { deriveCodeSecrets } from '../auth/code-secrets.js'
 import { createBackground } from '../security/background.js'
+import { ensureAdminUiClient } from '../manage/setup.js'
 import { createLoginAudit } from '../auth/login-audit.js'
 import { createRateLimiter } from '../auth/rate-limiter.js'
 import { createPasswordResetSender } from '../auth/password-reset.js'
 import { createUi } from '../ui/index.js'
 import { createProviderHolder } from '../oidc/provider.js'
-import { basicAuth, registerCodeSource } from './browser.js'
+import { ADMIN_UI_CLIENT_ID } from '../manage/constants.js'
+import { basicAuth, Browser, registerCodeSource, signIn } from './browser.js'
 import { createRecordingNotifier } from './recording-notifier.js'
 
 export const ISSUER = 'https://localhost:3300'
@@ -22,6 +24,8 @@ const COOKIE_KEYS = ['k'.repeat(40)]
 export const createAdminHarness = async () => {
   const database = await createTestDatabase()
   await seed(database.db)
+
+  await ensureAdminUiClient(database.db, ISSUER)
 
   const jwk = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ format: 'jwk' })
   const ui = createUi()
@@ -44,6 +48,7 @@ export const createAdminHarness = async () => {
     issuer: ISSUER,
     getDatabaseTime: () => getDatabaseTime(database.db),
     oidc: { provider, authenticate: await createAuthenticate(database.db), db: database.db, notifier, cookieKeys: COOKIE_KEYS, ui, limiter, audit: loginAudit },
+    manage: { issuer: ISSUER, cookieKeys: COOKIE_KEYS, ui, organisation: 'Example Inc.' },
     account: {
       db: database.db,
       sendPasswordResetCode,
@@ -74,6 +79,21 @@ export const createAdminHarness = async () => {
       url: '/token',
       headers: { authorization: basicAuth(clientId, 'dev-secret'), 'content-type': 'application/x-www-form-urlencoded' },
       payload: new URLSearchParams({ grant_type: 'client_credentials', scope }).toString(),
+    })
+    expect(response.statusCode, response.body).toBe(200)
+    return response.json().access_token as string
+  }
+
+  /**
+   * Signs a person in to the administration UI (password, then the code) and returns the access token the UI would
+   * get, the way an application does it: authorization code flow with PKCE.
+   */
+  const personToken = async (email = 'admin@example.com', { clientId = ADMIN_UI_CLIENT_ID, redirectUri = `${ISSUER}/manage/callback` } = {}) => {
+    const browser = new Browser(app)
+    const result = await signIn(browser, { clientId, redirectUri, email })
+    expect(result.code, 'the sign-in should end with an authorization code').toBeTruthy()
+    const response = await browser.request('POST', '/token', {
+      form: { grant_type: 'authorization_code', code: result.code!, redirect_uri: redirectUri, client_id: clientId, code_verifier: result.verifier },
     })
     expect(response.statusCode, response.body).toBe(200)
     return response.json().access_token as string
@@ -116,6 +136,7 @@ export const createAdminHarness = async () => {
     tokenFor,
     adminToken,
     directoryToken,
+    personToken,
     count,
     audit,
     limiter,

@@ -34,6 +34,13 @@ export const hu: Catalog = {
   'limit.title': 'Túl sok próbálkozás',
   'limit.text': 'A hálózatáról vagy erre a címre túl sok próbálkozás érkezett. Kérjük, próbálja újra {minutes} perc múlva.',
 
+  'logout.title': 'Kijelentkezés?',
+  'logout.text': 'Ki szeretne jelentkezni innen: {host}?',
+  'logout.yes': 'Igen, kijelentkezem',
+  'logout.no': 'Nem, bejelentkezve maradok',
+  'logout.doneTitle': 'Ki van jelentkezve',
+  'logout.done': 'A kijelentkezés sikeres volt.',
+
   'error.title': 'Valami hiba történt',
   'error.generic': 'A kérést nem sikerült teljesíteni.',
   'error.refusedTitle': 'A kérés elutasítva',

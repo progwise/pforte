@@ -100,6 +100,38 @@ export const getClient = async (db: DatabaseOrTransaction, clientId: string) => 
   return client
 }
 
+/** Refuses to change a client that pforte registered itself. */
+const assertEditable = (client: ClientRow) => {
+  if (client.system) throw new AdminError(`"${client.clientId}" is a built-in client of pforte and cannot be changed or deleted.`, 'conflict')
+}
+
+/**
+ * Makes sure a built-in public client exists with these settings, and keeps it that way: it is written at every
+ * start, so a changed address in the configuration takes effect and nothing done to the row survives. Writes no
+ * audit event: it is pforte's own setup, not somebody's decision.
+ */
+export const ensureSystemClient = async (
+  db: DatabaseOrTransaction,
+  client: { clientId: string; name: string; redirectUris: string[]; postLogoutRedirectUris: string[]; scopes: string[] },
+) => {
+  const values = {
+    name: client.name,
+    type: 'public' as const,
+    secretHash: null,
+    pkceRequired: true,
+    redirectUris: client.redirectUris,
+    postLogoutRedirectUris: client.postLogoutRedirectUris,
+    backchannelLogoutUri: null,
+    backchannelLogoutSessionRequired: false,
+    allowedGrants: ['authorization_code'],
+    scopes: client.scopes,
+    system: true,
+  }
+  const problems = validateClientConfig(values)
+  if (problems.length > 0) throw new AdminError('The built-in client is not valid.', 'invalid', problems)
+  await db.insert(clients).values({ clientId: client.clientId, ...values }).onConflictDoUpdate({ target: clients.clientId, set: values })
+}
+
 const configOf = (client: ClientRow): ClientConfig => ({
   name: client.name,
   type: client.type,
@@ -159,6 +191,7 @@ export const updateClient = async (
   client: ClientRow,
   wanted: Partial<Omit<ClientConfig, 'type'>>,
 ) => {
+  assertEditable(client)
   const current = configOf(client)
   const next = { ...current, ...wanted }
   const changes: Record<string, { from: unknown; to: unknown }> = {}
@@ -179,6 +212,7 @@ export const updateClient = async (
 
 /** Replaces the secret. The old one stops working at once; the new one is shown by the caller once. */
 export const rotateClientSecret = async (tx: DatabaseOrTransaction, context: RequestContext, client: ClientRow, secretHash: string) => {
+  assertEditable(client)
   if (client.type !== 'confidential') {
     throw new AdminError('A public client has no secret.', 'conflict')
   }
@@ -191,6 +225,7 @@ export const rotateClientSecret = async (tx: DatabaseOrTransaction, context: Req
  * the last client with the admin scope, and for the client making the call.
  */
 export const deleteClient = async (tx: DatabaseOrTransaction, context: RequestContext, client: ClientRow) => {
+  assertEditable(client)
   if (context.actor.type === 'client' && context.actor.id === client.clientId) {
     throw new AdminError('A client cannot delete itself.', 'conflict')
   }

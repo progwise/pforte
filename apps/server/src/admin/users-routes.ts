@@ -60,7 +60,8 @@ export const toUserDto = (user: UserRow): z.infer<typeof userSchema> => ({
 })
 
 export const requestContext = (request: FastifyRequest): RequestContext => ({
-  actor: { type: 'client', id: request.admin?.clientId },
+  // What a person changes is recorded under their name, not under the administration UI.
+  actor: request.admin?.kind === 'user' ? { type: 'user', id: request.admin.user?.id } : { type: 'client', id: request.admin?.clientId },
   ip: request.ip,
   userAgent: request.headers['user-agent'],
 })

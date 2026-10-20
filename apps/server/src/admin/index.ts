@@ -7,10 +7,13 @@ import {
   serializerCompiler,
   validatorCompiler,
 } from 'fastify-type-provider-zod'
+import { AdminError, LifecycleError } from '@progwise/pforte-db/admin'
+import { z } from 'zod'
 import type { RateLimiter } from '../auth/rate-limiter.js'
 import type { SendPasswordResetCode } from '../auth/password-reset.js'
 import type { Notifier } from '../notifications/notifier.js'
 import type { ProviderHolder } from '../oidc/provider.js'
+import { sendAdminError } from './admin-errors.js'
 import { createAdminAuth } from './auth.js'
 import { auditRoutes } from './audit-routes.js'
 import { claimTypesRoutes } from './claim-types-routes.js'
@@ -18,7 +21,7 @@ import { clientsRoutes } from './clients-routes.js'
 import { devicesRoutes } from './devices-routes.js'
 import { claimsRoutes } from './claims-routes.js'
 import { lifecycleRoutes } from './lifecycle-routes.js'
-import { problem } from './problem.js'
+import { problem, problemSchema } from './problem.js'
 import { usersRoutes } from './users-routes.js'
 
 export interface AdminDependencies {
@@ -81,6 +84,9 @@ export const adminRoutes =
           errors: error.validation.map(({ instancePath, message }) => ({ path: instancePath, message })),
         })
       }
+      // What the data layer refuses (a duplicate, the last administrator, a built-in client) answers as such.
+      if (error instanceof AdminError) return sendAdminError(reply, error)
+      if (error instanceof LifecycleError) return problem(reply, 409, 'Conflict', error.message)
       // Errors of the caller (bad JSON, wrong content type, …) keep their own 4xx status.
       const status = (error as { statusCode?: number }).statusCode
       if (status && status >= 400 && status < 500) {
@@ -109,6 +115,33 @@ export const adminRoutes =
         request.log.error(error, 'rebuilding the OpenID provider after a claim type change failed')
       }
     }
+
+    app.get(
+      '/whoami',
+      {
+        onRequest: auth.require('directory', 'admin'),
+        schema: {
+          tags: ['Users'],
+          summary: 'Who is calling',
+          description: 'The caller of this request: a machine (a client with its scopes) or a person signed in to the administration UI.',
+          response: {
+            200: z.object({
+              kind: z.enum(['client', 'user']),
+              clientId: z.string(),
+              scopes: z.array(z.string()),
+              user: z.object({ id: z.uuid(), email: z.string(), firstName: z.string(), lastName: z.string(), language: z.string() }).nullable(),
+            }),
+            401: problemSchema,
+            403: problemSchema,
+            429: problemSchema,
+          },
+        },
+      },
+      async (request) => {
+        const caller = request.admin!
+        return { kind: caller.kind, clientId: caller.clientId, scopes: caller.scopes, user: caller.user ?? null }
+      },
+    )
 
     await app.register(usersRoutes({ db, auth }))
     await app.register(claimsRoutes({ db, auth }))

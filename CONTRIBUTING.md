@@ -92,6 +92,9 @@ end the user's sessions and refresh tokens. Activation links and reset requests 
 notifier; until e-mail and SMS exist, the development notifier writes them to the server log
 (and refuses to run with `NODE_ENV=production`, so secrets never reach production logs).
 
+The administration UI is at <http://localhost:3300/manage>: sign in as `admin@example.com` (`dev-password`) and enter the code
+from Mailpit. See [docs/administration.md](docs/administration.md).
+
 ### Importing users
 
 `pnpm pforte import users.csv --dry-run` imports a CSV file through the admin API; see [docs/import.md](docs/import.md).

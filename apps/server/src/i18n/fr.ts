@@ -34,6 +34,13 @@ export const fr: Catalog = {
   'limit.title': 'Trop de tentatives',
   'limit.text': 'Il y a eu trop de tentatives depuis votre réseau ou pour cette adresse. Veuillez réessayer dans {minutes} minutes.',
 
+  'logout.title': 'Se déconnecter ?',
+  'logout.text': 'Voulez-vous vous déconnecter de {host} ?',
+  'logout.yes': 'Oui, me déconnecter',
+  'logout.no': 'Non, rester connecté',
+  'logout.doneTitle': 'Vous êtes déconnecté',
+  'logout.done': 'Votre déconnexion a réussi.',
+
   'error.title': "Une erreur s'est produite",
   'error.generic': "La demande n'a pas pu être traitée.",
   'error.refusedTitle': 'Demande refusée',

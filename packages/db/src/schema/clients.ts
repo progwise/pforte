@@ -20,6 +20,11 @@ export const clients = pgTable(
      * PKCE, e.g. an older application.
      */
     pkceRequired: boolean().notNull().default(true),
+    /**
+     * A client pforte registers itself, such as the one the administration UI signs in with. The admin API
+     * does not let it be changed, rotated or deleted, since pforte could not work without it.
+     */
+    system: boolean().notNull().default(false),
     redirectUris: text().array().notNull().default(sql`'{}'`),
     postLogoutRedirectUris: text().array().notNull().default(sql`'{}'`),
     /** Where pforte sends back-channel logout tokens when a session ends. Null disables it. */

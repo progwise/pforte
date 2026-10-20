@@ -7,12 +7,15 @@ import { addSecurityHeaders } from './security/headers.js'
 import { logSerializers } from './security/log-redaction.js'
 import { brandRoutes } from './ui/brand-routes.js'
 import type { Ui } from './ui/index.js'
+import { manageRoutes, type ManageDependencies } from './manage/routes.js'
 import { oidcRoutes } from './oidc/routes.js'
 import type { ProviderHolder } from './oidc/provider.js'
 
 export interface AppDependencies {
   /** The admin API. Needs the provider (to verify tokens) and the database. */
   admin?: AdminDependencies
+  /** The administration UI under /manage. */
+  manage?: ManageDependencies
   /** Serves the logo and the fonts of the branding folder. */
   ui?: Pick<Ui, 'theme'>
   /** The pages for choosing the first password and for a forgotten one. */
@@ -31,7 +34,7 @@ export interface AppDependencies {
   }
 }
 
-export const buildApp = ({ getDatabaseTime, oidc, admin, account, ui, trustProxy = 0, issuer, logStream }: AppDependencies) => {
+export const buildApp = ({ getDatabaseTime, oidc, admin, account, manage, ui, trustProxy = 0, issuer, logStream }: AppDependencies) => {
   // "The first N proxies are trusted": the client is what the Nth proxy from the end says it is.
   const options: FastifyServerOptions = {
     logger: logStream ? { stream: logStream, serializers: logSerializers } : process.env.NODE_ENV !== 'test' ? { serializers: logSerializers } : false,
@@ -71,6 +74,9 @@ export const buildApp = ({ getDatabaseTime, oidc, admin, account, ui, trustProxy
   }
   if (account) {
     void app.register(accountRoutes(account))
+  }
+  if (manage) {
+    void app.register(manageRoutes(manage))
   }
   if (admin) {
     void app.register(adminRoutes(admin), { prefix: '/admin' })

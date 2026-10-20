@@ -4,7 +4,9 @@ import {
   type ClientConfig,
   createClient,
   deleteClient,
+  ensureSystemClient,
   getClient,
+  listClients,
   rotateClientSecret,
   updateClient,
   validateClientConfig,
@@ -211,5 +213,75 @@ describe.skipIf(!hasDatabase)('client operations', () => {
       const [event] = await events('client.delete', 'shop')
       expect(event.details).toMatchObject({ name: 'Shop', tokensAndGrantsRevoked: 2 })
     })
+  })
+})
+
+describe.skipIf(!hasDatabase)('built-in clients', () => {
+  let database: Awaited<ReturnType<typeof createTestDatabase>>
+  const context = { actor: { type: 'client' as const, id: 'ops' }, ip: '203.0.113.7', userAgent: 'vitest' }
+  const ui = {
+    clientId: 'pforte-admin-ui',
+    name: 'Administration',
+    redirectUris: ['https://id.example.com/manage/callback'],
+    postLogoutRedirectUris: ['https://id.example.com/manage/signed-out'],
+    scopes: ['openid', 'profile'],
+  }
+
+  beforeAll(async () => {
+    database = await createTestDatabase()
+  })
+
+  afterAll(async () => {
+    await database?.drop()
+  })
+
+  it('is created as a public client for the authorization code flow with PKCE, marked as built in', async () => {
+    await ensureSystemClient(database.db, ui)
+    const client = (await getClient(database.db, 'pforte-admin-ui'))!
+    expect(client).toMatchObject({
+      type: 'public',
+      system: true,
+      pkceRequired: true,
+      secretHash: null,
+      allowedGrants: ['authorization_code'],
+      scopes: ['openid', 'profile'],
+      redirectUris: ui.redirectUris,
+    })
+  })
+
+  it('is written again at every start, so changed settings apply and tampering does not survive', async () => {
+    await database.pool.query(`update clients set redirect_uris = '{https://evil.example/cb}', scopes = '{openid,offline_access}' where client_id = 'pforte-admin-ui'`)
+    await ensureSystemClient(database.db, { ...ui, redirectUris: ['https://id.example.org/manage/callback'] })
+    const client = (await getClient(database.db, 'pforte-admin-ui'))!
+    expect(client.redirectUris).toEqual(['https://id.example.org/manage/callback'])
+    expect(client.scopes).toEqual(['openid', 'profile'])
+    expect((await listClients(database.db)).filter((candidate) => candidate.clientId === 'pforte-admin-ui')).toHaveLength(1)
+  })
+
+  it('writes no audit event, since it is pforte\'s own setup', async () => {
+    const { rows } = await database.pool.query(`select count(*) from audit_events where target_id = 'pforte-admin-ui'`)
+    expect(Number(rows[0].count)).toBe(0)
+  })
+
+  it('cannot be changed, rotated or deleted through the API', async () => {
+    const client = (await getClient(database.db, 'pforte-admin-ui'))!
+    const attempts = [
+      () => database.db.transaction((tx) => updateClient(tx, context, client, { name: 'Mine' })),
+      () => database.db.transaction((tx) => rotateClientSecret(tx, context, client, 'hash')),
+      () => database.db.transaction((tx) => deleteClient(tx, context, client)),
+    ]
+    // one after the other: started together, a failure could arrive before anyone is waiting for it
+    for (const attempt of attempts) {
+      const error = await attempt().catch((caught) => caught)
+      expect(error).toBeInstanceOf(AdminError)
+      expect(error).toMatchObject({ kind: 'conflict' })
+      expect(error.message).toMatch(/built-in client/)
+    }
+    expect((await getClient(database.db, 'pforte-admin-ui'))!.name).toBe('Administration')
+  })
+
+  it('refuses settings that are not valid for a client', async () => {
+    await expect(ensureSystemClient(database.db, { ...ui, redirectUris: ['http://insecure.example/cb'] })).rejects.toMatchObject({ kind: 'invalid' })
+    await expect(ensureSystemClient(database.db, { ...ui, scopes: ['admin'] })).rejects.toBeInstanceOf(AdminError)
   })
 })

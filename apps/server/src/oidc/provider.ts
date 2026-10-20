@@ -49,6 +49,8 @@ export const createProvider = async ({ config, db, onError, ui = createUi() }: P
   const claimTypeKeys = (await listClaimTypes(db)).map((claimType) => claimType.key)
   const store = createOidcPayloadStore(db)
   const secureIssuer = config.issuer.startsWith('https:')
+  /** The pages in the language of the browser, for what the library renders. */
+  const viewFor = (ctx: { get(name: string): string }) => ui.pages.for(ui.i18n.pick(parseAcceptLanguage(ctx.get('accept-language'))))
 
   const provider = new Provider(config.issuer, {
     adapter: (name: string) => (name === 'Client' ? new ClientAdapter(db) : new PayloadAdapter(name, store)),
@@ -86,7 +88,8 @@ export const createProvider = async ({ config, db, onError, ui = createUi() }: P
     renderError: async (ctx, out, error) => {
       onError?.(error)
       ctx.type = 'html'
-      const view = ui.pages.for(ui.i18n.pick(parseAcceptLanguage(ctx.get('accept-language'))))
+      const view = viewFor(ctx)
+      ctx.set('Content-Security-Policy', ui.pages.contentSecurityPolicy)
       // The library's own description is in English; the title and the fallback follow the browser's language.
       ctx.body = view.notice(view.t('error.title'), out.error_description ?? out.error ?? view.t('error.generic'))
     },
@@ -103,7 +106,23 @@ export const createProvider = async ({ config, db, onError, ui = createUi() }: P
     features: {
       clientCredentials: { enabled: true },
       devInteractions: { enabled: false },
-      rpInitiatedLogout: { enabled: true },
+      rpInitiatedLogout: {
+        enabled: true,
+        // The library's own pages load fonts from a font service and look like nothing else here. These are
+        // pforte's: in the language of the browser, in the look of the installation, with nothing from outside.
+        logoutSource: async (ctx, form) => {
+          const view = viewFor(ctx)
+          ctx.type = 'html'
+          ctx.set('Content-Security-Policy', ui.pages.contentSecurityPolicy)
+          ctx.body = view.logoutConfirm({ host: ctx.host, formHtml: form })
+        },
+        postLogoutSuccessSource: async (ctx) => {
+          const view = viewFor(ctx)
+          ctx.type = 'html'
+          ctx.set('Content-Security-Policy', ui.pages.contentSecurityPolicy)
+          ctx.body = view.notice(view.t('logout.doneTitle'), view.t('logout.done'))
+        },
+      },
       backchannelLogout: { enabled: true },
     },
     // A phone stays signed in: refresh tokens go to every client that may use them and

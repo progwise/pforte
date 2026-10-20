@@ -1,4 +1,6 @@
+export * from './admins.js'
 export * from './audit.js'
+export * from './bootstrap.js'
 export * from './claims.js'
 export * from './clients.js'
 export * from './devices.js'

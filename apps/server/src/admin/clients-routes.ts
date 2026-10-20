@@ -26,6 +26,8 @@ const clientId = z.string().regex(/^[a-z0-9][a-z0-9._-]{2,62}$/, 'Use 3 to 63 lo
 const uris = z.array(z.string().max(2000)).max(50)
 
 const clientSchema = z.object({
+  /** Registered by pforte itself, such as the client of the administration UI; it cannot be changed or deleted. */
+  system: z.boolean(),
   clientId: z.string(),
   name: z.string(),
   type: z.enum(['public', 'confidential']),
@@ -46,6 +48,7 @@ type ClientRow = NonNullable<Awaited<ReturnType<typeof getClient>>>
 
 /** The API's view of a client. The secret hash never leaves the database. */
 const toClientDto = (client: ClientRow, claimTypes: string[]): z.infer<typeof clientSchema> => ({
+  system: client.system,
   clientId: client.clientId,
   name: client.name,
   type: client.type,

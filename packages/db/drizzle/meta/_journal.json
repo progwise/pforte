@@ -64,6 +64,13 @@
       "when": 1792483607704,
       "tag": "0008_drop_failed_login_attempts",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792486787557,
+      "tag": "0009_add_system_clients",
+      "breakpoints": true
     }
   ]
 }
