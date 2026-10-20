@@ -3,6 +3,7 @@ import { escapeHtml } from '../ui/pages.js'
 import { MANAGE_PATH } from './constants.js'
 import type { ManageContext, ManageSession } from './context.js'
 import { badge, checkbox, field, link, select, textarea } from './html.js'
+import { actionButtons, registerUserActions, userPanels } from './user-actions.js'
 
 const BASE = `${MANAGE_PATH}/users`
 const STATUSES = ['created', 'active', 'locked', 'deactivated'] as const
@@ -271,6 +272,9 @@ ${checkbox({ id: 'isAdmin', label: t('manage.field.isAdmin'), checked: values.is
 <h1>${escapeHtml(fullName(user) || user.email)}</h1>
 <div class="panel">${facts}</div>
 
+<h2>${escapeHtml(t('manage.actions.title'))}</h2>
+${actionButtons(user, t)}
+
 <h2>${escapeHtml(t('manage.user.profile'))}</h2>
 <div class="panel"><form class="fields" method="post" action="${BASE}/${user.id}">
 ${profileFields(t, extra.profile ?? profileOf(user), extra.errors ?? {})}
@@ -285,7 +289,9 @@ ${extra.claimError ? `<p class="flash error" role="alert">${escapeHtml(extra.cla
 ${claimFields}
 ${claimTypes.length ? `<p><button type="submit">${escapeHtml(t('manage.claims.save'))}</button></p>` : ''}
 </form>
-</div>`
+</div>
+
+${await userPanels(ctx, request, session, user)}`
 
     const html = page(request, reply, session, 'users', fullName(user) || user.email, content)
     return reply.code(extra.status ?? 200).type('text/html').send(extra.error ? withFlash(html, extra.error) : html)
@@ -374,4 +380,6 @@ ${claimTypes.length ? `<p><button type="submit">${escapeHtml(t('manage.claims.sa
     }
     return detail(request, reply, session, user, { claimValues: typed, claimError: problemText(response.json()), status: response.statusCode === 400 ? 422 : response.statusCode })
   })
+
+  registerUserActions(app, ctx)
 }

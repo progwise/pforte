@@ -1,25 +1,9 @@
-import { findClientById } from '@progwise/pforte-db/oidc'
+import { findClientById, MODEL_TYPES } from '@progwise/pforte-db/oidc'
 import type { createOidcPayloadStore } from '@progwise/pforte-db/oidc'
 import type { Database } from '@progwise/pforte-db'
 import type { Adapter, AdapterPayload } from 'oidc-provider'
 
-/** Numeric model types stored in oidc_payloads.type. Append only; never renumber. */
-const modelTypes: Record<string, number> = {
-  Session: 1,
-  AccessToken: 2,
-  AuthorizationCode: 3,
-  RefreshToken: 4,
-  DeviceCode: 5,
-  ClientCredentials: 6,
-  Client: 7,
-  InitialAccessToken: 8,
-  RegistrationAccessToken: 9,
-  Interaction: 10,
-  ReplayDetection: 11,
-  PushedAuthorizationRequest: 12,
-  Grant: 13,
-  BackchannelAuthenticationRequest: 14,
-}
+const modelTypes: Record<string, number> = MODEL_TYPES
 
 type PayloadStore = ReturnType<typeof createOidcPayloadStore>
 

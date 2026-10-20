@@ -139,6 +139,7 @@ export const createAdminHarness = async () => {
     personToken,
     count,
     audit,
+    loginAudit,
     limiter,
     /** Waits until the work that goes on after responses (the password reset mail) is done. */
     settle: () => background.idle(),

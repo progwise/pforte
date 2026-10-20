@@ -63,6 +63,14 @@ with the other clients as built in and cannot be changed, rotated or deleted.
   and their **claims**: one value per line for every claim type that exists, with its format and description. A form that
   cannot be saved comes back with what you typed and says what is wrong, field by field.
 - **New user** creates a person in the status "Not activated". Sending them the activation link comes next to it.
+- **Actions** on a person's page depend on their status: lock and unlock, send the activation link (or activate again),
+  deactivate, reset the password, sign out everywhere, and delete. Each opens a page that names the person and says what
+  will happen before anything changes; deleting asks you to type the person's e-mail address. The last administrator cannot
+  be locked, deactivated, deleted or demoted, and nobody can do these to themselves; the page says so.
+- **Signed in** shows the browsers where the person is signed in (and whether a code was entered) and the applications that
+  stay signed in, such as an app on a phone. **Remembered devices** lists where no code is asked for; one or all can be
+  revoked, and the next sign-in there asks for a code again. **Recent sign-ins** shows the last ten sign-in events: successes,
+  wrong passwords and codes, codes sent, and sign-ins held back after too many attempts, with the address they came from.
 
 Times are shown in the time zone you set with `TIME_ZONE` (default UTC), in the language of the administrator.
 

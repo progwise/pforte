@@ -20,6 +20,7 @@ const OPERATIONS = [
   'GET /admin/users/{id}',
   'GET /admin/users/{id}/claims',
   'GET /admin/users/{id}/devices',
+  'GET /admin/users/{id}/sessions',
   'GET /admin/whoami',
   'PATCH /admin/claim-types/{key}',
   'PATCH /admin/clients/{clientId}',

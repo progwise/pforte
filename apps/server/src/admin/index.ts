@@ -19,6 +19,7 @@ import { auditRoutes } from './audit-routes.js'
 import { claimTypesRoutes } from './claim-types-routes.js'
 import { clientsRoutes } from './clients-routes.js'
 import { devicesRoutes } from './devices-routes.js'
+import { sessionsRoutes } from './sessions-routes.js'
 import { claimsRoutes } from './claims-routes.js'
 import { lifecycleRoutes } from './lifecycle-routes.js'
 import { problem, problemSchema } from './problem.js'
@@ -146,6 +147,7 @@ export const adminRoutes =
     await app.register(usersRoutes({ db, auth }))
     await app.register(claimsRoutes({ db, auth }))
     await app.register(devicesRoutes({ db, auth }))
+    await app.register(sessionsRoutes({ db, auth }))
     await app.register(lifecycleRoutes({ db, auth, notifier, sendPasswordResetCode, limiter, issuer: provider.issuer }))
     await app.register(claimTypesRoutes({ db, auth, reloadProvider }))
     await app.register(clientsRoutes({ db, auth, reloadProvider }))
