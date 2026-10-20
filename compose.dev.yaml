@@ -19,7 +19,7 @@ services:
 
   # Catches the e-mails pforte sends (codes, activation links). Open http://localhost:8026.
   mailpit:
-    image: axllent/mailpit:v1.27
+    image: axllent/mailpit:v1.30
     ports:
       - '${PFORTE_SMTP_PORT:-1026}:1025'
       - '${PFORTE_MAIL_UI_PORT:-8026}:8025'
