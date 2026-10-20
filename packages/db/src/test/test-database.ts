@@ -34,7 +34,8 @@ export const createTestDatabase = async () => {
 
   const testUrl = new URL(baseUrl)
   testUrl.pathname = `/${name}`
-  const { db, pool } = createDb(testUrl.toString())
+  // Dropping the database at the end closes connections that may still be shutting down; that is not worth a log line.
+  const { db, pool } = createDb(testUrl.toString(), { onError: () => {} })
   await migrate(db, { migrationsFolder: fileURLToPath(new URL('../../drizzle', import.meta.url)) })
 
   return {
