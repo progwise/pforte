@@ -133,7 +133,7 @@ pnpm dev:example         # example application on http://localhost:3400, sign in
                          # anna.schmidt@example.com / dev-password
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for details, and [docs/configuration.md](docs/configuration.md) for every setting.
 
 ## Roadmap
 
