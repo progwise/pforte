@@ -7,6 +7,7 @@ import { completeActivation, completePasswordReset, findPendingActivation } from
 import { findUserByEmail } from '@progwise/pforte-db/users'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { maskPhone } from '../auth/channels.js'
+import type { RateLimiter } from '../auth/rate-limiter.js'
 import { checkPassword } from '../auth/password-policy.js'
 import type { SendPasswordResetCode } from '../auth/password-reset.js'
 import { readCookie, setCookieHeader, sign, unsign } from '../interaction/signed-cookie.js'
@@ -14,6 +15,7 @@ import { parseAcceptLanguage } from '../i18n/index.js'
 import { type Notifier, NotifierUnavailableError } from '../notifications/notifier.js'
 import type { Ui } from '../ui/index.js'
 import type { PageSet } from '../ui/pages.js'
+import { tooManyRequests } from '../ui/too-many.js'
 
 export interface AccountDependencies {
   db: Database
@@ -28,6 +30,8 @@ export interface AccountDependencies {
   secure: boolean
   /** The pages and their languages. */
   ui: Ui
+  /** Says when somebody has tried too often. */
+  limiter: RateLimiter
 }
 
 const PHONE_COOKIE = 'pforte_phone_step'
@@ -42,7 +46,7 @@ const normalizeEmail = (value: unknown) => text(value).trim().toLowerCase()
 
 /** Pages that are not part of a sign-in: choosing the first password, and choosing a new one after forgetting it. */
 export const accountRoutes =
-  ({ db, sendPasswordResetCode, codeSecrets, notifier, cookieKeys, secure, ui }: AccountDependencies) =>
+  ({ db, sendPasswordResetCode, codeSecrets, notifier, cookieKeys, secure, ui, limiter }: AccountDependencies) =>
   async (app: FastifyInstance) => {
     await app.register(formbody)
     ui.pages.addHeaders(app)
@@ -74,16 +78,29 @@ export const accountRoutes =
 
     app.get<{ Querystring: { token?: string; lang?: string } }>('/activate', async (request, reply) => {
       const token = text(request.query.token)
+      const wait = await limiter.activationBlockedFor(request.ip)
+      if (wait > 0) return tooManyRequests(reply, ui.pages.for(languageOf(request, request.query.lang)), wait)
+
       const user = token ? await findPendingActivation(db, token) : undefined
       const view = ui.pages.for(languageOf(request, request.query.lang, user?.language))
-      return user ? html(reply, 200, view.activation({ token })) : invalidLink(reply, view)
+      if (!user) {
+        await limiter.activationFailed(request.ip)
+        return invalidLink(reply, view)
+      }
+      return html(reply, 200, view.activation({ token }))
     })
 
     app.post<{ Body: Record<string, unknown> }>('/activate', async (request, reply) => {
       const token = text(request.body?.token)
+      const wait = await limiter.activationBlockedFor(request.ip)
+      if (wait > 0) return tooManyRequests(reply, ui.pages.for(languageOf(request, request.body?.lang)), wait)
+
       const pending = token ? await findPendingActivation(db, token) : undefined
       const view = ui.pages.for(languageOf(request, request.body?.lang, pending?.language))
-      if (!pending) return invalidLink(reply, view)
+      if (!pending) {
+        await limiter.activationFailed(request.ip)
+        return invalidLink(reply, view)
+      }
 
       const problem = passwordProblem(view, request.body, pending.email)
       if (problem) return html(reply, 422, view.activation({ token, error: problem }))
@@ -135,9 +152,13 @@ export const accountRoutes =
       const view = ui.pages.for(languageOf(request, undefined, user?.language))
       if (!user) return html(reply, 200, activeAccount(view))
 
+      const wait = await limiter.codeBlockedFor(request.ip)
+      if (wait > 0) return tooManyRequests(reply, view, wait)
+
       const code = text(request.body?.code).replaceAll(' ', '')
       const result = /^\d{6}$/.test(code) ? await checkCode(db, { userId: user.id, purpose: 'activation', code }, { secrets: codeSecrets }) : undefined
       if (!result?.ok) {
+        await limiter.codeFailed(request.ip)
         return html(reply, 401, view.phoneConfirm({ sentTo: maskPhone(user.phone!), error: view.t('code.badOrExpired') }))
       }
       await markPhoneVerified(db, user.id)
@@ -148,6 +169,10 @@ export const accountRoutes =
       const user = await phoneStep(request)
       const view = ui.pages.for(languageOf(request, undefined, user?.language))
       if (!user) return html(reply, 200, activeAccount(view))
+
+      const sendWait = await limiter.codeResend(request.ip)
+      if (sendWait > 0) return tooManyRequests(reply, view, sendWait)
+
       try {
         await sendPhoneCode(user)
       } catch (error) {
@@ -177,6 +202,10 @@ export const accountRoutes =
       const view = ui.pages.for(languageOf(request, request.body?.lang))
       if (!email.includes('@')) return html(reply, 400, view.forgotPassword({ email, error: view.t('reset.noEmail') }))
 
+      // Every address is counted, existing or not, so being over the limit says nothing about an account.
+      const wait = await limiter.resetRequest(email, request.ip)
+      if (wait > 0) return tooManyRequests(reply, view, wait)
+
       // The answer is the same whether or not the address belongs to someone, so the page cannot be
       // used to find out who has an account.
       const user = await findUserByEmail(db, email)
@@ -202,10 +231,16 @@ export const accountRoutes =
       const problem = passwordProblem(view, request.body, email)
       if (problem) return html(reply, 422, view.resetCode({ email, error: problem }))
 
+      const wait = await limiter.codeBlockedFor(request.ip)
+      if (wait > 0) return tooManyRequests(reply, view, wait)
+
       const code = text(request.body?.code).replaceAll(' ', '')
       const user = await findUserByEmail(db, email)
-      // One answer for every way this can fail, so it reveals nothing about the account.
-      const refused = () => html(reply, 401, view.resetCode({ email, error: view.t('code.badOrExpired') }))
+      // One answer for every way this can fail, so it reveals nothing about the account; all of them count.
+      const refused = async () => {
+        await limiter.codeFailed(request.ip)
+        return html(reply, 401, view.resetCode({ email, error: view.t('code.badOrExpired') }))
+      }
       if (!user || user.status !== 'active' || !user.passwordHash || !/^\d{6}$/.test(code)) return refused()
 
       const result = await checkCode(db, { userId: user.id, purpose: 'password_reset', code }, { secrets: codeSecrets })

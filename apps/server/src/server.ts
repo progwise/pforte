@@ -1,9 +1,11 @@
 import { createDb, deleteExpiredOidcPayloads, getDatabaseTime } from '@progwise/pforte-db'
 import { deleteOldCodes } from '@progwise/pforte-db/codes'
 import { deleteOldDevices } from '@progwise/pforte-db/devices'
+import { deleteOldRateLimits } from '@progwise/pforte-db/rate-limits'
 import { buildApp } from './app.js'
 import { createAuthenticate } from './auth/authenticate.js'
 import { deriveCodeSecrets } from './auth/code-secrets.js'
+import { createRateLimiter } from './auth/rate-limiter.js'
 import { createPasswordResetSender } from './auth/password-reset.js'
 import { loadConfig } from './config.js'
 import { createSmtpMailer } from './notifications/mailer.js'
@@ -51,6 +53,7 @@ const notifier = config.mail
       production: process.env.NODE_ENV === 'production',
       smsAvailable: Boolean(config.sms),
     })
+const limiter = createRateLimiter({ db, secret: deriveCodeSecrets(config.cookieKeys)[0]! })
 const sendPasswordResetCode = createPasswordResetSender({
   db,
   notifier,
@@ -59,8 +62,9 @@ const sendPasswordResetCode = createPasswordResetSender({
 })
 const app = buildApp({
   ui,
+  trustProxy: config.trustProxy,
   getDatabaseTime: () => getDatabaseTime(db),
-  oidc: { provider, authenticate, db, notifier, cookieKeys: config.cookieKeys, ui },
+  oidc: { provider, authenticate, db, notifier, cookieKeys: config.cookieKeys, ui, limiter },
   account: {
     db,
     sendPasswordResetCode,
@@ -69,12 +73,14 @@ const app = buildApp({
     cookieKeys: config.cookieKeys,
     secure: config.issuer.startsWith('https:'),
     ui,
+    limiter,
   },
   admin: {
     db,
     provider,
     notifier,
     sendPasswordResetCode,
+    limiter,
   },
 })
 
@@ -83,6 +89,7 @@ for (const warning of warnings) app.log.warn(warning)
 const cleanup = setInterval(() => {
   deleteExpiredOidcPayloads(db).catch((error) => app.log.error(error, 'cleanup of expired OIDC payloads failed'))
   deleteOldCodes(db).catch((error) => app.log.error(error, 'cleanup of old one-time codes failed'))
+  deleteOldRateLimits(db).catch((error) => app.log.error(error, 'cleanup of old rate limit counters failed'))
   deleteOldDevices(db).catch((error) => app.log.error(error, 'cleanup of old devices failed'))
 }, CLEANUP_INTERVAL_MS)
 cleanup.unref()

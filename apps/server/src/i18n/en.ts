@@ -34,6 +34,9 @@ export const en = {
   'code.tooMany': 'Too many codes were requested. Please try again in {minutes} minutes.',
   'code.tooManyTitle': 'Too many codes',
 
+  'limit.title': 'Too many attempts',
+  'limit.text': 'There were too many attempts from your network or for this address. Please try again in {minutes} minutes.',
+
   'error.title': 'Something went wrong',
   'error.generic': 'The request could not be completed.',
   'error.signInExpiredTitle': 'Sign-in expired',

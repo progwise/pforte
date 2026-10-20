@@ -12,6 +12,7 @@
     "./codes": "./src/codes.ts",
     "./credentials": "./src/credentials.ts",
     "./devices": "./src/devices.ts",
+    "./rate-limits": "./src/rate-limits.ts",
     "./testing": "./src/test/test-database.ts"
   },
   "scripts": {

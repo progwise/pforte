@@ -125,7 +125,7 @@ describe.skipIf(!hasDatabase)('data model', () => {
     expect(rows.map((row) => row.id)).toEqual(['no-expiry', 'valid'])
   })
 
-  it('has created_at and updated_at on every table except audit_events', async () => {
+  it('has created_at and updated_at on every table except audit_events and the rate limit counters', async () => {
     const { rows } = await database.pool.query<{ table_name: string; columns: string[] }>(`
       select table_name, array_agg(column_name::text) as columns
       from information_schema.columns
@@ -134,6 +134,11 @@ describe.skipIf(!hasDatabase)('data model', () => {
     `)
     const tables = Object.fromEntries(rows.map((row) => [row.table_name, row.columns]))
     for (const [table, columns] of Object.entries(tables)) {
+      if (table === 'rate_limits') {
+        // Counters, rewritten on every hit; their window_start says what matters.
+        expect(columns, table).toEqual(expect.arrayContaining(['key', 'window_start', 'hits']))
+        continue
+      }
       expect(columns, table).toContain('created_at')
       if (table === 'audit_events') {
         expect(columns, table).not.toContain('updated_at')

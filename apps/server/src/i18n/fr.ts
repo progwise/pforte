@@ -31,6 +31,9 @@ export const fr: Catalog = {
   'code.tooMany': 'Trop de codes ont été demandés. Veuillez réessayer dans {minutes} minutes.',
   'code.tooManyTitle': 'Trop de codes',
 
+  'limit.title': 'Trop de tentatives',
+  'limit.text': 'Il y a eu trop de tentatives depuis votre réseau ou pour cette adresse. Veuillez réessayer dans {minutes} minutes.',
+
   'error.title': "Une erreur s'est produite",
   'error.generic': "La demande n'a pas pu être traitée.",
   'error.signInExpiredTitle': 'Connexion expirée',

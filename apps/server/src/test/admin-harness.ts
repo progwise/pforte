@@ -6,6 +6,7 @@ import { expect } from 'vitest'
 import { buildApp } from '../app.js'
 import { createAuthenticate } from '../auth/authenticate.js'
 import { deriveCodeSecrets } from '../auth/code-secrets.js'
+import { createRateLimiter } from '../auth/rate-limiter.js'
 import { createPasswordResetSender } from '../auth/password-reset.js'
 import { createUi } from '../ui/index.js'
 import { createProviderHolder } from '../oidc/provider.js'
@@ -22,6 +23,7 @@ export const createAdminHarness = async () => {
 
   const jwk = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ format: 'jwk' })
   const ui = createUi()
+  const limiter = createRateLimiter({ db: database.db, secret: 'rate-limit-test-secret' })
   const provider = await createProviderHolder({
     config: {
       issuer: ISSUER,
@@ -35,7 +37,7 @@ export const createAdminHarness = async () => {
   const sendPasswordResetCode = createPasswordResetSender({ db: database.db, notifier, codeSecrets: deriveCodeSecrets(COOKIE_KEYS), issuer: ISSUER })
   const app = buildApp({
     getDatabaseTime: () => getDatabaseTime(database.db),
-    oidc: { provider, authenticate: await createAuthenticate(database.db), db: database.db, notifier, cookieKeys: COOKIE_KEYS, ui },
+    oidc: { provider, authenticate: await createAuthenticate(database.db), db: database.db, notifier, cookieKeys: COOKIE_KEYS, ui, limiter },
     account: {
       db: database.db,
       sendPasswordResetCode,
@@ -44,12 +46,14 @@ export const createAdminHarness = async () => {
       cookieKeys: COOKIE_KEYS,
       secure: true,
       ui,
+      limiter,
     },
     admin: {
       db: database.db,
       provider,
       notifier,
       sendPasswordResetCode,
+      limiter,
     },
   })
   await app.ready()
@@ -105,6 +109,7 @@ export const createAdminHarness = async () => {
     directoryToken,
     count,
     audit,
+    limiter,
     close: async () => {
       await app.close()
       await database.drop()

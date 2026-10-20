@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { buildApp } from '../app.js'
 import { createAuthenticate } from '../auth/authenticate.js'
 import { basicAuth, Browser, pkcePair, signIn, verifyJwt } from '../test/browser.js'
+import { createRateLimiter } from '../auth/rate-limiter.js'
 import { createUi } from '../ui/index.js'
 import { registerCodeSource } from '../test/browser.js'
 import { createRecordingNotifier } from '../test/recording-notifier.js'
@@ -52,7 +53,7 @@ describe.skipIf(!hasDatabase)('authorization code flow', () => {
     })
     app = buildApp({
       getDatabaseTime: () => getDatabaseTime(database.db),
-      oidc: { provider, authenticate: await createAuthenticate(database.db), db: database.db, notifier: recording.notifier, cookieKeys: ['k'.repeat(40)], ui: createUi() },
+      oidc: { provider, authenticate: await createAuthenticate(database.db), db: database.db, notifier: recording.notifier, cookieKeys: ['k'.repeat(40)], ui: createUi(), limiter: createRateLimiter({ db: database.db, secret: 'rate-limit-test-secret' }) },
     })
     await app.ready()
     registerCodeSource(app, recording.lastCode)

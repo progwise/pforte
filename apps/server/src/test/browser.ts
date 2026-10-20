@@ -29,7 +29,7 @@ export class Browser {
   async request(
     method: 'GET' | 'POST',
     url: string,
-    { form, headers }: { form?: Record<string, string>; headers?: Record<string, string> } = {},
+    { form, headers, ip }: { form?: Record<string, string>; headers?: Record<string, string>; ip?: string } = {},
   ) {
     const target = new URL(url, 'http://localhost:3300')
     const response = await this.app.inject({
@@ -43,6 +43,7 @@ export class Browser {
         ...headers,
       },
       payload: form ? new URLSearchParams(form).toString() : undefined,
+      remoteAddress: ip,
     })
     this.store(response.headers['set-cookie'])
     return response

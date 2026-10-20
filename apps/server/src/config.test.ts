@@ -171,3 +171,19 @@ describe('language and branding settings', () => {
     expect(loadConfig({ ...validEnv, REMEMBER_DEVICE_DEFAULT: 'yes' }).rememberDeviceDefault).toBe(false)
   })
 })
+
+describe('TRUST_PROXY', () => {
+  it('is 0 unless set, so X-Forwarded-For is ignored', () => {
+    expect(loadConfig(validEnv).trustProxy).toBe(0)
+    expect(loadConfig({ ...validEnv, TRUST_PROXY: ' ' }).trustProxy).toBe(0)
+  })
+
+  it('is the number of proxies in front of pforte', () => {
+    expect(loadConfig({ ...validEnv, TRUST_PROXY: '1' }).trustProxy).toBe(1)
+    expect(loadConfig({ ...validEnv, TRUST_PROXY: '2' }).trustProxy).toBe(2)
+  })
+
+  it.each(['yes', 'true', '-1', '1.5', '11'])('refuses %s, as it would trust the wrong address', (value) => {
+    expect(() => loadConfig({ ...validEnv, TRUST_PROXY: value })).toThrow(/TRUST_PROXY must be the number of proxies/)
+  })
+})

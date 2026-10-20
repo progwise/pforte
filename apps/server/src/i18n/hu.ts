@@ -31,6 +31,9 @@ export const hu: Catalog = {
   'code.tooMany': 'Túl sok kódot kért. Kérjük, próbálja újra {minutes} perc múlva.',
   'code.tooManyTitle': 'Túl sok kód',
 
+  'limit.title': 'Túl sok próbálkozás',
+  'limit.text': 'A hálózatáról vagy erre a címre túl sok próbálkozás érkezett. Kérjük, próbálja újra {minutes} perc múlva.',
+
   'error.title': 'Valami hiba történt',
   'error.generic': 'A kérést nem sikerült teljesíteni.',
   'error.signInExpiredTitle': 'A bejelentkezés lejárt',

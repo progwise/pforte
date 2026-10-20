@@ -30,6 +30,11 @@ export interface Config {
   defaultLanguage: string
   /** Whether "Remember this device" is ticked when the code page opens. */
   rememberDeviceDefault: boolean
+  /**
+   * How many proxies stand between the internet and pforte. The client's address is the one that many
+   * steps from the end of X-Forwarded-For. 0 means pforte is reached directly and the header is ignored.
+   */
+  trustProxy: number
   /** How to send e-mail. Without it, codes and links cannot be sent (development writes them to the log). */
   mail?: { smtpUrl: string; from: string }
   /** How to send SMS. Without it, codes go by e-mail only. */
@@ -190,6 +195,15 @@ const parseSms = (env: Env): HttpSmsSettings | undefined => {
   return { url, method, headers, contentType: CONTENT_TYPES[contentTypeName as keyof typeof CONTENT_TYPES], body, from, successPattern }
 }
 
+const parseTrustProxy = (value: string | undefined) => {
+  if (value === undefined || value.trim() === '') return 0
+  const hops = Number(value)
+  if (!Number.isInteger(hops) || hops < 0 || hops > 10) {
+    throw new Error('TRUST_PROXY must be the number of proxies in front of pforte (0 to 10), e.g. 1 behind a tunnel or a load balancer')
+  }
+  return hops
+}
+
 export const loadConfig = (env: Env = process.env): Config => ({
   port: Number(env.PORT ?? 3300),
   databaseUrl: requireSecret(env, 'DATABASE_URL'),
@@ -201,6 +215,7 @@ export const loadConfig = (env: Env = process.env): Config => ({
   brandingDir: env.BRANDING_DIR?.trim() || undefined,
   defaultLanguage: env.DEFAULT_LANGUAGE?.trim().toLowerCase() || 'en',
   rememberDeviceDefault: env.REMEMBER_DEVICE_DEFAULT === 'true',
+  trustProxy: parseTrustProxy(env.TRUST_PROXY),
   mail: parseMail(env),
   sms: parseSms(env),
 })

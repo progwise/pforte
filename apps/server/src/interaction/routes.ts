@@ -9,12 +9,14 @@ import { ACR_PASSWORD, ACR_SECOND_FACTOR, secondFactorAssurance } from '../auth/
 import { channelFor, maskEmail, maskPhone } from '../auth/channels.js'
 import { deriveCodeSecrets } from '../auth/code-secrets.js'
 import type { Authenticate } from '../auth/authenticate.js'
+import type { RateLimiter } from '../auth/rate-limiter.js'
 import { type Channel, type Notifier, NotifierUnavailableError } from '../notifications/notifier.js'
 import { applyIssuerHeaders } from '../oidc/issuer-headers.js'
 import type { ProviderHolder } from '../oidc/provider.js'
 import { parseAcceptLanguage } from '../i18n/index.js'
 import type { Ui } from '../ui/index.js'
 import type { PageSet } from '../ui/pages.js'
+import { tooManyRequests } from '../ui/too-many.js'
 import { readCookie, setCookieHeader, sign, unsign } from './signed-cookie.js'
 
 export interface InteractionDependencies {
@@ -26,6 +28,8 @@ export interface InteractionDependencies {
   cookieKeys: string[]
   /** The pages and their languages. */
   ui: Ui
+  /** Says when somebody has tried too often. */
+  limiter: RateLimiter
 }
 
 const STEP_COOKIE = 'pforte_second_factor'
@@ -45,7 +49,7 @@ interface Step {
 
 /** The login pages the provider redirects to ("interactions"). */
 export const interactionRoutes =
-  ({ provider, authenticate, db, notifier, cookieKeys, ui }: InteractionDependencies) =>
+  ({ provider, authenticate, db, notifier, cookieKeys, ui, limiter }: InteractionDependencies) =>
   async (app: FastifyInstance) => {
     await app.register(formbody)
 
@@ -133,12 +137,19 @@ export const interactionRoutes =
         if (!details) return expired(request, reply)
 
         const { email, password } = request.body ?? {}
+        const address = typeof email === 'string' ? email : ''
+        const view = ui.pages.for(languageOf(request, details.params))
+
+        // Before the password is looked at, so a blocked address learns nothing from a right or wrong guess.
+        const wait = await limiter.passwordBlockedFor(address, request.ip)
+        if (wait > 0) return tooManyRequests(reply, view, wait)
+
         const result =
           typeof email === 'string' && typeof password === 'string' ? await authenticate(email, password) : undefined
 
         if (!result) {
+          await limiter.passwordFailed(address, request.ip)
           const client = await provider.current().Client.find(String(details.params.client_id))
-          const view = ui.pages.for(languageOf(request, details.params))
           return reply
             .code(401)
             .type('text/html')
@@ -152,6 +163,7 @@ export const interactionRoutes =
             )
         }
 
+        await limiter.passwordSucceeded(address, request.ip)
         return startSecondFactor(request, reply, details, result.userId)
       },
     )
@@ -250,6 +262,8 @@ export const interactionRoutes =
         return finishLogin(request, reply, user.id, { acr: ACR_PASSWORD, amr: ['pwd'] })
       }
 
+      // The first code needs no limit per IP: it only goes out after the right password, and per user
+      // a code can be sent once a minute. Only asking again is counted (see the resend route).
       try {
         await sendCode(user, channelFor(user, notifier))
       } catch (error) {
@@ -282,12 +296,16 @@ export const interactionRoutes =
       if (!current) return reply.redirect(cookiePath(details.uid), 303)
       const { user } = current
 
+      const wait = await limiter.codeBlockedFor(request.ip)
+      if (wait > 0) return tooManyRequests(reply, ui.pages.for(current.step.language), wait)
+
       const code = typeof request.body?.code === 'string' ? request.body.code.replaceAll(' ', '') : ''
       const result = /^\d{6}$/.test(code)
         ? await checkCode(db, { userId: user.id, purpose: 'login', code }, { secrets: codeSecrets })
         : ({ ok: false, reason: 'wrong' } as const)
 
       if (!result.ok) {
+        if (result.reason === 'wrong' || result.reason === 'exhausted') await limiter.codeFailed(request.ip)
         const error = ui.pages.for(current.step.language).t(`code.${result.reason}`)
         return reply.code(401).type('text/html').send(await codePageFor(user, details.uid, current.step.language, { error }))
       }
@@ -311,6 +329,9 @@ export const interactionRoutes =
       if (!details) return expired(request, reply)
       const current = await stepFor(request, details.uid)
       if (!current) return reply.redirect(cookiePath(details.uid), 303)
+
+      const sendWait = await limiter.codeResend(request.ip)
+      if (sendWait > 0) return tooManyRequests(reply, ui.pages.for(current.step.language), sendWait)
 
       // "Send it by e-mail instead" asks for the e-mail even where an SMS would be the usual way.
       const wanted = request.body?.channel === 'email' ? 'email' : channelFor(current.user, notifier)

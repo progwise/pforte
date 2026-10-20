@@ -7,6 +7,7 @@ import {
   serializerCompiler,
   validatorCompiler,
 } from 'fastify-type-provider-zod'
+import type { RateLimiter } from '../auth/rate-limiter.js'
 import type { SendPasswordResetCode } from '../auth/password-reset.js'
 import type { Notifier } from '../notifications/notifier.js'
 import type { ProviderHolder } from '../oidc/provider.js'
@@ -27,11 +28,13 @@ export interface AdminDependencies {
   notifier: Notifier
   /** Sends the code with which a user chooses a new password. */
   sendPasswordResetCode: SendPasswordResetCode
+  /** Counts failed authentications of clients. */
+  limiter: RateLimiter
 }
 
 /** The admin API, mounted under /admin. */
 export const adminRoutes =
-  ({ db, provider, notifier, sendPasswordResetCode }: AdminDependencies) =>
+  ({ db, provider, notifier, sendPasswordResetCode, limiter }: AdminDependencies) =>
   async (app: FastifyInstance) => {
     app.setValidatorCompiler(validatorCompiler)
     app.setSerializerCompiler(serializerCompiler)
@@ -96,7 +99,7 @@ export const adminRoutes =
     })
     app.setNotFoundHandler((_request, reply) => problem(reply, 404, 'Not found'))
 
-    const auth = createAdminAuth({ db, provider })
+    const auth = createAdminAuth({ db, provider, limiter })
     // The change is already committed when the provider is rebuilt, so a failed rebuild is logged,
     // not reported as a failed request. The next restart picks the claim types up anyway.
     const reloadProvider = async (request: FastifyRequest) => {

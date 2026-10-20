@@ -1,4 +1,4 @@
-import Fastify from 'fastify'
+import Fastify, { type FastifyServerOptions } from 'fastify'
 import { accountRoutes, type AccountDependencies } from './account/routes.js'
 import { type AdminDependencies, adminRoutes } from './admin/index.js'
 import type { InteractionDependencies } from './interaction/routes.js'
@@ -15,6 +15,8 @@ export interface AppDependencies {
   ui?: Pick<Ui, 'theme'>
   /** The pages for choosing the first password and for a forgotten one. */
   account?: AccountDependencies
+  /** How many proxies stand in front of pforte; see `Config.trustProxy`. */
+  trustProxy?: number
   /** Returns the current time as reported by the database. */
   getDatabaseTime: () => Promise<Date>
   /** The OpenID Connect provider and its login. Omitted in tests that do not need them. */
@@ -23,8 +25,25 @@ export interface AppDependencies {
   }
 }
 
-export const buildApp = ({ getDatabaseTime, oidc, admin, account, ui }: AppDependencies) => {
-  const app = Fastify({ logger: process.env.NODE_ENV !== 'test' })
+export const buildApp = ({ getDatabaseTime, oidc, admin, account, ui, trustProxy = 0 }: AppDependencies) => {
+  // "The first N proxies are trusted": the client is what the Nth proxy from the end says it is.
+  const options: FastifyServerOptions = {
+    logger: process.env.NODE_ENV !== 'test',
+    trustProxy: trustProxy > 0 ? (_address, hop) => hop < trustProxy : false,
+  }
+  const app = Fastify(options)
+
+  // Rate limits count by client address. Behind a proxy without TRUST_PROXY that address is the proxy's,
+  // and everybody would be counted together: worth saying once, loudly.
+  if (trustProxy === 0) {
+    let warned = false
+    app.addHook('onRequest', async (request) => {
+      if (!warned && request.headers['x-forwarded-for']) {
+        warned = true
+        request.log.warn('A request carried X-Forwarded-For, but TRUST_PROXY is not set: the rate limits see the proxy\'s address for everybody. Set TRUST_PROXY to the number of proxies in front of pforte.')
+      }
+    })
+  }
 
   app.get('/health', async (_request, reply) => {
     try {
@@ -37,7 +56,7 @@ export const buildApp = ({ getDatabaseTime, oidc, admin, account, ui }: AppDepen
   })
 
   if (oidc) {
-    void app.register(oidcRoutes(oidc.provider))
+    void app.register(oidcRoutes(oidc.provider, oidc.limiter))
     void app.register(interactionRoutes(oidc))
   }
   if (ui && ui.theme.assets.length > 0) {

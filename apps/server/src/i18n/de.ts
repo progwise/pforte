@@ -31,6 +31,9 @@ export const de: Catalog = {
   'code.tooMany': 'Es wurden zu viele Codes angefordert. Bitte versuchen Sie es in {minutes} Minuten erneut.',
   'code.tooManyTitle': 'Zu viele Codes',
 
+  'limit.title': 'Zu viele Versuche',
+  'limit.text': 'Von Ihrem Netzwerk oder für diese Adresse gab es zu viele Versuche. Bitte versuchen Sie es in {minutes} Minuten erneut.',
+
   'error.title': 'Etwas ist schiefgelaufen',
   'error.generic': 'Die Anfrage konnte nicht abgeschlossen werden.',
   'error.signInExpiredTitle': 'Anmeldung abgelaufen',
