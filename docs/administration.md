@@ -51,6 +51,21 @@ Two rules protect you from locking yourself out, for the API as much as for the 
 The built-in client `pforte-admin-ui`, which the administration signs in with, is created by pforte at every start. It is listed
 with the other clients as built in and cannot be changed, rotated or deleted.
 
+## Users
+
+**Users** (`/manage/users`) is where most of the work is.
+
+- **Find people** by name or e-mail, by status, and by the value of a claim (for example everybody with a certain partner
+  number). The search is a form that is also a link, so a search can be bookmarked or sent to a colleague. Long lists are
+  paged ("Next users").
+- **A person's page** shows their status, when they last signed in, when they were created, and whether e-mail and phone are
+  confirmed. Below that are the **profile** (names, e-mail, mobile phone, language, and whether they are an administrator)
+  and their **claims**: one value per line for every claim type that exists, with its format and description. A form that
+  cannot be saved comes back with what you typed and says what is wrong, field by field.
+- **New user** creates a person in the status "Not activated". Sending them the activation link comes next to it.
+
+Times are shown in the time zone you set with `TIME_ZONE` (default UTC), in the language of the administrator.
+
 ## For those who call the admin API
 
 The API accepts two kinds of token, and `GET /admin/whoami` says which you are:

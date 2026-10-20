@@ -192,11 +192,18 @@ a.button, .page button { display: inline-flex; align-items: center; justify-cont
   border: 0; border-radius: var(--radius-small); background: var(--primary); color: var(--primary-text); font: 600 1rem var(--font-heading); text-decoration: none; cursor: pointer; }
 a.button.secondary, .page button.secondary { background: transparent; color: var(--link); box-shadow: inset 0 0 0 1px var(--input-border); margin-top: 0; }
 .page button.danger { background: var(--danger); color: #fff; }
-.page form.fields { display: grid; gap: 0.25rem 1rem; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); align-items: end; }
+.page form.fields { display: grid; gap: 0.25rem 1rem; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); align-items: start; }
+.page form.fields .submit { align-self: end; margin-bottom: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.page input:not([type="checkbox"]), .page select { min-height: 3rem; }
+.page small.muted { display: block; margin: -0.25rem 0 1rem; }
 .page form.fields > label, .page form.fields > div { margin: 0; }
 .page form.fields input, .page form.fields select { margin-bottom: 0.75rem; }
+.page textarea { width: 100%; padding: 0.7rem; margin-bottom: 0.25rem; font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--input-border); border-radius: var(--radius-small); }
 .page select { width: 100%; padding: 0.7rem; font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--input-border); border-radius: var(--radius-small); }
 .muted { color: var(--muted); }
+.field-error { display: block; color: var(--danger); }
+.page label.check { align-items: center; min-height: 2.75rem; margin: 0; }
+.page label.check input, .page input[type="checkbox"] { width: 1.25rem; height: 1.25rem; margin: 0; }
 dl.facts { display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 1.25rem; margin: 0; }
 dl.facts dt { color: var(--muted); }
 dl.facts dd { margin: 0; }

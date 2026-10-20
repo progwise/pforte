@@ -1,36 +1,15 @@
 import formbody from '@fastify/formbody'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { ACR_SECOND_FACTOR } from '../auth/assurance.js'
-import { parseAcceptLanguage } from '../i18n/index.js'
 import type { MessageKey, Values } from '../i18n/index.js'
-import { readCookie, setCookieHeader, sign, unsign } from '../interaction/signed-cookie.js'
+import { readCookie, sign, unsign } from '../interaction/signed-cookie.js'
 import { refuseForeignPosts } from '../security/origin-check.js'
 import { escapeHtml } from '../ui/pages.js'
-import type { Ui } from '../ui/index.js'
-import { createApiCaller } from './api.js'
 import { ADMIN_UI_CLIENT_ID, MANAGE_PATH } from './constants.js'
+import { createManageContext, type ManageDependencies, type ManageSession, SESSION_COOKIE } from './context.js'
+import { registerUsers } from './users.js'
 import { challengeOf, isForThisSignIn, type LoginState, newLogin, readIdToken, safeNext } from './oidc.js'
 
-export interface ManageDependencies {
-  /** The public address of pforte. */
-  issuer: string
-  /** Sign the cookies of the UI. */
-  cookieKeys: string[]
-  ui: Ui
-  /** Named on the start page. */
-  organisation: string
-}
-
-/** The session of a person in the UI: kept in a signed cookie, so there is nothing to store on the server. */
-export interface ManageSession {
-  token: string
-  /** Kept to tell pforte who is signing out. */
-  idToken: string
-  user: { id: string; name: string; language: string }
-  expiresAt: number
-}
-
-const SESSION_COOKIE = 'pforte_manage'
 const LOGIN_COOKIE = 'pforte_manage_login'
 const MAX_SESSION_SECONDS = 8 * 60 * 60
 
@@ -40,21 +19,16 @@ const MAX_SESSION_SECONDS = 8 * 60 * 60
  * with that person's own token.
  */
 export const manageRoutes =
-  ({ issuer, cookieKeys, ui, organisation }: ManageDependencies) =>
+  (dependencies: ManageDependencies) =>
   async (app: FastifyInstance) => {
+    const { issuer, cookieKeys, ui, organisation } = dependencies
     await app.register(formbody)
     ui.pages.addHeaders(app)
 
-    const secure = issuer.startsWith('https:')
+    const ctx = createManageContext(app, dependencies)
+    const { acceptedLanguages, viewFor, cookie, sessionOf, requireSession, page } = ctx
     const redirectUri = `${issuer}${MANAGE_PATH}/callback`
-    const callApi = createApiCaller(app)
-
-    const acceptedLanguages = (request: FastifyRequest) => parseAcceptLanguage(request.headers['accept-language'])
-    const languageOf = (request: FastifyRequest, session?: ManageSession) => ui.i18n.pick(session?.user.language, acceptedLanguages(request))
-    const viewFor = (request: FastifyRequest, session?: ManageSession) => {
-      const view = ui.pages.for(languageOf(request, session))
-      return { view, t: (key: MessageKey, values?: Values) => view.t(key, values) }
-    }
+    const callApi = ctx.callApi
 
     app.addHook(
       'onRequest',
@@ -63,41 +37,6 @@ export const manageRoutes =
         return reply.code(403).type('text/html').send(view.notice(view.t('error.refusedTitle'), view.t('error.refused')))
       }),
     )
-
-    const cookie = (name: string, value: string, maxAgeSeconds: number) =>
-      setCookieHeader(name, value, { path: MANAGE_PATH, maxAgeSeconds, secure })
-
-    const sessionOf = (request: FastifyRequest) => {
-      const session = unsign<ManageSession>(cookieKeys, readCookie(request.headers.cookie, SESSION_COOKIE))
-      return session && session.expiresAt > Date.now() ? session : undefined
-    }
-
-    /** The session, or the person is sent to sign in and brought back to where they were going. */
-    const requireSession = (request: FastifyRequest, reply: FastifyReply) => {
-      const session = sessionOf(request)
-      if (!session) {
-        const next = request.method === 'GET' ? `?next=${encodeURIComponent(request.url)}` : ''
-        void reply.redirect(`${MANAGE_PATH}/login${next}`, 303)
-      }
-      return session
-    }
-
-    /** The sections the person can open. */
-    const sections = (t: (key: MessageKey) => string, current: string) => [
-      { href: MANAGE_PATH, label: t('manage.nav.home'), current: current === 'home' },
-    ]
-
-    /** A page of the administration for a person who is signed in. */
-    const page = (request: FastifyRequest, session: ManageSession, current: string, title: string, content: string) => {
-      const { view, t } = viewFor(request, session)
-      return view.manage({
-        title,
-        sectionsLabel: t('manage.nav.label'),
-        nav: sections(t, current),
-        person: { signedInAs: t('manage.signedInAs', { name: session.user.name }), signOutLabel: t('manage.signOut') },
-        content,
-      })
-    }
 
     /** A page for somebody who has no session: what the sign-in or the sign-out came to. */
     const publicPage = (request: FastifyRequest, titleKey: MessageKey, textKey: MessageKey, values?: Values, withSignIn = true) => {
@@ -218,6 +157,7 @@ export const manageRoutes =
         .send(
           page(
             request,
+            reply,
             session,
             'home',
             t('manage.home.title'),
@@ -225,4 +165,6 @@ export const manageRoutes =
           ),
         )
     })
+
+    registerUsers(app, ctx)
   }

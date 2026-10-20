@@ -39,6 +39,8 @@ export interface Config {
   mail?: { smtpUrl: string; from: string }
   /** How to send SMS. Without it, codes go by e-mail only. */
   sms?: HttpSmsSettings
+  /** Where times are shown in the administration: an IANA time zone such as `Europe/Berlin`. */
+  timeZone: string
   /** If pforte has no administrator, this address becomes one and is mailed the link to choose a password. */
   bootstrapAdminEmail?: string
   /** Whether this is a production start (`NODE_ENV=production`), where weak secrets stop it (see `security/startup-checks.ts`). */
@@ -226,6 +228,16 @@ const parseBootstrapAdmin = (value: string | undefined) => {
   return email
 }
 
+const parseTimeZone = (value: string | undefined) => {
+  const zone = value?.trim() || 'UTC'
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: zone })
+  } catch {
+    throw new Error(`TIME_ZONE must be a time zone such as Europe/Berlin or UTC, got "${value}"`)
+  }
+  return zone
+}
+
 export const loadConfig = (env: Env = process.env): Config => ({
   port: Number(env.PORT ?? 3300),
   databaseUrl: requireSecret(env, 'DATABASE_URL'),
@@ -241,6 +253,7 @@ export const loadConfig = (env: Env = process.env): Config => ({
   loginAuditRetentionDays: parseRetention(env.AUDIT_LOGIN_RETENTION_DAYS),
   production: env.NODE_ENV === 'production',
   bootstrapAdminEmail: parseBootstrapAdmin(env.BOOTSTRAP_ADMIN_EMAIL),
+  timeZone: parseTimeZone(env.TIME_ZONE),
   mail: parseMail(env),
   sms: parseSms(env),
 })

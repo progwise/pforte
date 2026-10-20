@@ -423,7 +423,7 @@ describe.skipIf(!hasDatabase)('admin API: users', () => {
       expect((await api('GET', '/users?search=%25')).json().items).toHaveLength(0)
     })
 
-    it.each(['limit=0', 'limit=201', 'status=asleep', 'claim=nocolon', 'cursor=nope'])('rejects %s', async (query) => {
+    it.each(['limit=0', 'limit=201', 'status=asleep', 'claim=nocolon', 'cursor=nope', `search=${'a'.repeat(201)}`, `claim=team:${'b'.repeat(300)}`])('rejects %s', async (query) => {
       expect((await api('GET', `/users?${query}`)).statusCode).toBe(400)
     })
   })

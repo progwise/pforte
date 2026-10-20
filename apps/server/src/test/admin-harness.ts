@@ -48,7 +48,7 @@ export const createAdminHarness = async () => {
     issuer: ISSUER,
     getDatabaseTime: () => getDatabaseTime(database.db),
     oidc: { provider, authenticate: await createAuthenticate(database.db), db: database.db, notifier, cookieKeys: COOKIE_KEYS, ui, limiter, audit: loginAudit },
-    manage: { issuer: ISSUER, cookieKeys: COOKIE_KEYS, ui, organisation: 'Example Inc.' },
+    manage: { issuer: ISSUER, cookieKeys: COOKIE_KEYS, ui, organisation: 'Example Inc.', timeZone: 'Europe/Berlin' },
     account: {
       db: database.db,
       sendPasswordResetCode,

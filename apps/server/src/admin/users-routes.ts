@@ -131,11 +131,12 @@ export const usersRoutes =
           summary: 'List users',
           description: 'Newest last. Pass `nextCursor` as `cursor` to get the following page.',
           querystring: z.object({
-            search: z.string().trim().min(1).optional(),
+            search: z.string().trim().min(1).max(200).optional(),
             status: z.enum(USER_STATUSES).optional(),
             claim: z
               .string()
               .regex(/^[^:]+:.+$/, 'Use claim=<type>:<value>, e.g. partner_no:00892')
+              .max(300)
               .optional(),
             cursor: z.uuid().optional(),
             limit: z.coerce.number().int().min(1).max(200).default(50),

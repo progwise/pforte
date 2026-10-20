@@ -215,3 +215,18 @@ describe('BOOTSTRAP_ADMIN_EMAIL', () => {
     expect(() => loadConfig({ ...validEnv, BOOTSTRAP_ADMIN_EMAIL: value })).toThrow(/BOOTSTRAP_ADMIN_EMAIL must be an e-mail address/)
   })
 })
+
+describe('TIME_ZONE', () => {
+  it('is UTC unless set', () => {
+    expect(loadConfig(validEnv).timeZone).toBe('UTC')
+    expect(loadConfig({ ...validEnv, TIME_ZONE: ' ' }).timeZone).toBe('UTC')
+  })
+
+  it('takes a time zone', () => {
+    expect(loadConfig({ ...validEnv, TIME_ZONE: 'Europe/Berlin' }).timeZone).toBe('Europe/Berlin')
+  })
+
+  it.each(['Berlin', 'CET+1', 'Mars/Olympus'])('refuses %s', (value) => {
+    expect(() => loadConfig({ ...validEnv, TIME_ZONE: value })).toThrow(/TIME_ZONE must be a time zone/)
+  })
+})
