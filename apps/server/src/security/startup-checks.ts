@@ -33,7 +33,7 @@ export const checkConfig = (config: Config) => {
 
   config.cookieKeys.forEach((key, index) => {
     if (new Set(key).size < MIN_DISTINCT_CHARACTERS) {
-      problems.push(`Cookie key ${index + 1} of COOKIE_KEYS looks guessable (fewer than ${MIN_DISTINCT_CHARACTERS} different characters). Generate keys with: node scripts/dev-keys.mjs --force, or openssl rand -base64 48.`)
+      problems.push(`Cookie key ${index + 1} of COOKIE_KEYS looks guessable (fewer than ${MIN_DISTINCT_CHARACTERS} different characters). Generate new ones with the keys command of pforte (docker run --rm ghcr.io/progwise/pforte keys), or openssl rand -base64 48.`)
     }
   })
 

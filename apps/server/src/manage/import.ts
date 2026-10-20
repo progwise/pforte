@@ -36,7 +36,7 @@ const defaultForm = (): ImportForm => ({ encoding: 'utf-8', valueSeparator: ';',
 
 /** Imports users from a CSV file: checked first, written only when the person confirms. */
 export const registerImport = (app: FastifyInstance, ctx: ManageContext, store: ImportStore = createImportStore()) => {
-  const { requireSession, api, page, viewFor, problemText, formatTime, sessionEnded } = ctx
+  const { requireSession, api, page, viewFor, problemText, sessionEnded } = ctx
 
   const interval = setInterval(store.sweep, 60_000)
   interval.unref()

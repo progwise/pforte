@@ -99,6 +99,23 @@ from Mailpit. See [docs/administration.md](docs/administration.md).
 
 `pnpm pforte import users.csv --dry-run` imports a CSV file through the admin API; see [docs/import.md](docs/import.md).
 
+### Building the image
+
+`docker build -t pforte:dev .` builds the image: our own code is bundled into one file (`apps/server/build.mjs`) and the
+third-party packages are installed from the lockfile. Try it against the database of `pnpm dev:up`:
+
+```bash
+docker run --rm pforte:dev keys > /tmp/pforte-keys.env     # COOKIE_KEYS and JWKS
+docker run --rm -p 3300:3300 --env-file /tmp/pforte-keys.env \
+  -e DATABASE_URL=postgres://user:a-long-password@host.docker.internal:5433/pforte \
+  -e ISSUER=https://id.example.com -e SMTP_URL=smtp://host.docker.internal:1026 -e MAIL_FROM=no-reply@example.com \
+  pforte:dev
+```
+
+The image runs in production mode, so it needs the settings production needs (https `ISSUER`, keys, mail, no default database
+password). It applies pending database migrations at start (`MIGRATE_ON_START=false` skips that); `pforte:dev migrate` only
+migrates. `pforte:dev --help` lists the commands.
+
 ### Ports
 
 - Mailpit, which catches the e-mails pforte sends, listens for SMTP on **1026** and shows the mails on

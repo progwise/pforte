@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./migrate": "./src/migrate.ts",
     "./oidc": "./src/oidc.ts",
     "./admin": "./src/admin/index.ts",
     "./seed": "./src/seed.ts",
