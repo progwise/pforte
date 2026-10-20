@@ -36,6 +36,8 @@ jobs:
           cache-to: type=gha,mode=max
       - name: Smoke test
         run: scripts/smoke-test-image.sh pforte:ci 0.0.0-ci
+      - name: Smoke test of the production example (Caddy, Postgres and this image)
+        run: scripts/smoke-test-compose.sh pforte:ci
       # Fails on high and critical findings that have a fix. Accepted ones go into .trivyignore, each with its reason.
       # Pinned to a commit: this action runs with access to the build.
       - name: Scan for known vulnerabilities

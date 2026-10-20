@@ -1,0 +1,91 @@
+# pforte for production: pforte, Postgres, and Caddy in front, which gets and renews the TLS certificate.
+# Read README.md first. Secrets are files in ./secrets (made by ./setup.sh), never values in this file.
+name: pforte
+
+services:
+  pforte:
+    # Pin a version in production: PFORTE_IMAGE=ghcr.io/progwise/pforte:0.1.0 in .env
+    image: ${PFORTE_IMAGE:-ghcr.io/progwise/pforte:latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ISSUER: ${PFORTE_ISSUER:-https://${PFORTE_HOST:?Set PFORTE_HOST in .env}}
+      DATABASE_URL_FILE: /run/secrets/database_url
+      COOKIE_KEYS_FILE: /run/secrets/cookie_keys
+      JWKS_FILE: /run/secrets/jwks
+      SMTP_URL_FILE: /run/secrets/smtp_url
+      MAIL_FROM: ${MAIL_FROM:?Set MAIL_FROM in .env}
+      ORGANISATION_NAME: ${ORGANISATION_NAME:-pforte}
+      DEFAULT_LANGUAGE: ${DEFAULT_LANGUAGE:-en}
+      TIME_ZONE: ${TIME_ZONE:-UTC}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      # Caddy is the one proxy between the internet and pforte: the client address is the last one in X-Forwarded-For.
+      TRUST_PROXY: '1'
+      # BRANDING_DIR: /branding    # and the volume below, see ../../docs/branding-and-languages.md
+    secrets: [database_url, cookie_keys, jwks, smtp_url]
+    # volumes:
+    #   - ./branding:/branding:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    networks: [proxy, backend]
+
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pforte
+      POSTGRES_DB: pforte
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets: [db_password]
+    volumes:
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U pforte -d pforte']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [backend]
+
+  caddy:
+    image: caddy:2.11-alpine
+    restart: unless-stopped
+    depends_on:
+      pforte:
+        condition: service_healthy
+    environment:
+      PFORTE_HOST: ${PFORTE_HOST:?Set PFORTE_HOST in .env}
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [proxy]
+
+networks:
+  proxy: {}
+  # The database can only be reached by pforte: no route in or out.
+  backend:
+    internal: true
+
+volumes:
+  db-data: {}
+  caddy-data: {}
+  caddy-config: {}
+
+secrets:
+  db_password:
+    file: ./secrets/db_password
+  database_url:
+    file: ./secrets/database_url
+  cookie_keys:
+    file: ./secrets/cookie_keys
+  jwks:
+    file: ./secrets/jwks
+  smtp_url:
+    file: ./secrets/smtp_url

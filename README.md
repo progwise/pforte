@@ -3,11 +3,12 @@
 A small, self-hosted OpenID Connect identity service for organisations whose users are managed
 by a back office rather than by self-registration.
 
-**Status: early development.** The OpenID Connect provider works: sign-in with e-mail and
-password, the authorization code flow with PKCE, claims in the ID token, refresh tokens with
-rotation, and logout. There is no admin API or UI, no import, no second factor and no password
-reset yet. This README describes what is being built, so that early integrators can plan
-against it. Expect the first usable release around the end of 2026.
+**Status: feature complete, first release in preparation.** Sign-in with e-mail and password and a second factor by code,
+remembered devices, password reset and activation links, the authorization code flow with PKCE, refresh tokens, logout, an
+admin API, an administration (users, clients, claim types, audit log, CSV import), a login audit with rate limits, your own
+name, colours and languages, and a Docker image all work and are tested. What is left before a release is publishing the
+image and a changelog ([#9](https://github.com/progwise/pforte/issues/9)). Until then there is no published image: build it
+from this repository.
 
 ## Why another identity service
 
@@ -111,16 +112,14 @@ ERP ──(hourly)──▶ import job ──(admin API)──▶ pforte
 
 ## Quick start
 
-Not yet usable as an identity service. The target is:
-
-```sh
-docker compose up        # pforte + Postgres
-open http://localhost:3300/admin
-```
+For a server: [examples/production](examples/production/README.md) runs pforte, Postgres and Caddy (automatic TLS) with
+Docker Compose, with secrets as files and a read-only, unprivileged pforte. Every setting is in
+[docs/configuration.md](docs/configuration.md). Until the first release is published, build the image yourself with
+`docker build -t pforte .`.
 
 ## Development
 
-To run the current skeleton (Node.js 22, pnpm and Docker required):
+To run pforte from source (Node.js 22, pnpm and Docker required):
 
 ```sh
 cp .env.example .env
@@ -137,13 +136,12 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details, and [docs/configuration.md](
 
 ## Roadmap
 
-1. Repository skeleton, Postgres schema, discovery and the authorization code flow with a password-only login page
-2. Admin API: users, claims, clients
-3. CSV import
-4. First client application wired up end to end
-5. Admin UI
-6. SMS and e-mail second factor, remember device, password reset
-7. Audit log, rate limiting, first release
+Done: the OpenID Connect provider, the admin API, CSV import, the administration, the second factor, remembered devices and
+password reset, the audit log and rate limits, branding and languages, the Docker image and a production example.
+
+Next: the first release ([#9](https://github.com/progwise/pforte/issues/9)), a page where people manage their own account
+([#18](https://github.com/progwise/pforte/issues/18)), and ideas that wait for a need: a consent screen, custom URL schemes for
+native apps, self-service sign-up, a first-party login API.
 
 ## Contributing
 

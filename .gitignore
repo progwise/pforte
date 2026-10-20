@@ -7,3 +7,6 @@ coverage/
 !.env.conformance.example
 *.log
 .DS_Store
+
+# Secrets made by examples/production/setup.sh
+examples/production/secrets/

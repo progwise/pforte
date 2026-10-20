@@ -6,12 +6,11 @@ import { Pool } from 'pg'
 const MIGRATION_LOCK = 7_141_592_653
 
 const appliedCount = async (pool: Pool) => {
-  try {
-    const { rows } = await pool.query<{ count: string }>('select count(*) from drizzle.__drizzle_migrations')
-    return Number(rows[0]?.count ?? 0)
-  } catch {
-    return 0 // the table does not exist yet: nothing was applied
-  }
+  // Ask whether the table is there instead of failing on it: a failed query is an ERROR line in the database's log.
+  const { rows: found } = await pool.query<{ present: boolean }>(`select to_regclass('drizzle.__drizzle_migrations') is not null as present`)
+  if (!found[0]?.present) return 0
+  const { rows } = await pool.query<{ count: string }>('select count(*) from drizzle.__drizzle_migrations')
+  return Number(rows[0]?.count ?? 0)
 }
 
 /**

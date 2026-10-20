@@ -1,0 +1,6 @@
+# Caddy gets a certificate for the host name and renews it, redirects http to https, and passes requests on to pforte.
+# For a name that is not public (a test on your own machine) it makes a certificate of its own, which browsers do not trust.
+{$PFORTE_HOST} {
+	encode zstd gzip
+	reverse_proxy pforte:3300
+}

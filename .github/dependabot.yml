@@ -35,9 +35,9 @@ updates:
       - dependency-name: node
         update-types: ['version-update:semver-major']
 
-  # The images of the development setup (Postgres, Mailpit).
+  # The images of the development setup (Postgres, Mailpit) and of the production example (Postgres, Caddy).
   - package-ecosystem: docker-compose
-    directory: /
+    directories: [/, /examples/production]
     schedule:
       interval: weekly
       day: monday
