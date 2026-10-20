@@ -39,6 +39,8 @@ export const en = {
 
   'error.title': 'Something went wrong',
   'error.generic': 'The request could not be completed.',
+  'error.refusedTitle': 'Request refused',
+  'error.refused': 'This request did not come from this site. Please go back to the page you were on and try again.',
   'error.signInExpiredTitle': 'Sign-in expired',
   'error.signInExpired': 'This sign-in request has expired. Please go back to the application and start again.',
   'error.notSupportedTitle': 'Not supported',

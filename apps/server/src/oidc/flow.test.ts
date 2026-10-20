@@ -53,6 +53,7 @@ describe.skipIf(!hasDatabase)('authorization code flow', () => {
       db: database.db,
     })
     app = buildApp({
+      issuer: ISSUER,
       getDatabaseTime: () => getDatabaseTime(database.db),
       oidc: { provider, authenticate: await createAuthenticate(database.db), db: database.db, notifier: recording.notifier, cookieKeys: ['k'.repeat(40)], ui: createUi(), limiter: createRateLimiter({ db: database.db, secret: 'rate-limit-test-secret' }), audit: createLoginAudit({ db: database.db, secret: 'audit-test-secret' }) },
     })

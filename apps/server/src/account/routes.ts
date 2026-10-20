@@ -15,6 +15,7 @@ import { readCookie, setCookieHeader, sign, unsign } from '../interaction/signed
 import { parseAcceptLanguage } from '../i18n/index.js'
 import { type Notifier, NotifierUnavailableError } from '../notifications/notifier.js'
 import type { Ui } from '../ui/index.js'
+import { refuseForeignPosts } from '../security/origin-check.js'
 import type { PageSet } from '../ui/pages.js'
 import { tooManyRequests } from '../ui/too-many.js'
 
@@ -29,6 +30,8 @@ export interface AccountDependencies {
   cookieKeys: string[]
   /** Whether the service is reached over https, which makes cookies `Secure`. */
   secure: boolean
+  /** The public address of pforte: forms are only accepted from pages served there. */
+  issuer: string
   /** The pages and their languages. */
   ui: Ui
   /** Says when somebody has tried too often. */
@@ -49,10 +52,17 @@ const normalizeEmail = (value: unknown) => text(value).trim().toLowerCase()
 
 /** Pages that are not part of a sign-in: choosing the first password, and choosing a new one after forgetting it. */
 export const accountRoutes =
-  ({ db, sendPasswordResetCode, codeSecrets, notifier, cookieKeys, secure, ui, limiter, audit }: AccountDependencies) =>
+  ({ db, sendPasswordResetCode, codeSecrets, notifier, cookieKeys, secure, issuer, ui, limiter, audit }: AccountDependencies) =>
   async (app: FastifyInstance) => {
     await app.register(formbody)
     ui.pages.addHeaders(app)
+    app.addHook(
+      'onRequest',
+      refuseForeignPosts(issuer, (request, reply) => {
+        const view = ui.pages.for(languageOf(request, (request.query as Record<string, unknown> | undefined)?.lang))
+        return reply.code(403).type('text/html').send(view.notice(view.t('error.refusedTitle'), view.t('error.refused')))
+      }),
+    )
 
     const html = (reply: FastifyReply, status: number, body: string) => reply.code(status).type('text/html').send(body)
     const origin = (request: FastifyRequest) => ({ ip: request.ip, userAgent: request.headers['user-agent'] })

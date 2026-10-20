@@ -39,6 +39,8 @@ export interface Config {
   mail?: { smtpUrl: string; from: string }
   /** How to send SMS. Without it, codes go by e-mail only. */
   sms?: HttpSmsSettings
+  /** Whether this is a production start (`NODE_ENV=production`), where weak secrets stop it (see `security/startup-checks.ts`). */
+  production: boolean
   /** Sign-in events (`login.*`) older than this many days are deleted; 0 keeps them. Administrative events are always kept. */
   loginAuditRetentionDays: number
 }
@@ -228,6 +230,7 @@ export const loadConfig = (env: Env = process.env): Config => ({
   rememberDeviceDefault: env.REMEMBER_DEVICE_DEFAULT === 'true',
   trustProxy: parseTrustProxy(env.TRUST_PROXY),
   loginAuditRetentionDays: parseRetention(env.AUDIT_LOGIN_RETENTION_DAYS),
+  production: env.NODE_ENV === 'production',
   mail: parseMail(env),
   sms: parseSms(env),
 })

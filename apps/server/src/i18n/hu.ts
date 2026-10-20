@@ -36,6 +36,8 @@ export const hu: Catalog = {
 
   'error.title': 'Valami hiba történt',
   'error.generic': 'A kérést nem sikerült teljesíteni.',
+  'error.refusedTitle': 'A kérés elutasítva',
+  'error.refused': 'Ez a kérés nem erről az oldalról érkezett. Kérjük, térjen vissza az előző oldalra, és próbálja újra.',
   'error.signInExpiredTitle': 'A bejelentkezés lejárt',
   'error.signInExpired': 'Ez a bejelentkezési kérés lejárt. Térjen vissza az alkalmazáshoz, és kezdje elölről.',
   'error.notSupportedTitle': 'Nem támogatott',

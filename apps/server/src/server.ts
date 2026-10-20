@@ -6,6 +6,7 @@ import { deleteOldRateLimits } from '@progwise/pforte-db/rate-limits'
 import { buildApp } from './app.js'
 import { createAuthenticate } from './auth/authenticate.js'
 import { deriveCodeSecrets } from './auth/code-secrets.js'
+import { checkConfig, checkDevelopmentLeftovers, startupFailure } from './security/startup-checks.js'
 import { createLoginAudit } from './auth/login-audit.js'
 import { createRateLimiter } from './auth/rate-limiter.js'
 import { createPasswordResetSender } from './auth/password-reset.js'
@@ -32,9 +33,15 @@ const ui = createUi({
   rememberDeviceDefault: config.rememberDeviceDefault,
   theme: brand.theme,
 })
+const startupProblems = checkConfig(config)
 const { db, pool } = createDb(config.databaseUrl, {
   onError: (error) => app.log.error(error, 'database pool error'),
 })
+
+startupProblems.push(...(await checkDevelopmentLeftovers(db).catch(() => [])))
+if (startupProblems.length > 0 && config.production) {
+  throw new Error(startupFailure(startupProblems))
+}
 
 const provider = await createProviderHolder({
   config,
@@ -70,6 +77,7 @@ const sendPasswordResetCode = createPasswordResetSender({
 const app = buildApp({
   ui,
   trustProxy: config.trustProxy,
+  issuer: config.issuer,
   getDatabaseTime: () => getDatabaseTime(db),
   oidc: { provider, authenticate, db, notifier, cookieKeys: config.cookieKeys, ui, limiter, audit },
   account: {
@@ -79,6 +87,7 @@ const app = buildApp({
     notifier,
     cookieKeys: config.cookieKeys,
     secure: config.issuer.startsWith('https:'),
+    issuer: config.issuer,
     ui,
     limiter,
     audit,
@@ -93,6 +102,9 @@ const app = buildApp({
 })
 
 for (const warning of warnings) app.log.warn(warning)
+if (startupProblems.length > 0) {
+  app.log.warn({ problems: startupProblems }, `${startupProblems.length} thing(s) would stop pforte in production (NODE_ENV=production)`)
+}
 
 const cleanup = setInterval(() => {
   deleteExpiredOidcPayloads(db).catch((error) => app.log.error(error, 'cleanup of expired OIDC payloads failed'))

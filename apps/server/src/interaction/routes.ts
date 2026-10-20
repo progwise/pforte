@@ -18,6 +18,7 @@ import { parseAcceptLanguage } from '../i18n/index.js'
 import type { Ui } from '../ui/index.js'
 import type { PageSet } from '../ui/pages.js'
 import { tooManyRequests } from '../ui/too-many.js'
+import { refuseForeignPosts } from '../security/origin-check.js'
 import { readCookie, setCookieHeader, sign, unsign } from './signed-cookie.js'
 
 export interface InteractionDependencies {
@@ -62,6 +63,13 @@ export const interactionRoutes =
     const cookiePath = (uid: string) => `/interaction/${encodeURIComponent(uid)}`
 
     ui.pages.addHeaders(app)
+    app.addHook(
+      'onRequest',
+      refuseForeignPosts(provider.issuer, (request, reply) => {
+        const view = ui.pages.for(languageOf(request))
+        return reply.code(403).type('text/html').send(view.notice(view.t('error.refusedTitle'), view.t('error.refused')))
+      }),
+    )
 
     /** The interaction this request belongs to, or undefined if the cookie or uid does not match. */
     const interactionFor = async (request: FastifyRequest, reply: FastifyReply, uid: string) => {

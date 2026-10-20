@@ -36,6 +36,8 @@ export const fr: Catalog = {
 
   'error.title': "Une erreur s'est produite",
   'error.generic': "La demande n'a pas pu être traitée.",
+  'error.refusedTitle': 'Demande refusée',
+  'error.refused': 'Cette demande ne provient pas de ce site. Veuillez retourner à la page précédente et réessayer.',
   'error.signInExpiredTitle': 'Connexion expirée',
   'error.signInExpired': "Cette demande de connexion a expiré. Veuillez retourner à l'application et recommencer.",
   'error.notSupportedTitle': 'Non pris en charge',

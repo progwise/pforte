@@ -36,6 +36,8 @@ export const de: Catalog = {
 
   'error.title': 'Etwas ist schiefgelaufen',
   'error.generic': 'Die Anfrage konnte nicht abgeschlossen werden.',
+  'error.refusedTitle': 'Anfrage abgelehnt',
+  'error.refused': 'Diese Anfrage kam nicht von dieser Seite. Bitte gehen Sie zur vorherigen Seite zurück und versuchen Sie es erneut.',
   'error.signInExpiredTitle': 'Anmeldung abgelaufen',
   'error.signInExpired': 'Diese Anmeldeanfrage ist abgelaufen. Bitte gehen Sie zurück zur Anwendung und beginnen Sie von vorn.',
   'error.notSupportedTitle': 'Nicht unterstützt',

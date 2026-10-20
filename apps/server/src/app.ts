@@ -3,6 +3,7 @@ import { accountRoutes, type AccountDependencies } from './account/routes.js'
 import { type AdminDependencies, adminRoutes } from './admin/index.js'
 import type { InteractionDependencies } from './interaction/routes.js'
 import { interactionRoutes } from './interaction/routes.js'
+import { addSecurityHeaders } from './security/headers.js'
 import { brandRoutes } from './ui/brand-routes.js'
 import type { Ui } from './ui/index.js'
 import { oidcRoutes } from './oidc/routes.js'
@@ -17,6 +18,8 @@ export interface AppDependencies {
   account?: AccountDependencies
   /** How many proxies stand in front of pforte; see `Config.trustProxy`. */
   trustProxy?: number
+  /** The public address of pforte. Over https, responses carry HSTS. */
+  issuer?: string
   /** Returns the current time as reported by the database. */
   getDatabaseTime: () => Promise<Date>
   /** The OpenID Connect provider and its login. Omitted in tests that do not need them. */
@@ -25,13 +28,14 @@ export interface AppDependencies {
   }
 }
 
-export const buildApp = ({ getDatabaseTime, oidc, admin, account, ui, trustProxy = 0 }: AppDependencies) => {
+export const buildApp = ({ getDatabaseTime, oidc, admin, account, ui, trustProxy = 0, issuer }: AppDependencies) => {
   // "The first N proxies are trusted": the client is what the Nth proxy from the end says it is.
   const options: FastifyServerOptions = {
     logger: process.env.NODE_ENV !== 'test',
     trustProxy: trustProxy > 0 ? (_address, hop) => hop < trustProxy : false,
   }
   const app = Fastify(options)
+  addSecurityHeaders(app, { https: issuer?.startsWith('https:') ?? false })
 
   // Rate limits count by client address. Behind a proxy without TRUST_PROXY that address is the proxy's,
   // and everybody would be counted together: worth saying once, loudly.
