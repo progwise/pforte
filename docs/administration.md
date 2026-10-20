@@ -108,6 +108,30 @@ range**. Days are counted in your `TIME_ZONE`. Like the search on the users page
 send. A person who was deleted shows with the e-mail address kept in the event. The page of a person links to all events about
 them.
 
+## Import
+
+**Import** (`/manage/import`) creates and updates people and their claims from a CSV file, the same as `pforte import` on the
+command line, which is the better tool for very large files or for a job that runs by itself. The page takes files up to 5 MB.
+
+1. **Choose the file and the options.** The file has a header row with `email`, `first_name` and `last_name`, optionally `phone`
+   and `language`, and one column for every claim type you want to set, named like the claim type. A person whose e-mail
+   address is already known is updated, anybody else is created. Say how the file is encoded (Excel in Germany writes
+   Windows-1252 unless you choose "CSV UTF-8"), what separates several values in one cell, whether to skip columns that are not
+   claim types, and what happens to people who are **not in the file**: nothing, lock them, or delete them. Delete needs you to
+   type a word, and a safety limit (20% by default) stops the import when a cut-off file would affect many people.
+   Administrators are never touched.
+2. **Check.** Nothing is written yet. The page shows how many people would be created, updated and left unchanged, what
+   would change, who would be locked or deleted, and the rows that cannot be imported, each with its line and the reason.
+   The rejected rows can be downloaded as a CSV in the layout of your file plus the columns `line` and `reason`, to fix and import
+   again.
+3. **Import now.** The file you checked is imported, exactly with the options you checked. Rejected rows are skipped.
+
+An example file for the seeded database is [examples/users.csv](../examples/users.csv).
+
+The checked file is kept in the server's memory (never on disk) for 30 minutes, one per administrator, and is let go of as
+soon as it is imported. The import is made through the admin API with your own token, so it is recorded in the audit log under
+your name, person by person.
+
 Times are shown in the time zone you set with `TIME_ZONE` (default UTC), in the language of the administrator.
 
 ## For those who call the admin API

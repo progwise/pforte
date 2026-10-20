@@ -1,0 +1,7 @@
+email,first_name,last_name,phone,language,partner_no,customer_no,branch_code
+lena.hoffmann@example.com,Lena,Hoffmann,+49 151 1234 5678,de,10001,,B-01
+omar.haddad@example.com,Omar,Haddad,,en,10002;10003,20001,B-02
+sofia.rossi@example.com,Sofia,Rossi,0049 160 9876 5432,en,,20002,B-01
+anna.schmidt@example.com,Anna,Schmidt-Meyer,+4915100000001,de,10004,,
+not-an-address,Broken,Row,,de,10005,,
+tim.becker@example.com,Tim,Becker,,de,partner-17,,

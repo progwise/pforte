@@ -32,6 +32,10 @@ saved by a German Excel works. Save it as "CSV UTF-8"; for an older file use `--
 A column that is neither of these stops the import and suggests the closest name ("did you mean
 `partner_no`?"). `--ignore-unknown-columns` skips such columns with a warning instead.
 
+An example that works against the seeded database is [examples/users.csv](../examples/users.csv): three new people (one with
+two partner numbers), an update of a seeded user, and two rows that are rejected, so that you can see what that looks like.
+Try it with `--dry-run`, or on the Import page of the administration.
+
 ## Rejected rows
 
 A row with a problem (bad e-mail, a value that does not match the claim type's pattern, a second

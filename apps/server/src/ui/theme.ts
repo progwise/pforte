@@ -211,7 +211,7 @@ fieldset.group label.check { min-height: 2.25rem; }
 code.secret { display: block; padding: 0.8rem; margin: 1rem 0; overflow-wrap: anywhere; font: 1rem ui-monospace, monospace; background: var(--background); border: 1px solid var(--border); border-radius: var(--radius-small); user-select: all; }
 .cards { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }
 .cards .panel { margin: 0; }
-.cards h2 { margin-top: 0; }
+.cards h2, .panel > h2:first-child { margin-top: 0; }
 .events { background: var(--surface); border-radius: var(--radius-small); box-shadow: 0 1px 3px rgb(0 0 0 / 12%); overflow: hidden; }
 .events .cols { display: grid; grid-template-columns: 13rem 1.2fr 1.2fr 1.2fr 8rem; gap: 0.25rem 1rem; align-items: start; padding: 0.7rem 0.85rem; }
 .events .head { font: 600 0.85rem var(--font-heading); color: var(--muted); }

@@ -9,6 +9,27 @@ export const registerCodeSource = (app: FastifyInstance, source: (email: string)
 }
 
 /** A minimal browser for driving the provider through `app.inject`: it keeps cookies between requests. */
+export interface Multipart {
+  fields?: Record<string, string>
+  file?: { field?: string; name: string; content: Buffer | string }
+}
+
+/** A `multipart/form-data` body, as a browser sends it for a form with a file. */
+const multipartBody = ({ fields = {}, file }: Multipart) => {
+  const boundary = `----pforte-test-${randomBytes(8).toString('hex')}`
+  const parts: Buffer[] = []
+  for (const [name, value] of Object.entries(fields)) {
+    parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`))
+  }
+  if (file) {
+    parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${file.field ?? 'file'}"; filename="${file.name}"\r\nContent-Type: text/csv\r\n\r\n`))
+    parts.push(Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content))
+    parts.push(Buffer.from('\r\n'))
+  }
+  parts.push(Buffer.from(`--${boundary}--\r\n`))
+  return { contentType: `multipart/form-data; boundary=${boundary}`, body: Buffer.concat(parts) }
+}
+
 export class Browser {
   readonly cookies = new Map<string, string>()
 
@@ -29,9 +50,10 @@ export class Browser {
   async request(
     method: 'GET' | 'POST',
     url: string,
-    { form, headers, ip }: { form?: Record<string, string | string[]>; headers?: Record<string, string>; ip?: string } = {},
+    { form, multipart, headers, ip }: { form?: Record<string, string | string[]>; multipart?: Multipart; headers?: Record<string, string>; ip?: string } = {},
   ) {
     const target = new URL(url, 'http://localhost:3300')
+    const upload = multipart && multipartBody(multipart)
     const response = await this.app.inject({
       method,
       url: target.pathname + target.search,
@@ -40,9 +62,10 @@ export class Browser {
           ? { cookie: [...this.cookies].map(([name, value]) => `${name}=${value}`).join('; ') }
           : {}),
         ...(form ? { 'content-type': 'application/x-www-form-urlencoded' } : {}),
+        ...(upload ? { 'content-type': upload.contentType } : {}),
         ...headers,
       },
-      payload: form ? new URLSearchParams(Object.entries(form).flatMap(([name, value]) => (Array.isArray(value) ? value : [value]).map((item) => [name, item] as [string, string]))).toString() : undefined,
+      payload: upload ? upload.body : form ? new URLSearchParams(Object.entries(form).flatMap(([name, value]) => (Array.isArray(value) ? value : [value]).map((item) => [name, item] as [string, string]))).toString() : undefined,
       remoteAddress: ip,
     })
     this.store(response.headers['set-cookie'])

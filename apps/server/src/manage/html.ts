@@ -7,7 +7,7 @@ export const field = (options: {
   name?: string
   label: string
   value?: string | null
-  type?: 'text' | 'email' | 'tel' | 'search' | 'date'
+  type?: 'text' | 'email' | 'tel' | 'search' | 'date' | 'number'
   /** The id of a `<datalist>` with suggestions. */
   list?: string
   hint?: string
@@ -73,3 +73,13 @@ ${options.choices
   .join('\n')}
 ${options.hint ? `<small class="muted">${escapeHtml(options.hint)}</small>` : ''}${options.error ? `<small class="field-error">${escapeHtml(options.error)}</small>` : ''}
 </fieldset>`
+
+/** Choosing a file to upload. */
+export const fileInput = (options: { id: string; name?: string; label: string; accept?: string; hint?: string; error?: string; required?: boolean }) => {
+  const { id, name = id, label, accept, hint, error, required } = options
+  return `<div>
+<label for="${escapeHtml(id)}">${escapeHtml(label)}</label>
+<input id="${escapeHtml(id)}" name="${escapeHtml(name)}" type="file"${accept ? ` accept="${escapeHtml(accept)}"` : ''}${required ? ' required' : ''}${error ? ' aria-invalid="true"' : ''}>
+${hint ? `<small class="muted">${escapeHtml(hint)}</small>` : ''}${error ? `<small class="field-error">${escapeHtml(error)}</small>` : ''}
+</div>`
+}

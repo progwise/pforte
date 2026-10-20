@@ -10,6 +10,7 @@ import { createManageContext, type ManageDependencies, type ManageSession, SESSI
 import { registerAudit } from './audit.js'
 import { registerClaimTypes } from './claim-types.js'
 import { registerClients } from './clients.js'
+import { registerImport } from './import.js'
 import { registerUsers } from './users.js'
 import { challengeOf, isForThisSignIn, type LoginState, newLogin, readIdToken, safeNext } from './oidc.js'
 
@@ -173,4 +174,5 @@ export const manageRoutes =
     registerClients(app, ctx)
     registerClaimTypes(app, ctx)
     registerAudit(app, ctx)
+    registerImport(app, ctx)
   }
