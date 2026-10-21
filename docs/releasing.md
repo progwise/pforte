@@ -27,7 +27,8 @@ Taking it back before pushing: `git tag -d v0.1.0 && git reset --hard HEAD~1`.
    [production example](../examples/production/README.md) with it, and scans it for known vulnerabilities (high and critical
    findings that have a fix stop the release; see [security](security.md#dependencies)).
 4. Builds it for amd64 and arm64 and pushes `ghcr.io/progwise/pforte` with the tags `1.2.3`, `1.2`, `1` and `latest`
-   (for `0.x`: `0.1.0` and `0.1`, and `latest`), with an SBOM and a provenance attestation.
+   (for `0.x`: `0.1.0`, `0.1` and `latest`, but no `0`, which would move along through breaking releases), with an SBOM and a
+   provenance attestation.
 5. Starts the pushed image by its digest and runs the smoke test again, and checks that the arm64 image starts.
 6. Signs an attestation of where the image comes from, and creates the **GitHub release** with the changelog entry as its text.
 
@@ -69,7 +70,11 @@ Migrations only go forward: there is no downgrade. That is why the update instru
 
 ## If something goes wrong
 
-- **The workflow fails before the release exists**: fix it and run the failed workflow again, or delete the tag
-  (`git push origin :refs/tags/v0.1.0`) and cut it again.
+- **The workflow fails before the release exists**: if the cause was temporary, run the failed workflow again. A run uses the
+  workflow file of the commit that was tagged, so if the fix is in a workflow file, the tag has to move to a commit that has it:
+  `git push origin :refs/tags/v0.1.0 && git tag -d v0.1.0`, fix on `main`, then `git tag -a v0.1.0 -m "pforte 0.1.0"` and
+  push the tag. This is fine only as long as no GitHub release exists and nobody has used the version. The tags a failed run already
+  pushed to the registry are overwritten, except for tags that the fixed workflow no longer makes: delete those in the
+  package's settings.
 - **A published version is bad**: do not reuse its number. Publish a fixed version, and say in its changelog entry what was wrong.
   A GitHub release can be edited to warn about the version; an image can be deleted in the package settings.

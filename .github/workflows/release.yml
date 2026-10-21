@@ -118,10 +118,11 @@ jobs:
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.IMAGE }}
+          # No tag "0" for 0.x: it would move along through minor releases that may break things.
           tags: |
             type=semver,pattern={{version}},value=v${{ steps.version.outputs.version }}
             type=semver,pattern={{major}}.{{minor}},value=v${{ steps.version.outputs.version }}
-            type=semver,pattern={{major}},value=v${{ steps.version.outputs.version }}
+            type=semver,pattern={{major}},value=v${{ steps.version.outputs.version }},enable=${{ !startsWith(steps.version.outputs.version, '0.') }}
       # A rehearsal builds both platforms too, and discards the result.
       - name: Build both platforms, and publish them
         id: push
@@ -143,12 +144,18 @@ jobs:
       - name: The published image works
         if: steps.version.outputs.publish == 'true'
         env:
-          REFERENCE: ${{ env.IMAGE }}@${{ steps.push.outputs.digest }}
+          DIGEST: ${{ steps.push.outputs.digest }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
+          REFERENCE="$IMAGE@$DIGEST"
           docker pull "$REFERENCE"
           scripts/smoke-test-image.sh "$REFERENCE" "$VERSION"
-          [ "$(docker run --rm --platform linux/arm64 "$REFERENCE" --version)" = "$VERSION" ]
+          # The other platform. A digest cannot be pulled for a second platform, so this goes by the tag, after making sure
+          # that the tag is what was just pushed and that the index lists arm64.
+          INDEX=$(docker buildx imagetools inspect "$IMAGE:$VERSION" | awk '/^Digest:/ {print $2; exit}')
+          [ "$INDEX" = "$DIGEST" ] || { echo "::error::$IMAGE:$VERSION is $INDEX, not the $DIGEST that was pushed"; exit 1; }
+          docker buildx imagetools inspect "$REFERENCE" | grep -q 'Platform: *linux/arm64' || { echo "::error::the image has no arm64 variant"; exit 1; }
+          [ "$(docker run --rm --platform linux/arm64 "$IMAGE:$VERSION" --version)" = "$VERSION" ]
       - name: Attestation of where the image comes from
         if: steps.version.outputs.publish == 'true'
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
