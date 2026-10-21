@@ -135,7 +135,8 @@ pnpm site:serve    # shows it on http://localhost:4000
 The reference of the admin API is made from `docs/openapi.json`, which the server's tests keep in step with the code: after changing a
 route, run `pnpm openapi` to update it (the test fails, and says so, when it is out of date). A new document needs an entry in
 `site/src/navigation.ts`. The build, and with it CI, fails on a document that is not in the
-navigation, on a link to a file or a section that does not exist, and on a page without a title.
+navigation, on a link to a file or a section that does not exist, and on a page without a title. The workflow `site.yml` publishes the
+site at https://pforte.dev whenever a document it is made from changes on `main`.
 
 ### Ports
 

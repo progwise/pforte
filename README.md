@@ -3,6 +3,8 @@
 A small, self-hosted OpenID Connect identity service for organisations whose users are managed
 by a back office rather than by self-registration.
 
+**Documentation: <https://pforte.dev>**
+
 **Status: first release, 0.1.0.** Sign-in with e-mail and password and a second factor by code, remembered devices, password
 reset and activation links, the authorization code flow with PKCE, refresh tokens, logout, an admin API, an administration
 (users, clients, claim types, audit log, CSV import), a login audit with rate limits, your own name, colours and languages,
