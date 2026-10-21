@@ -3,12 +3,11 @@
 A small, self-hosted OpenID Connect identity service for organisations whose users are managed
 by a back office rather than by self-registration.
 
-**Status: feature complete, first release in preparation.** Sign-in with e-mail and password and a second factor by code,
-remembered devices, password reset and activation links, the authorization code flow with PKCE, refresh tokens, logout, an
-admin API, an administration (users, clients, claim types, audit log, CSV import), a login audit with rate limits, your own
-name, colours and languages, and a Docker image all work and are tested. What is left before a release is publishing the
-image and a changelog ([#9](https://github.com/progwise/pforte/issues/9)). Until then there is no published image: build it
-from this repository.
+**Status: first release, 0.1.0.** Sign-in with e-mail and password and a second factor by code, remembered devices, password
+reset and activation links, the authorization code flow with PKCE, refresh tokens, logout, an admin API, an administration
+(users, clients, claim types, audit log, CSV import), a login audit with rate limits, your own name, colours and languages,
+and a Docker image all work and are tested. The image is `ghcr.io/progwise/pforte`; what changed in each release is in the
+[changelog](CHANGELOG.md). While the version starts with 0, a release can break things: read the changelog before you update.
 
 ## Why another identity service
 
@@ -114,8 +113,7 @@ ERP ──(hourly)──▶ import job ──(admin API)──▶ pforte
 
 For a server: [examples/production](examples/production/README.md) runs pforte, Postgres and Caddy (automatic TLS) with
 Docker Compose, with secrets as files and a read-only, unprivileged pforte. Every setting is in
-[docs/configuration.md](docs/configuration.md). Until the first release is published, build the image yourself with
-`docker build -t pforte .`.
+[docs/configuration.md](docs/configuration.md). The image is `ghcr.io/progwise/pforte`, for amd64 and arm64; pin a version.
 
 ## Development
 
@@ -137,11 +135,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details, and [docs/configuration.md](
 ## Roadmap
 
 Done: the OpenID Connect provider, the admin API, CSV import, the administration, the second factor, remembered devices and
-password reset, the audit log and rate limits, branding and languages, the Docker image and a production example.
+password reset, the audit log and rate limits, branding and languages, the Docker image and a production example, and the first
+release (0.1.0).
 
-Next: the first release ([#9](https://github.com/progwise/pforte/issues/9)), a page where people manage their own account
-([#18](https://github.com/progwise/pforte/issues/18)), and ideas that wait for a need: a consent screen, custom URL schemes for
-native apps, self-service sign-up, a first-party login API.
+Next: a page where people manage their own account ([#18](https://github.com/progwise/pforte/issues/18)), and ideas that wait
+for a need: a consent screen, custom URL schemes for native apps, self-service sign-up, a first-party login API.
 
 ## Contributing
 

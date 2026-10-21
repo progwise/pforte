@@ -18,9 +18,9 @@ docker compose up -d
 docker compose logs -f pforte
 ```
 
-Until the first release is published, build the image yourself (`docker build -t pforte ../..`) and put `PFORTE_IMAGE=pforte`
-in `.env`. Afterwards use a published version: `PFORTE_IMAGE=ghcr.io/progwise/pforte:0.1.0`. **Pin a version** rather than
-`latest`, so an update is something you decide.
+Use a published version: `PFORTE_IMAGE=ghcr.io/progwise/pforte:0.1.0` in `.env` (the available versions are on the
+[releases page](https://github.com/progwise/pforte/releases)). **Pin a version** rather than `latest`, so an update is something
+you decide.
 
 `setup.sh` makes five secrets in `./secrets`: the database password and its address, the key that signs cookies, the key that
 signs tokens, and your mail server's address. They are files, not values in the compose file or in `.env`, so they do not show up

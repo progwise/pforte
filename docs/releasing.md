@@ -41,13 +41,9 @@ platforms, tests and scans, and takes the notes from "Unreleased" if the version
 
 ## After the first release
 
-Once, after the first tag has been pushed:
-
-1. **Make the image public.** A new package of an organisation starts as private, and the workflow cannot tell, because it
-   pulls with a login. On GitHub: the organisation's *Packages* → `pforte` → *Package settings* → *Change visibility* → Public.
-   Check from outside: `docker logout ghcr.io && docker pull ghcr.io/progwise/pforte:0.1.0`.
-2. **Remove the "no published image yet" sentences** from [README.md](../README.md) and
-   [examples/production/README.md](../examples/production/README.md).
+Check from outside that the image can be pulled without a login: `docker logout ghcr.io && docker pull ghcr.io/progwise/pforte:0.1.0`.
+The workflow cannot tell, because it pulls with a login. A new package of an organisation can start as private; if it did, make it
+public: the organisation's *Packages* → `pforte` → *Package settings* → *Change visibility*.
 
 ## Verifying an image
 
