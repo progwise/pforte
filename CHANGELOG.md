@@ -8,6 +8,8 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
 
 ## Unreleased
 
+## 0.1.0 (2026-10-21)
+
 The first release.
 
 ### Added
