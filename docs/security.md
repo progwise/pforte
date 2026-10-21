@@ -87,6 +87,10 @@ logs as short as your obligations allow.
   push and **every Monday**. The scan (Trivy) fails on high or critical findings that have a fix, in the operating system
   packages of the base image and in the Node packages. Accepted findings go into `.trivyignore`, each with its reason and a date
   to look at it again. The base image is pinned by digest, and Dependabot proposes new ones (after the same 14 days).
+- **The repository** protects `main` with rules: changes arrive only through pull requests, which can be merged when `check`,
+  `dependencies`, `image` and `signoff` have passed, with linear history, and no force-push or deletion. Tags `v*`, which start
+  a release and publish the image, can only be created by administrators and cannot be moved or deleted without that right.
+  Administrators can bypass the checks of a pull request in an emergency, but not push to `main`.
 - **Accepted advisory:** `GHSA-67mh-4wv8-2f99` (moderate), in `esbuild` through `drizzle-kit`, a tool that writes database
   migrations during development. It is not part of what runs in production. It stays accepted until `drizzle-kit` ships a
   fix, and is checked again each time it is updated.
