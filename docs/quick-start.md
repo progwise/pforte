@@ -55,7 +55,8 @@ version are in the [changelog](../CHANGELOG.md). Every setting is described in t
 
 - Put people into pforte: create them in the administration, or [import them from a CSV file](import.md). A system of record can
   keep them current through the admin API.
-- Look at the [example application](../examples/relying-party) to see what an application needs to do to sign users in. It uses the
-  standard `openid-client` library and nothing specific to pforte.
+- Connect an application: [integrating an application](integrating-a-client.md) walks through the example application, how to
+  register your own, what the tokens contain, and the requests without a library. The
+  [example application](../examples/relying-party) uses the standard `openid-client` library and nothing specific to pforte.
 - Make the pages your own: [branding and languages](branding-and-languages.md).
 - Read what pforte does against attacks, and what it asks of you: [security measures](security.md).
