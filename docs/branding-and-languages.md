@@ -97,7 +97,7 @@ cannot use the page otherwise.
 The code is entered in one large field with wide letter spacing, not in six separate boxes. That keeps the pages free of
 JavaScript and lets phones fill in the code from an SMS, which separate boxes often prevent.
 
-# Languages and texts
+## Languages and texts
 
 pforte's pages, e-mails and SMS come in **English, German, French and Hungarian**. More languages are added
 with a file, and every text can be replaced for one installation.

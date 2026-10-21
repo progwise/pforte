@@ -15,13 +15,12 @@ they prefer not to be named.
 
 ## Supported versions
 
-pforte is in the design phase and has no releases yet. Once released, the latest minor
-version receives security fixes.
+The latest release receives security fixes. While the version starts with 0, that is the latest minor version, for example 0.1.x.
+Update to it before reporting a problem, if you can.
 
 ## Scope
 
-In scope: this repository, the published Docker image and the npm packages under the
-`@progwise` scope that belong to pforte.
+In scope: this repository and the published Docker image, `ghcr.io/progwise/pforte`.
 
 Out of scope: the OpenID Connect protocol implementation itself, which comes from
 [node-oidc-provider](https://github.com/panva/node-oidc-provider). Please report issues in
