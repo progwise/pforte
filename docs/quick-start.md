@@ -54,7 +54,7 @@ version are in the [changelog](../CHANGELOG.md). Every setting is described in t
 ## What next
 
 - Put people into pforte: create them in the administration, or [import them from a CSV file](import.md). A system of record can
-  keep them current through the admin API.
+  keep them current through the admin API ([syncing users](syncing-users.md)).
 - Connect an application: [integrating an application](integrating-a-client.md) walks through the example application, how to
   register your own, what the tokens contain, and the requests without a library. The
   [example application](../examples/relying-party) uses the standard `openid-client` library and nothing specific to pforte.

@@ -90,22 +90,27 @@ export const createAdminAuth = ({ provider, db, limiter }: AdminAuthDependencies
     }
   }
 
-  /** A route hook: only callers holding one of the given scopes may continue. */
-  const require =
-    (...allowed: AdminScope[]) =>
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      const token = /^Bearer (\S+)$/i.exec(request.headers.authorization ?? '')?.[1]
-      if (!token) return unauthorized(request, reply)
+  /**
+   * A route hook: only callers holding one of the given scopes may continue. The hook carries its scopes, so that the OpenAPI
+   * document can say what each operation needs without a second list that could drift.
+   */
+  const require = (...allowed: AdminScope[]) =>
+    Object.assign(
+      async (request: FastifyRequest, reply: FastifyReply) => {
+        const token = /^Bearer (\S+)$/i.exec(request.headers.authorization ?? '')?.[1]
+        if (!token) return unauthorized(request, reply)
 
-      const caller = (await machineCaller(token)) ?? (await personCaller(token))
-      if (!caller) return unauthorized(request, reply)
+        const caller = (await machineCaller(token)) ?? (await personCaller(token))
+        if (!caller) return unauthorized(request, reply)
 
-      if (!allowed.some((scope) => caller.scopes.includes(scope))) {
-        return problem(reply, 403, 'Forbidden', `This call needs the ${allowed.join(' or ')} scope.`)
-      }
+        if (!allowed.some((scope) => caller.scopes.includes(scope))) {
+          return problem(reply, 403, 'Forbidden', `This call needs the ${allowed.join(' or ')} scope.`)
+        }
 
-      request.admin = caller
-    }
+        request.admin = caller
+      },
+      { scopes: allowed as readonly AdminScope[] },
+    )
 
   return { require }
 }

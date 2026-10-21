@@ -70,7 +70,7 @@ The application verifies the token with the JWKS endpoint, reads the claims, and
 no authorization beyond "this person holds these claims". [Integrating an application](integrating-a-client.md) describes it step by
 step; a complete, runnable example of such an application is in [examples/relying-party](../examples/relying-party).
 
-A system of record keeps users current:
+A system of record keeps users current ([syncing users](syncing-users.md)):
 
 ```text
 ERP ──(hourly)──▶ import job ──(admin API)──▶ pforte

@@ -6,6 +6,8 @@ export interface NavigationEntry {
   source: string
   /** The name in the menu, where the title of the document is not what it should say there. */
   menu?: string
+  /** A page that is made from a data file instead of a document: the reference of the admin API. */
+  generated?: 'openapi'
 }
 
 export interface NavigationGroup {
@@ -23,7 +25,11 @@ export const navigation: NavigationGroup[] = [
   },
   {
     title: 'Integrate',
-    pages: [{ slug: 'integrating-a-client', source: 'docs/integrating-a-client.md', menu: 'Integrating an application' }],
+    pages: [
+      { slug: 'integrating-a-client', source: 'docs/integrating-a-client.md', menu: 'Integrating an application' },
+      { slug: 'syncing-users', source: 'docs/syncing-users.md', menu: 'Syncing users' },
+      { slug: 'admin-api', source: 'docs/openapi.json', generated: 'openapi', menu: 'Admin API reference' },
+    ],
   },
   {
     title: 'Operate',
