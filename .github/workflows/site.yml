@@ -3,6 +3,7 @@ name: Site
 # Builds the documentation site and publishes it at https://pforte.dev with GitHub Pages, whenever something it is made
 # from changes on main. Pull requests build the site in the checks of CI (`pnpm build`), without publishing it.
 # The actions are pinned to a commit: the deploy job may write to the site.
+# To publish without a change (after a failed run, or to refresh the version of the latest release): Actions → Site → Run workflow.
 on:
   push:
     branches: [main]
