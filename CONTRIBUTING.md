@@ -120,6 +120,21 @@ The image runs in production mode, so it needs the settings production needs (ht
 password). It applies pending database migrations at start (`MIGRATE_ON_START=false` skips that); `pforte:dev migrate` only
 migrates. `pforte:dev --help` lists the commands.
 
+### The documentation site
+
+The site at pforte.dev is generated from `docs/` and a few other documents of the repository (`CHANGELOG.md`, `SECURITY.md`,
+`examples/production/README.md`) by the small generator in `site/`. The documents are the only source: write them for readers on
+GitHub as well, link to other documents with relative links (`security.md`, `../CONTRIBUTING.md`), and the generator turns them
+into links of the site or of GitHub.
+
+```sh
+pnpm site          # builds the site into site/dist
+pnpm site:serve    # shows it on http://localhost:4000
+```
+
+A new document needs an entry in `site/src/navigation.ts`. The build, and with it CI, fails on a document that is not in the
+navigation, on a link to a file or a section that does not exist, and on a page without a title.
+
 ### Ports
 
 - Mailpit, which catches the e-mails pforte sends, listens for SMTP on **1026** and shows the mails on

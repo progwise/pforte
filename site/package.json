@@ -1,0 +1,20 @@
+{
+  "name": "@progwise/pforte-site",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The documentation site of pforte (https://pforte.dev), generated from docs/.",
+  "scripts": {
+    "build": "tsx src/build.ts",
+    "serve": "tsx src/serve.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "markdown-it": "14.3.2"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "14.2.0",
+    "tsx": "4.23.15"
+  }
+}

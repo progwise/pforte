@@ -2,6 +2,7 @@ packages:
   - apps/*
   - packages/*
   - examples/*
+  - site
 allowBuilds:
   esbuild: true
 minimumReleaseAgeExclude:

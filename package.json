@@ -12,6 +12,8 @@
     "conformance:setup": "node scripts/conformance-setup.mjs",
     "conformance:start": "pnpm --filter @progwise/pforte-server conformance",
     "pforte": "apps/cli/node_modules/.bin/tsx apps/cli/src/cli.ts",
+    "site": "pnpm --filter @progwise/pforte-site build",
+    "site:serve": "pnpm --filter @progwise/pforte-site serve",
     "dev:example":"pnpm --filter @progwise/pforte-example-relying-party start",
     "dev:up":"docker compose -f compose.dev.yaml up -d --wait",
     "dev:down": "docker compose -f compose.dev.yaml down",
