@@ -8,8 +8,6 @@ For maintainers. A release is a tag `vX.Y.Z` on `main`. Pushing it starts the wo
 - The OpenID conformance suite was run again against `main` ([conformance](conformance.md)); it cannot run in CI.
 - The section **Unreleased** of [CHANGELOG.md](../CHANGELOG.md) says what changed, in words an operator understands, and says
   clearly what **breaks**: a renamed or removed variable, a changed admin API, a change that needs action before updating.
-- After the very first release only: in [README.md](../README.md) and
-  [examples/production/README.md](../examples/production/README.md) remove the sentences that say there is no published image yet.
 
 ## Cut it
 
@@ -39,6 +37,16 @@ The release is the last step: if anything fails before it, there is no release, 
 platforms, tests and scans, and takes the notes from "Unreleased" if the version has no entry yet.
 
 **Pre-releases.** A tag such as `v0.2.0-rc.1` makes a pre-release on GitHub. It gets no `latest` and no `0.2` tag.
+
+## After the first release
+
+Once, after the first tag has been pushed:
+
+1. **Make the image public.** A new package of an organisation starts as private, and the workflow cannot tell, because it
+   pulls with a login. On GitHub: the organisation's *Packages* → `pforte` → *Package settings* → *Change visibility* → Public.
+   Check from outside: `docker logout ghcr.io && docker pull ghcr.io/progwise/pforte:0.1.0`.
+2. **Remove the "no published image yet" sentences** from [README.md](../README.md) and
+   [examples/production/README.md](../examples/production/README.md).
 
 ## Verifying an image
 

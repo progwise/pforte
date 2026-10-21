@@ -113,10 +113,6 @@ Warnings are accepted for certification. These are known and intended:
   allowed. Applications get claims through scopes.
 - `oidcc-alternate-happy-flow`: the same two warnings as `oidcc-scope-email` (the e-mail is also in
   the ID token; not all standard claims of the scope are returned).
-- `oidcc-ensure-request-with-acr-values-succeeds`: in the run below the request succeeded, but pforte
-  returned no `acr` claim although `acr_values` were requested (a SHOULD). Since #6 pforte returns `acr`
-  and `amr` and advertises `acr_values_supported`, so this warning is expected to be gone in the next
-  run. If it is not, record why here.
 - `oidcc-scope-address`, `oidcc-scope-all`: skipped, because pforte does not support the
   `address` scope (`scope-all` includes it).
 - `oidcc-unsigned-request-object-supported-correctly-or-rejected-as-unsupported`: skipped,
@@ -146,10 +142,34 @@ Keep the link to each test's log. Record the outcome of each run below.
 
 ## Results
 
-### Run of 2026-10-16: no failures
+### Run of 2026-10-20: no failures
 
-This run predates the second factor (#6). The sign-in now has a code step, and the ID token has `acr`,
-`amr` and `email_verified`, so the next run should be a full one; update the lists above with what it shows.
+The run for the first release: a complete run on pforte commit `16970cc`, the head of `main` when it started. The release
+adds only the changelog entry to it, so the image is built from this code.
+
+Plan `oidcc-basic-certification-test-plan` (id `CbyR5vcTxLfZR`), suite version 5.3.3 (revision `7d420f7`), variant
+`server_metadata=discovery, client_registration=static_client`, alias `progwise-pforte`, issuer `https://conformance.pforte.dev`.
+The plan was started on 2026-10-20 at 18:46 (Berlin time); some tests were run on the following day. The table shows the latest
+result of each test.
+
+**35 tests: 24 passed, 4 warnings, 4 to review, 3 skipped, 0 failed, 0 interrupted.**
+
+| Result | Tests |
+| --- | --- |
+| Passed | `server`, `response-type-missing`, `userinfo-get`, `userinfo-post-header`, `userinfo-post-body`, `ensure-request-without-nonce-succeeds-for-code-flow`, `scope-phone`, `display-page`, `display-popup`, `prompt-none-not-logged-in`, `prompt-none-logged-in`, `max-age-10000`, `ensure-request-with-unknown-parameter-succeeds`, `id-token-hint`, `login-hint`, `ui-locales`, `claims-locales`, `ensure-request-with-acr-values-succeeds`, `codereuse`, `codereuse-30seconds`, `ensure-post-request-succeeds`, `server-client-secret-post`, `refresh-token`, `ensure-request-with-valid-pkce-succeeds` |
+| Warning (accepted, see above) | `scope-profile`, `scope-email`, `alternate-happy-flow`, `claims-essential` |
+| Review | `prompt-login`, `max-age-1`, `ensure-registered-redirect-uri`, `ensure-request-object-with-redirect-uri` |
+| Skipped | `scope-address`, `scope-all`, `unsigned-request-object-supported-correctly-or-rejected-as-unsupported` |
+
+Compared with the run of 2026-10-16, this one has the second factor (#6) in every sign-in, and the ID token carries `acr`, `amr`
+and `email_verified`. `ensure-request-with-acr-values-succeeds` therefore moved from warning to passed. The four tests marked
+*review* only need a human to look at evidence (screenshots of the login page or of an error page); they are required for a formal
+certification submission, which has not been made. The suite's "private link" for the plan is not published here, because the logs
+contain the generated test credentials.
+
+### Earlier run of 2026-10-16: no failures
+
+This run predates the second factor (#6) and is superseded by the run above.
 
 Plan `oidcc-basic-certification-test-plan`, suite version 5.3.3, variant
 `server_metadata=discovery, client_registration=static_client`, alias `progwise-pforte`,

@@ -13,8 +13,8 @@ The first release.
 ### Added
 
 - **OpenID Connect provider**: authorization code flow with PKCE, refresh tokens with rotation, discovery, JWKS, userinfo,
-  RP-initiated and back-channel logout, claims in the ID token. Tested against the OpenID conformance suite
-  ([docs/conformance.md](docs/conformance.md)).
+  RP-initiated and back-channel logout, claims in the ID token. Run against the OpenID conformance suite (Basic OP plan)
+  without failures; certification has not been applied for ([docs/conformance.md](docs/conformance.md)).
 - **Sign-in**: e-mail and password, a second factor by a code sent by e-mail or SMS (any provider with an HTTP API, see
   [docs/sms.md](docs/sms.md)), "remember this device", activation links for new users and password reset.
 - **Admin API** for users, claims, claim types, clients, sessions and devices, with an OpenAPI document and an audit log of
