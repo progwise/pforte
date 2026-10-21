@@ -143,6 +143,14 @@ anywhere else.
 Maintainers cut releases as described in [docs/releasing.md](docs/releasing.md); changes that users should know about go under
 "Unreleased" in [CHANGELOG.md](CHANGELOG.md).
 
+## Changes reach `main` through pull requests
+
+`main` is protected: nobody pushes to it directly, maintainers included. Make a branch, commit with `git commit -s`, push it and
+open a pull request. It can be merged when these checks have passed: `check` (lint, types, tests and build), `dependencies`
+(audit), `image` (the Docker image is built, started and scanned) and `signoff` (every commit is signed off). No approval is
+required while the project has a single maintainer. Pull requests are merged by squash, or by rebase when the separate commits
+are worth keeping, and the branch is deleted afterwards. History stays linear.
+
 ## Before you push
 
 CI runs the same commands:

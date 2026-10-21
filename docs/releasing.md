@@ -11,13 +11,18 @@ For maintainers. A release is a tag `vX.Y.Z` on `main`. Pushing it starts the wo
 
 ## Cut it
 
+`main` is protected, so a release goes through a pull request and then a tag. Tags `v*` can only be created by administrators.
+
 ```bash
-scripts/release.sh 0.1.0      # checks that main is clean and current, turns "Unreleased" into "0.1.0 (date)", commits and tags
-git show v0.1.0               # look at what will go out
-git push origin main v0.1.0   # this starts the release
+scripts/release.sh 0.2.0        # a branch release/0.2.0 with the changelog cut ("Unreleased" becomes "0.2.0 (date)"), pushed, as a pull request
+# merge the pull request when its checks have passed, then
+git checkout main && git pull
+scripts/release.sh --tag 0.2.0  # tags the merged release commit as v0.2.0, whatever has been merged after it
+git show v0.2.0                 # look at what will go out
+git push origin v0.2.0          # this starts the release
 ```
 
-Taking it back before pushing: `git tag -d v0.1.0 && git reset --hard HEAD~1`.
+Taking it back: before merging, close the pull request and delete the branch; after tagging but before pushing, `git tag -d v0.2.0`.
 
 ## What the workflow does
 
@@ -68,8 +73,9 @@ Migrations only go forward: there is no downgrade. That is why the update instru
 
 - **The workflow fails before the release exists**: if the cause was temporary, run the failed workflow again. A run uses the
   workflow file of the commit that was tagged, so if the fix is in a workflow file, the tag has to move to a commit that has it:
-  `git push origin :refs/tags/v0.1.0 && git tag -d v0.1.0`, fix on `main`, then `git tag -a v0.1.0 -m "pforte 0.1.0"` and
-  push the tag. This is fine only as long as no GitHub release exists and nobody has used the version. The tags a failed run already
+  `git push origin :refs/tags/v0.1.0 && git tag -d v0.1.0` (the tag protection lets only an administrator do this), fix on
+  `main` through a pull request, then `git tag -a v0.1.0 -m "pforte 0.1.0"` and push the tag. This is fine only as long as no
+  GitHub release exists and nobody has used the version. The tags a failed run already
   pushed to the registry are overwritten, except for tags that the fixed workflow no longer makes: delete those in the
   package's settings.
 - **A published version is bad**: do not reuse its number. Publish a fixed version, and say in its changelog entry what was wrong.
