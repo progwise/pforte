@@ -132,7 +132,9 @@ pnpm site          # builds the site into site/dist
 pnpm site:serve    # shows it on http://localhost:4000
 ```
 
-A new document needs an entry in `site/src/navigation.ts`. The build, and with it CI, fails on a document that is not in the
+The reference of the admin API is made from `docs/openapi.json`, which the server's tests keep in step with the code: after changing a
+route, run `pnpm openapi` to update it (the test fails, and says so, when it is out of date). A new document needs an entry in
+`site/src/navigation.ts`. The build, and with it CI, fails on a document that is not in the
 navigation, on a link to a file or a section that does not exist, and on a page without a title.
 
 ### Ports

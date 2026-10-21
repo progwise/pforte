@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { BrokenLinkError, createLinkResolver, REPOSITORY } from './links.js'
 import { escapeHtml, renderLayout, type PageModel, type SiteContext } from './layout.js'
 import { renderMarkdown } from './markdown.js'
+import { renderOpenApi, type OpenApiDocument } from './openapi.js'
 import { navigation, notPublished, urlOf } from './navigation.js'
 
 export const SITE_URL = 'https://pforte.dev'
@@ -61,7 +62,13 @@ export const buildSite = ({ repositoryRoot = defaultRepositoryRoot, outDir = joi
       problems.push(`${entry.source} is in the navigation but does not exist`)
       continue
     }
-    const rendered = renderMarkdown(readFileSync(path, 'utf8'), (href) => safeResolve(entry.source, href))
+    const rendered =
+      entry.generated === 'openapi'
+        ? (() => {
+            const reference = renderOpenApi(JSON.parse(readFileSync(path, 'utf8')) as OpenApiDocument)
+            return { html: reference.html, headings: reference.headings, summary: reference.summary, links: [] as string[] }
+          })()
+        : renderMarkdown(readFileSync(path, 'utf8'), (href) => safeResolve(entry.source, href))
     const title = rendered.headings.find((heading) => heading.level === 1)?.text
     if (!title) {
       problems.push(`${entry.source} has no title (a heading of level 1)`)
@@ -75,6 +82,7 @@ export const buildSite = ({ repositoryRoot = defaultRepositoryRoot, outDir = joi
       description: rendered.summary,
       html: rendered.html,
       headings: rendered.headings,
+      generated: entry.generated !== undefined,
     })
     resolvedLinks.set(entry.slug, rendered.links.map((href) => safeResolve(entry.source, href)))
   }
@@ -129,6 +137,7 @@ export const buildSite = ({ repositoryRoot = defaultRepositoryRoot, outDir = joi
   write('.nojekyll', '')
   copyFileSync(join(here, 'style.css'), join(outDir, 'style.css'))
   copyFileSync(join(here, 'favicon.svg'), join(outDir, 'favicon.svg'))
+  copyFileSync(join(repositoryRoot, 'docs', 'openapi.json'), join(outDir, 'openapi.json'))
 
   return { outDir, pages: pages.map((page) => ({ slug: page.slug, url: urlOf(page.slug), title: page.title, source: page.source, ids: page.headings.map((heading) => heading.id) })) }
 }

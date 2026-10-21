@@ -1,3 +1,5 @@
+import { readFileSync, writeFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { hasDatabase } from '@progwise/pforte-db/testing'
 import SwaggerParser from '@apidevtools/swagger-parser'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -93,6 +95,28 @@ describe.skipIf(!hasDatabase)('admin API: OpenAPI document', () => {
       expect(statuses.some((status) => status.startsWith('2')), `${id} documents a success response`).toBe(true)
       expect(statuses, `${id} documents 401`).toContain('401')
     }
+  })
+
+  it('says which scopes may call each operation, and the API agrees', async () => {
+    for (const { id, operation } of operations()) {
+      const scopes = operation['x-required-scopes'] as string[] | undefined
+      expect(scopes, `${id} names its scopes`).toBeDefined()
+      expect(scopes!.every((scope) => scope === 'admin' || scope === 'directory'), id).toBe(true)
+
+      // The scope is checked before anything else, so a call with a token that only has `directory` shows what the operation needs.
+      const [method, path] = id.split(' ') as [string, string]
+      const url = path.replace('/admin', '').replace(/\{[^}]+\}/g, 'x')
+      const response = await h.api(method as never, url, { token: h.directoryToken })
+      expect(response.statusCode === 403, `${id} refuses a directory token exactly when it needs admin`).toBe(!scopes!.includes('directory'))
+    }
+  })
+
+  it('is the document in docs/openapi.json, from which the documentation site makes its reference (run pnpm openapi to update it)', () => {
+    const file = fileURLToPath(new URL('../../../../docs/openapi.json', import.meta.url))
+    const text = `${JSON.stringify(document, null, 2)}\n`
+    if (process.env.UPDATE_OPENAPI) writeFileSync(file, text)
+
+    expect(readFileSync(file, 'utf8'), 'docs/openapi.json is out of date: run pnpm openapi').toBe(text)
   })
 
   it('describes errors as problem documents', () => {

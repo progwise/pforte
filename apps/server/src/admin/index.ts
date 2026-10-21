@@ -76,7 +76,13 @@ export const adminRoutes =
         },
         security: [{ bearerAuth: [] }],
       },
-      transform: jsonSchemaTransform,
+      // Each operation says which scopes may call it: the hook of the route knows (see `auth.require`).
+      transform: (options) => {
+        const result = jsonSchemaTransform(options)
+        const hooks = [options.route.onRequest].flat()
+        const scopes = hooks.map((hook) => (hook as { scopes?: readonly string[] } | undefined)?.scopes).find(Boolean)
+        return scopes && 'schema' in result && result.schema ? { ...result, schema: { ...result.schema, 'x-required-scopes': scopes } } : result
+      },
     })
 
     app.setErrorHandler((error, request, reply) => {

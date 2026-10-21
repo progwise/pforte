@@ -10,6 +10,8 @@ export interface PageModel {
   description: string
   html: string
   headings: Heading[]
+  /** Made from a data file, so there is no document to edit. */
+  generated?: boolean
 }
 
 export interface SiteContext {
@@ -114,7 +116,7 @@ ${banner(context)}
 ${content}
 </article>
 ${notFound ? '' : siblings(page.slug, pages)}
-<p class="edit"><a href="${escapeHtml(editUrl)}">Edit this page on GitHub</a></p>
+<p class="edit">${page.generated ? `This page is made from <a href="${context.repository}/blob/main/${escapeHtml(page.source)}">${escapeHtml(page.source)}</a>, which the tests keep in step with the code.` : `<a href="${escapeHtml(editUrl)}">Edit this page on GitHub</a>`}</p>
 </main>
 </div>
 <footer>
