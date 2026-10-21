@@ -22,6 +22,10 @@ export const navigation: NavigationGroup[] = [
     ],
   },
   {
+    title: 'Integrate',
+    pages: [{ slug: 'integrating-a-client', source: 'docs/integrating-a-client.md', menu: 'Integrating an application' }],
+  },
+  {
     title: 'Operate',
     pages: [
       { slug: 'production', source: 'examples/production/README.md', menu: 'Production with Docker Compose' },

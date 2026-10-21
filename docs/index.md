@@ -67,8 +67,8 @@ Browser / app  ──(authorization code + PKCE)──▶  pforte  ──▶  ID
 ```
 
 The application verifies the token with the JWKS endpoint, reads the claims, and decides itself what the user may see. pforte does
-no authorization beyond "this person holds these claims". A complete, runnable example of such an application is in
-[examples/relying-party](../examples/relying-party).
+no authorization beyond "this person holds these claims". [Integrating an application](integrating-a-client.md) describes it step by
+step; a complete, runnable example of such an application is in [examples/relying-party](../examples/relying-party).
 
 A system of record keeps users current:
 
