@@ -18,6 +18,7 @@ const context = { actor: { type: 'client' as const, id: 'ops' }, ip: '203.0.113.
 const application: ClientConfig = {
   name: 'Shop',
   type: 'confidential',
+  clientUri: null,
   redirectUris: ['https://shop.example.com/callback'],
   postLogoutRedirectUris: ['https://shop.example.com/'],
   backchannelLogoutUri: null,
@@ -29,6 +30,7 @@ const application: ClientConfig = {
 const machine: ClientConfig = {
   name: 'Import job',
   type: 'confidential',
+  clientUri: null,
   redirectUris: [],
   postLogoutRedirectUris: [],
   backchannelLogoutUri: null,
