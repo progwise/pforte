@@ -258,7 +258,7 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
       const authorize = await b.request('GET', '/auth?client_id=demo-web&redirect_uri=http%3A%2F%2Flocalhost%3A3400%2Fcallback&response_type=code&scope=openid&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256')
       const page = await b.request('GET', authorize.headers.location as string)
       expect(page.body).toContain('href="/reset?lang=en&amp;client_id=demo-web"')
-      expect((await form('GET', '/reset')).body).toContain('Send the code')
+      expect((await form('GET', '/reset')).body).toContain('Set or reset your password')
     })
 
     it('sends a code to a user who can sign in, and says the same to everyone else', async () => {
@@ -267,19 +267,86 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
       expect(h.notifications).toEqual([expect.objectContaining({ kind: 'reset-code', user: expect.objectContaining({ email: user.email }) })])
       expect(resetCode(user.email)).toMatch(/^\d{6}$/)
 
-      const created = await invited()
       const locked = await activated()
       await h.api('POST', `/users/${locked.id}/lock`)
+      const deactivated = await activated()
+      await h.api('POST', `/users/${deactivated.id}/deactivate`)
       h.notifications.length = 0
 
       const answers = await Promise.all(
-        ['nobody@example.com', created.email, locked.email].map(async (email) => ({ email, response: await requestReset(email) })),
+        ['nobody@example.com', locked.email, deactivated.email].map(async (email) => ({ email, response: await requestReset(email) })),
       )
       expect(h.notifications).toEqual([])
       for (const { email, response } of answers) {
         expect(response.statusCode).toBe(200)
         expect(anonymous(response.body, email)).toBe(anonymous(known.body, user.email))
       }
+    })
+
+    describe('a person without a password asks for their activation link', () => {
+      it('gets a new link that replaces the earlier one, and answers like for everyone else', async () => {
+        const person = await invited()
+        const active = await activated()
+        const known = await requestReset(active.email)
+        h.notifications.length = 0
+
+        const response = await requestReset(person.email)
+        expect(anonymous(response.body, person.email)).toBe(anonymous(known.body, active.email))
+        const mail = h.notifications.filter((n) => n.kind === 'activation')
+        expect(mail).toEqual([expect.objectContaining({ user: expect.objectContaining({ email: person.email }) })])
+        expect(h.notifications.filter((n) => n.kind === 'reset-code')).toEqual([])
+
+        const fresh = tokenOf(mail[0]!.url!)
+        expect(fresh).not.toBe(person.token)
+        expect((await form('GET', `/activate?token=${person.token}`)).statusCode).not.toBe(200)
+        const done = await form('POST', '/activate', { token: fresh, password: GOOD, confirm: GOOD })
+        expect(done.statusCode, done.body).toBe(200)
+        expect((await row(person.email)).status).toBe('active')
+      })
+
+      it('is recorded as a request of the person themselves, without the link', async () => {
+        const person = await invited()
+        await requestReset(person.email)
+        const events = await h.audit('user.activation.request', person.id)
+        expect(events).toHaveLength(1)
+        expect(events[0]).toMatchObject({ actor_type: 'user', actor_id: person.id })
+        expect(events[0].details).toMatchObject({ self: true })
+        expect(JSON.stringify(events[0])).not.toContain(h.notifications.findLast((n) => n.kind === 'activation')!.url!.split('token=')[1])
+      })
+
+      it('answers before it sends, like the reset code does', async () => {
+        const person = await invited()
+        let release!: () => void
+        h.notifier.hold = new Promise<void>((resolve) => (release = resolve))
+        const response = await form('POST', '/reset', { email: person.email })
+        expect(response.statusCode).toBe(200)
+        expect(h.notifications).toEqual([])
+        release()
+        h.notifier.hold = undefined
+        await h.settle()
+        expect(h.notifications).toEqual([expect.objectContaining({ kind: 'activation' })])
+        expect(h.backgroundErrors).toEqual([])
+      })
+
+      it('does not reveal a failure to send', async () => {
+        const person = await invited()
+        h.notifier.failWith = new NotifierUnavailableError('SMTP is down')
+        const response = await requestReset(person.email)
+        expect(response.statusCode).toBe(200)
+        expect(response.body).not.toContain('SMTP')
+        expect(h.backgroundErrors).toEqual([])
+      })
+
+      it('gives nothing to a locked or deactivated person who has no password', async () => {
+        const locked = await invited()
+        await h.api('POST', `/users/${locked.id}/lock`)
+        const deactivated = await invited()
+        await h.api('POST', `/users/${deactivated.id}/deactivate`)
+        h.notifications.length = 0
+        await requestReset(locked.email)
+        await requestReset(deactivated.email)
+        expect(h.notifications).toEqual([])
+      })
     })
 
     it('does not reveal a failure to send, and does not send twice within a minute', async () => {
@@ -576,3 +643,25 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
   })
 })
 
+
+describe.skipIf(!hasDatabase)('activation by request, switched off', () => {
+  let h: AdminHarness
+
+  beforeAll(async () => {
+    h = await createAdminHarness({ selfServiceActivation: false })
+  })
+
+  afterAll(async () => {
+    await h?.close()
+  })
+
+  it('sends nothing to a person without a password, and still answers the same', async () => {
+    const email = 'invited-only@example.com'
+    expect((await h.api('POST', '/users', { body: { email, firstName: 'Ada', lastName: 'Lovelace' } })).statusCode).toBe(201)
+    const browser = () => new Browser(h.app)
+    const response = await browser().request('POST', '/reset', { form: { email } })
+    await h.settle()
+    expect(response.statusCode).toBe(200)
+    expect(h.notifications).toEqual([])
+  })
+})

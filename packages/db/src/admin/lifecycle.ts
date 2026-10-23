@@ -104,6 +104,30 @@ export const deactivateUser = async (tx: DatabaseOrTransaction, context: Request
 
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex')
 
+/** Replaces the activation link of a user who has no password yet. The token is returned once; only its hash is stored. */
+const issueActivationLink = async (tx: DatabaseOrTransaction, user: UserRow, clientId?: string) => {
+  const token = randomBytes(32).toString('base64url')
+  const expiresAt = new Date(Date.now() + ACTIVATION_VALIDITY_MS)
+  const updated = await setStatus(tx, user, {
+    status: 'created',
+    activationTokenHash: hashToken(token),
+    activationExpiresAt: expiresAt,
+    activationClientId: clientId ?? null,
+  })
+  return { token, expiresAt, updated }
+}
+
+/**
+ * A person who has no password yet asks for their activation link themselves. Only for a `created` user (anything else
+ * returns undefined); the new link replaces the earlier one. The audit event is `user.activation.request` with `self: true`.
+ */
+export const requestActivationLink = async (tx: DatabaseOrTransaction, context: RequestContext, user: UserRow) => {
+  if (user.status !== 'created') return undefined
+  const { token, expiresAt, updated } = await issueActivationLink(tx, user)
+  await recordAuditEvent(tx, audit(context, 'user.activation.request', user, { self: true, expiresAt: expiresAt.toISOString() }))
+  return { user: updated, activation: { token, expiresAt } }
+}
+
 /**
  * Starts activation. A user who never had a password gets a one-time link: the token is returned
  * once, for the notifier, and only its hash is stored. A deactivated user who already has a
@@ -118,14 +142,7 @@ export const activateUser = async (tx: DatabaseOrTransaction, context: RequestCo
     return { user: updated, activation: undefined }
   }
 
-  const token = randomBytes(32).toString('base64url')
-  const expiresAt = new Date(Date.now() + ACTIVATION_VALIDITY_MS)
-  const updated = await setStatus(tx, user, {
-    status: 'created',
-    activationTokenHash: hashToken(token),
-    activationExpiresAt: expiresAt,
-    activationClientId: options.clientId ?? null,
-  })
+  const { token, expiresAt, updated } = await issueActivationLink(tx, user, options.clientId)
   // The audit event never contains the token.
   await recordAuditEvent(
     tx,

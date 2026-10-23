@@ -69,6 +69,13 @@ describe('loadConfig', () => {
     expect(loadConfig({ ...validEnv, OUTBOUND_ALLOW_PRIVATE_ADDRESSES: 'yes' }).allowPrivateAddresses).toBe(false)
   })
 
+  it('lets people ask for their activation link unless that is switched off', () => {
+    expect(loadConfig(validEnv).selfServiceActivation).toBe(true)
+    expect(loadConfig({ ...validEnv, SELF_SERVICE_ACTIVATION: 'false' }).selfServiceActivation).toBe(false)
+    expect(loadConfig({ ...validEnv, SELF_SERVICE_ACTIVATION: ' False ' }).selfServiceActivation).toBe(false)
+    expect(loadConfig({ ...validEnv, SELF_SERVICE_ACTIVATION: 'true' }).selfServiceActivation).toBe(true)
+  })
+
   it('rejects an invalid JWKS', () => {
     expect(() => loadConfig({ ...validEnv, JWKS: 'not json' })).toThrow(/JSON/)
   })

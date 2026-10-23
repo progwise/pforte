@@ -92,6 +92,7 @@ const app = buildApp({
     sendPasswordResetCode,
     codeSecrets: deriveCodeSecrets(config.cookieKeys),
     notifier,
+    selfServiceActivation: config.selfServiceActivation,
     cookieKeys: config.cookieKeys,
     secure: config.issuer.startsWith('https:'),
     issuer: config.issuer,
