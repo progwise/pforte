@@ -8,6 +8,8 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
 
 ## Unreleased
 
+## 0.2.0 (2026-10-23)
+
 ### Added
 
 - **A person without a password can ask for their activation link.** On the page *Set or reset your password* (from "Forgot your
