@@ -22,6 +22,11 @@ export interface Config {
    * the applications run on the organisation's own network.
    */
   allowPrivateAddresses: boolean
+  /**
+   * Whether a person who has no password yet may ask for their activation link on the page for a forgotten password.
+   * On by default; turn it off when people should only get their link when an administrator invites them.
+   */
+  selfServiceActivation: boolean
   /** Named in e-mails. */
   organisationName: string
   /** A folder with texts that replace or add to the built-in ones (`locales/<language>.json`). */
@@ -245,6 +250,7 @@ export const loadConfig = (env: Env = process.env): Config => ({
   cookieKeys: parseCookieKeys(requireSecret(env, 'COOKIE_KEYS', '; generate them with `pforte keys`, or run pnpm dev:keys for development')),
   jwks: parseJwks(requireSecret(env, 'JWKS', '; generate them with `pforte keys`, or run pnpm dev:keys for development')),
   allowPrivateAddresses: env.OUTBOUND_ALLOW_PRIVATE_ADDRESSES === 'true',
+  selfServiceActivation: env.SELF_SERVICE_ACTIVATION?.trim().toLowerCase() !== 'false',
   organisationName: env.ORGANISATION_NAME?.trim() || 'pforte',
   brandingDir: env.BRANDING_DIR?.trim() || undefined,
   defaultLanguage: env.DEFAULT_LANGUAGE?.trim().toLowerCase() || 'en',

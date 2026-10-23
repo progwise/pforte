@@ -68,12 +68,12 @@ export const fr: Catalog = {
   'activate.doneTitle': 'Votre compte est actif',
   'activate.done': "Votre mot de passe est défini. Vous pouvez maintenant vous connecter depuis l'application d'où vous venez.",
 
-  'reset.title': 'Mot de passe oublié ?',
-  'reset.intro': 'Saisissez votre adresse e-mail. Nous vous envoyons un code pour choisir un nouveau mot de passe.',
-  'reset.send': 'Envoyer le code',
+  'reset.title': 'Définir ou réinitialiser votre mot de passe',
+  'reset.intro': 'Saisissez votre adresse e-mail. Nous vous envoyons un code ou un lien pour choisir un mot de passe.',
+  'reset.send': 'Envoyer',
   'reset.noEmail': 'Veuillez saisir votre adresse e-mail.',
   'reset.sent':
-    'Si un compte existe pour cette adresse, nous lui avons envoyé un code. Il est valable 10 minutes.',
+    'Si un compte existe pour cette adresse, nous lui avons envoyé un message : un code à saisir ci-dessous, ou un lien pour choisir votre mot de passe. Un code est valable 10 minutes.',
   'reset.codeTitle': 'Choisir un nouveau mot de passe',
   'reset.codeSubmit': 'Changer mon mot de passe',
   'reset.doneTitle': 'Mot de passe modifié',

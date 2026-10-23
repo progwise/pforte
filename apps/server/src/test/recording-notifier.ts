@@ -26,6 +26,7 @@ export const createRecordingNotifier = () => {
       notifications.push({ kind: 'phone-code', user, channel: 'sms', code: phone.code, expiresAt: phone.expiresAt })
     },
     async sendActivationLink(user, link) {
+      await notifier.hold
       if (notifier.failWith) throw notifier.failWith
       notifications.push({ kind: 'activation', user, url: link.url, expiresAt: link.expiresAt, applicationName: link.applicationName })
     },

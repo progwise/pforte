@@ -17,6 +17,7 @@ outlives the user it is about.
 | `login.code_failed` | A code was not accepted. | `purpose`, `reason` (`wrong`, `exhausted`, `expired`, `none`, and for a password reset also `unknown_user`, `not_allowed`, `malformed`). |
 | `login.succeeded` | A sign-in was completed. | `method` (`code` or `remembered_device`), `channel`, and `acr`: `urn:pforte:acr:mfa` after a code, `urn:pforte:acr:pwd` on a remembered device. |
 | `login.blocked` | A rate limit held somebody back. | `scope`: `password`, `code`, `code_resend`, `reset`, `reset_code`, `activation` or `phone_code`. Written **once per 15 minutes** for the same address or IP, not for every refused request, so an attack cannot fill the log. |
+| `user.activation.request` | A person who has no password yet asked for their activation link at `/reset`. The link itself is never recorded. | `self: true`, `expiresAt`. |
 | `user.password_reset.request` | Somebody asked for a password reset at `/reset`, for an address that has an account. | `self: true`. A reset an administrator starts is recorded as `user.password_reset.request` by that client. |
 
 For sign-in events the actor is the user (`actorType: user`), and the target is that user. `ip` and `userAgent` are

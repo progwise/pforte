@@ -68,12 +68,12 @@ export const de: Catalog = {
   'activate.doneTitle': 'Ihr Konto ist aktiv',
   'activate.done': 'Ihr Passwort ist gesetzt. Sie können sich jetzt in der Anwendung anmelden, von der Sie gekommen sind.',
 
-  'reset.title': 'Passwort vergessen?',
-  'reset.intro': 'Geben Sie Ihre E-Mail-Adresse ein. Wir senden Ihnen einen Code, mit dem Sie ein neues Passwort wählen.',
-  'reset.send': 'Code senden',
+  'reset.title': 'Passwort festlegen oder zurücksetzen',
+  'reset.intro': 'Geben Sie Ihre E-Mail-Adresse ein. Wir senden Ihnen einen Code oder einen Link, mit dem Sie ein Passwort wählen.',
+  'reset.send': 'Senden',
   'reset.noEmail': 'Bitte geben Sie Ihre E-Mail-Adresse ein.',
   'reset.sent':
-    'Falls es zu dieser Adresse ein Konto gibt, haben wir einen Code dorthin gesendet. Er ist 10 Minuten gültig.',
+    'Falls es zu dieser Adresse ein Konto gibt, haben wir eine Nachricht dorthin gesendet: einen Code, den Sie unten eingeben, oder einen Link zum Wählen Ihres Passworts. Ein Code ist 10 Minuten gültig.',
   'reset.codeTitle': 'Neues Passwort wählen',
   'reset.codeSubmit': 'Passwort ändern',
   'reset.doneTitle': 'Passwort geändert',

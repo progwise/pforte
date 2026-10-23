@@ -16,7 +16,7 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/
 const KNOWN_ACTIONS = [
   'login.*', 'login.succeeded', 'login.password_failed', 'login.code_sent', 'login.code_failed', 'login.blocked',
   'user.*', 'user.create', 'user.update', 'user.delete', 'user.lock', 'user.unlock', 'user.activate', 'user.deactivate',
-  'user.password_reset.request', 'user.password_reset.complete', 'user.sessions.end', 'user.device.revoke', 'user.devices.revoke', 'user.claims.set',
+  'user.activation.request', 'user.password_reset.request', 'user.password_reset.complete', 'user.sessions.end', 'user.device.revoke', 'user.devices.revoke', 'user.claims.set',
   'client.*', 'client.create', 'client.update', 'client.delete', 'client.rotate_secret', 'client.claim_types.set',
   'claim_type.*', 'claim_type.create', 'claim_type.update', 'claim_type.delete',
 ]

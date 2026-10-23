@@ -21,7 +21,7 @@ export const ISSUER = 'https://localhost:3300'
 const COOKIE_KEYS = ['k'.repeat(40)]
 
 /** A seeded test database with the whole app (provider, login and admin API) on top of it. */
-export const createAdminHarness = async () => {
+export const createAdminHarness = async ({ selfServiceActivation = true } = {}) => {
   const database = await createTestDatabase()
   await seed(database.db)
 
@@ -54,6 +54,7 @@ export const createAdminHarness = async () => {
       sendPasswordResetCode,
       codeSecrets: deriveCodeSecrets(COOKIE_KEYS),
       notifier,
+      selfServiceActivation,
       cookieKeys: COOKIE_KEYS,
       secure: true,
       issuer: ISSUER,

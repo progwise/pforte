@@ -2,7 +2,7 @@ import formbody from '@fastify/formbody'
 import { hash } from '@node-rs/argon2'
 import type { Database } from '@progwise/pforte-db'
 import { checkCode, CodeLimitError, issueCode, markEmailVerified, markPhoneVerified } from '@progwise/pforte-db/codes'
-import { getClient } from '@progwise/pforte-db/admin'
+import { getClient, requestActivationLink } from '@progwise/pforte-db/admin'
 import { findActiveUserById } from '@progwise/pforte-db/oidc'
 import { completeActivation, completePasswordReset, findPendingActivation } from '@progwise/pforte-db/credentials'
 import { findUserByEmail } from '@progwise/pforte-db/users'
@@ -27,7 +27,9 @@ export interface AccountDependencies {
   /** The secrets that sign one-time codes (see `deriveCodeSecrets`). */
   codeSecrets: string[]
   /** Sends the code that confirms a phone number. */
-  notifier: Pick<Notifier, 'smsAvailable' | 'sendPhoneCode'>
+  notifier: Pick<Notifier, 'smsAvailable' | 'sendPhoneCode' | 'sendActivationLink'>
+  /** Whether a person without a password may ask for their activation link on the reset page (`SELF_SERVICE_ACTIVATION`). */
+  selfServiceActivation: boolean
   /** Sign the cookie that carries the phone confirmation step. */
   cookieKeys: string[]
   /** Whether the service is reached over https, which makes cookies `Secure`. */
@@ -58,7 +60,7 @@ const normalizeEmail = (value: unknown) => text(value).trim().toLowerCase()
 
 /** Pages that are not part of a sign-in: choosing the first password, and choosing a new one after forgetting it. */
 export const accountRoutes =
-  ({ db, sendPasswordResetCode, codeSecrets, notifier, cookieKeys, secure, issuer, ui, limiter, audit, background }: AccountDependencies) =>
+  ({ db, sendPasswordResetCode, codeSecrets, notifier, selfServiceActivation, cookieKeys, secure, issuer, ui, limiter, audit, background }: AccountDependencies) =>
   async (app: FastifyInstance) => {
     await app.register(formbody)
     ui.pages.addHeaders(app)
@@ -263,6 +265,22 @@ export const accountRoutes =
       reply.raw.once('finish', () =>
         background.run(async () => {
           const user = await findUserByEmail(db, email)
+          // Somebody who has no password yet gets a new activation link instead of a code.
+          if (user?.status === 'created' && selfServiceActivation) {
+            try {
+              const result = await db.transaction((tx) => requestActivationLink(tx, { actor: { type: 'user', id: user.id }, ...where }, user))
+              if (!result) return
+              const url = `${issuer}/activate?token=${encodeURIComponent(result.activation.token)}`
+              await notifier.sendActivationLink(
+                { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, language: user.language, phone: user.phone },
+                { url, expiresAt: result.activation.expiresAt },
+              )
+            } catch (error) {
+              if (error instanceof NotifierUnavailableError) request.log.error(error, 'the activation link could not be sent')
+              else throw error
+            }
+            return
+          }
           if (user?.status !== 'active' || !user.passwordHash) return
           try {
             const channel = await sendPasswordResetCode(user)

@@ -99,6 +99,18 @@ client has a *start address* (see [integrating an application](integrating-a-cli
 that began on the sign-in page of that application. Without a `clientId` nothing changes: the page only says to sign in from the
 application you came from.
 
+**Rolling out to many people.** Sending thousands of links at once is rarely what you want. There are two ways, and you can mix them:
+
+- **Invite in waves.** Call `activate` for a group at a time (a department, a region), when you have told them to expect the mail.
+- **Let people ask for themselves.** On the sign-in page, *Forgot your password?* leads to *Set or reset your password*. Somebody who has
+  no password yet gets a new activation link there, to the address you loaded; anybody else gets what they got before, nothing
+  for an address pforte does not know, and a reset code for a person who can sign in. The page answers the same in every case, so
+  nobody can find out who has an account. A request counts against the same limits as a reset code, and is recorded in the audit
+  log as `user.activation.request` (done by the person themselves). It never reaches a locked or deactivated person.
+
+If people may only come in when you invite them (a staged roll-out), set `SELF_SERVICE_ACTIVATION=false` (see the
+[configuration](configuration.md)): the page then sends nothing to somebody without a password.
+
 ## People who are no longer in the source
 
 Locking is the safe answer: it ends their sessions and they cannot sign in, and `POST /admin/users/{id}/unlock` brings them back.
