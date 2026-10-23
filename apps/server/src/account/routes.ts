@@ -268,12 +268,16 @@ export const accountRoutes =
           // Somebody who has no password yet gets a new activation link instead of a code.
           if (user?.status === 'created' && selfServiceActivation) {
             try {
-              const result = await db.transaction((tx) => requestActivationLink(tx, { actor: { type: 'user', id: user.id }, ...where }, user))
+              // The application the person came from, if it is a registered one: the mail names it and the page ends with a button to it.
+              const client = clientId ? await getClient(db, clientId) : undefined
+              const result = await db.transaction((tx) =>
+                requestActivationLink(tx, { actor: { type: 'user', id: user.id }, ...where }, user, { clientId: client?.clientId }),
+              )
               if (!result) return
               const url = `${issuer}/activate?token=${encodeURIComponent(result.activation.token)}`
               await notifier.sendActivationLink(
                 { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, language: user.language, phone: user.phone },
-                { url, expiresAt: result.activation.expiresAt },
+                { url, expiresAt: result.activation.expiresAt, applicationName: client?.name },
               )
             } catch (error) {
               if (error instanceof NotifierUnavailableError) request.log.error(error, 'the activation link could not be sent')
