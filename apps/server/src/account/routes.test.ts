@@ -19,7 +19,9 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
     await h?.close()
   })
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    // All requests come from one test address; the reset limit per address would otherwise run out over the many tests.
+    await h.database.pool.query(`delete from rate_limits where key like 'reset:ip:%'`)
     h.notifications.length = 0
     h.notifier.failWith = undefined
     h.notifier.failSms = false
@@ -56,6 +58,12 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
   /** Asks for a reset and waits for the mail to be sent, which happens after the answer. */
   const requestReset = async (email: string) => {
     const response = await form('POST', '/reset', { email })
+    await h.settle()
+    return response
+  }
+  /** Asks for a reset from the page of an application, as the link on its sign-in page does. */
+  const requestResetFor = async (email: string, clientId?: string) => {
+    const response = await form('POST', '/reset', { email, ...(clientId ? { client_id: clientId } : {}) })
     await h.settle()
     return response
   }
@@ -302,6 +310,40 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
         const done = await form('POST', '/activate', { token: fresh, password: GOOD, confirm: GOOD })
         expect(done.statusCode, done.body).toBe(200)
         expect((await row(person.email)).status).toBe('active')
+      })
+
+      it('keeps the application the person came from: the mail names it and the page ends with a button to it', async () => {
+        const person = await invited()
+        await requestResetFor(person.email, 'demo-web')
+        const mail = h.notifications.findLast((n) => n.kind === 'activation')!
+        expect(mail.applicationName).toBe('Demo web app (public client)')
+        const [event] = await h.audit('user.activation.request', person.id)
+        expect(event.details).toMatchObject({ self: true, clientId: 'demo-web' })
+
+        const done = await form('POST', '/activate', { token: tokenOf(mail.url!), password: GOOD, confirm: GOOD })
+        expect(done.statusCode, done.body).toBe(200)
+        expect(done.body).toContain('Continue to Demo web app (public client)')
+        expect(done.body).toContain('href="http://localhost:3400/"')
+      })
+
+      it('ignores an application that is not registered, and still sends the link', async () => {
+        const person = await invited()
+        await requestResetFor(person.email, 'nobody')
+        const mail = h.notifications.findLast((n) => n.kind === 'activation')!
+        expect(mail.applicationName).toBeUndefined()
+        const done = await form('POST', '/activate', { token: tokenOf(mail.url!), password: GOOD, confirm: GOOD })
+        expect(done.statusCode).toBe(200)
+        expect(done.body).not.toContain('Continue to')
+        expect(h.backgroundErrors).toEqual([])
+      })
+
+      it('forgets an earlier invitation\'s application when the person asks without one', async () => {
+        const person = await invited()
+        await requestResetFor(person.email, 'demo-web')
+        await requestResetFor(person.email)
+        const mail = h.notifications.findLast((n) => n.kind === 'activation')!
+        expect(mail.applicationName).toBeUndefined()
+        expect((await form('POST', '/activate', { token: tokenOf(mail.url!), password: GOOD, confirm: GOOD })).body).not.toContain('Continue to')
       })
 
       it('is recorded as a request of the person themselves, without the link', async () => {

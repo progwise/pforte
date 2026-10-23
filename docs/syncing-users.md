@@ -106,7 +106,8 @@ application you came from.
   no password yet gets a new activation link there, to the address you loaded; anybody else gets what they got before, nothing
   for an address pforte does not know, and a reset code for a person who can sign in. The page answers the same in every case, so
   nobody can find out who has an account. A request counts against the same limits as a reset code, and is recorded in the audit
-  log as `user.activation.request` (done by the person themselves). It never reaches a locked or deactivated person.
+  log as `user.activation.request` (done by the person themselves). It never reaches a locked or deactivated person. When the person
+  came from the sign-in page of an application, the mail names it and the last page leads on to its start address, as with `clientId` above.
 
 If people may only come in when you invite them (a staged roll-out), set `SELF_SERVICE_ACTIVATION=false` (see the
 [configuration](configuration.md)): the page then sends nothing to somebody without a password.

@@ -119,12 +119,20 @@ const issueActivationLink = async (tx: DatabaseOrTransaction, user: UserRow, cli
 
 /**
  * A person who has no password yet asks for their activation link themselves. Only for a `created` user (anything else
- * returns undefined); the new link replaces the earlier one. The audit event is `user.activation.request` with `self: true`.
+ * returns undefined); the new link replaces the earlier one, and `clientId` is the application the person came from. The audit event is `user.activation.request` with `self: true`.
  */
-export const requestActivationLink = async (tx: DatabaseOrTransaction, context: RequestContext, user: UserRow) => {
+export const requestActivationLink = async (
+  tx: DatabaseOrTransaction,
+  context: RequestContext,
+  user: UserRow,
+  options: { clientId?: string } = {},
+) => {
   if (user.status !== 'created') return undefined
-  const { token, expiresAt, updated } = await issueActivationLink(tx, user)
-  await recordAuditEvent(tx, audit(context, 'user.activation.request', user, { self: true, expiresAt: expiresAt.toISOString() }))
+  const { token, expiresAt, updated } = await issueActivationLink(tx, user, options.clientId)
+  await recordAuditEvent(
+    tx,
+    audit(context, 'user.activation.request', user, { self: true, expiresAt: expiresAt.toISOString(), ...(options.clientId ? { clientId: options.clientId } : {}) }),
+  )
   return { user: updated, activation: { token, expiresAt } }
 }
 

@@ -13,7 +13,8 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
 - **A person without a password can ask for their activation link.** On the page *Set or reset your password* (from "Forgot your
   password?"), an address that belongs to a user who was created but never activated gets a new activation link instead of nothing.
   The answer is the same for every address, the limits are those of the reset request, and the audit log has a new event,
-  `user.activation.request`. Set `SELF_SERVICE_ACTIVATION=false` to switch it off
+  `user.activation.request`. When the person came from an application's sign-in page, the mail names that application and the
+  page after choosing a password has the button to it. Set `SELF_SERVICE_ACTIVATION=false` to switch it off
   ([#26](https://github.com/progwise/pforte/issues/26)).
 - **Continue to the application.** A client has an optional start address (`clientUri`, settable in the administration and the
   Admin API). `POST /admin/users/{id}/activate` accepts an optional `clientId`: the e-mail then names the application, and the
