@@ -5,7 +5,7 @@ by a back office rather than by self-registration.
 
 **Documentation: <https://pforte.dev>**
 
-**Status: first release, 0.1.0.** Sign-in with e-mail and password and a second factor by code, remembered devices, password
+**Status: early release, 0.2.0.** Sign-in with e-mail and password and a second factor by code, remembered devices, password
 reset and activation links, the authorization code flow with PKCE, refresh tokens, logout, an admin API, an administration
 (users, clients, claim types, audit log, CSV import), a login audit with rate limits, your own name, colours and languages,
 and a Docker image all work and are tested. The image is `ghcr.io/progwise/pforte`; what changed in each release is in the
@@ -137,8 +137,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details, and [docs/configuration.md](
 ## Roadmap
 
 Done: the OpenID Connect provider, the admin API, CSV import, the administration, the second factor, remembered devices and
-password reset, the audit log and rate limits, branding and languages, the Docker image and a production example, and the first
-release (0.1.0).
+password reset, the audit log and rate limits, branding and languages, the Docker image and a production example, and the
+releases 0.1.0 and 0.2.0.
 
 Next: a page where people manage their own account ([#18](https://github.com/progwise/pforte/issues/18)), and ideas that wait
 for a need: a consent screen, custom URL schemes for native apps, self-service sign-up, a first-party login API.

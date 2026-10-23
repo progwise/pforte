@@ -4,7 +4,7 @@ name: pforte
 
 services:
   pforte:
-    # Pin a version in production: PFORTE_IMAGE=ghcr.io/progwise/pforte:0.1.0 in .env
+    # Pin a version in production: PFORTE_IMAGE=ghcr.io/progwise/pforte:0.2.0 in .env
     image: ${PFORTE_IMAGE:-ghcr.io/progwise/pforte:latest}
     restart: unless-stopped
     depends_on:

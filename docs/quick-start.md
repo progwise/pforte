@@ -48,7 +48,7 @@ $EDITOR .env             # the host name, the sender address, the name of your o
 docker compose up -d
 ```
 
-The image is `ghcr.io/progwise/pforte`. Pin a version in `.env` (`PFORTE_IMAGE=ghcr.io/progwise/pforte:0.1.0`); the changes of each
+The image is `ghcr.io/progwise/pforte`. Pin a version in `.env` (`PFORTE_IMAGE=ghcr.io/progwise/pforte:0.2.0`); the changes of each
 version are in the [changelog](../CHANGELOG.md). Every setting is described in the [configuration reference](configuration.md).
 
 ## What next
