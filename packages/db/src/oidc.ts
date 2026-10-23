@@ -97,6 +97,10 @@ export const findClientById = async (db: Database, clientId: string) => {
   return client
 }
 
+/** The redirect URIs of every client, for the origins a browser application may call from. */
+export const listRedirectUris = async (db: Database) =>
+  (await db.select({ redirectUris: clients.redirectUris }).from(clients)).flatMap((client) => client.redirectUris)
+
 export const listClaimTypes = (db: Database) => db.select().from(claimTypes).orderBy(asc(claimTypes.key))
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
