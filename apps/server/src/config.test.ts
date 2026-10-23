@@ -218,8 +218,12 @@ describe('BOOTSTRAP_ADMIN_EMAIL', () => {
     expect(loadConfig({ ...validEnv, BOOTSTRAP_ADMIN_EMAIL: ' Boss@Example.com ' }).bootstrapAdminEmail).toBe('boss@example.com')
   })
 
-  it.each(['boss', 'boss@', '@example.com', 'a b@example.com', 'boss@example'])('refuses %s', (value) => {
+  it.each(['boss', 'boss@', '@example.com', 'a b@example.com', 'boss@example', 'admin@localhost'])('refuses %s', (value) => {
     expect(() => loadConfig({ ...validEnv, BOOTSTRAP_ADMIN_EMAIL: value })).toThrow(/BOOTSTRAP_ADMIN_EMAIL must be an e-mail address/)
+  })
+
+  it('says what is expected', () => {
+    expect(() => loadConfig({ ...validEnv, BOOTSTRAP_ADMIN_EMAIL: 'admin@localhost' })).toThrow(/with a domain such as you@example\.com/)
   })
 })
 

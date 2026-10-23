@@ -24,6 +24,13 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
 
 ### Changed
 
+- **A back-channel logout address may be http on a private network when `OUTBOUND_ALLOW_PRIVATE_ADDRESSES=true`**: a private or
+  link-local IP address, `host.docker.internal`, or a name without dots such as a Compose service. Without the setting nothing
+  changes (https, or http for localhost). This makes back-channel logout testable with pforte in a container and the application
+  beside it ([#32](https://github.com/progwise/pforte/issues/32)).
+- **`BOOTSTRAP_ADMIN_EMAIL`**: the error for an address like `admin@localhost` says that a domain such as `you@example.com` is
+  expected, and the configuration reference says so too. The admin API has always required a domain with a dot, so the rule is
+  unchanged ([#33](https://github.com/progwise/pforte/issues/33)).
 - **Cross-origin requests (CORS) are limited to registered applications.** Until now pforte repeated whatever origin a page
   asked about on its discovery, keys, token and userinfo endpoints. Now discovery and keys answer `*`; the token and userinfo
   endpoints answer only the origin of a redirect URI of the client (and a preflight request only an origin of any registered

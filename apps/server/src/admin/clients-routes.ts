@@ -74,11 +74,13 @@ export interface ClientRoutesDependencies {
   auth: AdminAuth
   /** Rebuilds the OpenID provider, which caches clients. */
   reloadProvider: (request: FastifyRequest) => Promise<void>
+  /** `OUTBOUND_ALLOW_PRIVATE_ADDRESSES`: a back-channel logout address may then be http on a private network. */
+  allowPrivateAddresses?: boolean
 }
 
 /** Registering, changing and removing the applications and machines that use pforte. Admin scope only. */
 export const clientsRoutes =
-  ({ db, auth, reloadProvider }: ClientRoutesDependencies) =>
+  ({ db, auth, reloadProvider, allowPrivateAddresses }: ClientRoutesDependencies) =>
   async (instance: FastifyInstance) => {
     const app = instance.withTypeProvider<ZodTypeProvider>()
     const onRequest = auth.require('admin')
@@ -167,7 +169,7 @@ export const clientsRoutes =
                 allowedGrants,
                 scopes: body.scopes ?? (machine ? [] : [...APPLICATION_SCOPES]),
                 pkceRequired: body.pkceRequired ?? true,
-              }),
+              }, { allowPrivateAddresses }),
             )
             await reloadProvider(request)
             return reply
@@ -213,7 +215,7 @@ export const clientsRoutes =
           const found = await db.transaction(async (tx) => {
             const client = await getClient(tx, request.params.clientId)
             if (!client) return undefined
-            await updateClient(tx, requestContext(request), client, request.body)
+            await updateClient(tx, requestContext(request), client, request.body, { allowPrivateAddresses })
             return client.clientId
           })
           if (!found) return noClient(reply)

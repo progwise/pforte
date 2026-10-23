@@ -229,7 +229,7 @@ const parseRetention = (value: string | undefined) => {
 const parseBootstrapAdmin = (value: string | undefined) => {
   const email = value?.trim().toLowerCase()
   if (!email) return undefined
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error(`BOOTSTRAP_ADMIN_EMAIL must be an e-mail address, got "${value}"`)
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error(`BOOTSTRAP_ADMIN_EMAIL must be an e-mail address with a domain such as you@example.com (a name like admin@localhost is not accepted), got "${value}"`)
   return email
 }
 

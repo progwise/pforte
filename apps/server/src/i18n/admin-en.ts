@@ -196,7 +196,7 @@ export const adminEn = {
   'manage.clientForm.postLogoutRedirectUris': 'After signing out, return to',
   'manage.clientForm.postLogoutRedirectUrisHint': 'One per line. Optional.',
   'manage.clientForm.backchannelLogoutUri': 'Back-channel logout address',
-  'manage.clientForm.backchannelLogoutUriHint': 'pforte tells this address when somebody signs out. Optional.',
+  'manage.clientForm.backchannelLogoutUriHint': 'pforte tells this address when somebody signs out. https, or http for localhost (and for private addresses when the operator allows them). Optional.',
   'manage.clientForm.sessionRequired': 'Send the session ID with the logout message',
   'manage.clientForm.refresh': 'May stay signed in with refresh tokens',
   'manage.clientForm.scopes': 'What the application may ask for',
