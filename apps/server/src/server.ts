@@ -107,6 +107,7 @@ const app = buildApp({
     notifier,
     sendPasswordResetCode,
     limiter,
+    allowPrivateAddresses: config.allowPrivateAddresses,
   },
 })
 

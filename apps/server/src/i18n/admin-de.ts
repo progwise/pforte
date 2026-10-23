@@ -194,7 +194,7 @@ export const adminDe: AdminCatalog = {
   'manage.clientForm.postLogoutRedirectUris': 'Nach der Abmeldung zurück zu',
   'manage.clientForm.postLogoutRedirectUrisHint': 'Eine pro Zeile. Optional.',
   'manage.clientForm.backchannelLogoutUri': 'Back-Channel-Logout-Adresse',
-  'manage.clientForm.backchannelLogoutUriHint': 'pforte meldet dieser Adresse, wenn sich jemand abmeldet. Optional.',
+  'manage.clientForm.backchannelLogoutUriHint': 'pforte meldet dieser Adresse, wenn sich jemand abmeldet. https, oder http für localhost (und für private Adressen, wenn der Betreiber das erlaubt). Optional.',
   'manage.clientForm.sessionRequired': 'Die Sitzungs-ID mit der Logout-Nachricht senden',
   'manage.clientForm.refresh': 'Darf mit Refresh-Tokens angemeldet bleiben',
   'manage.clientForm.scopes': 'Was die Anwendung anfragen darf',

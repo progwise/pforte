@@ -40,6 +40,41 @@ export const isAllowedUri = (value: string) => {
   }
 }
 
+/** True for addresses that only exist inside a network: loopback, link-local and private ranges, and the usual development names. */
+export const isPrivateHost = (hostname: string) => {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  if (host === 'localhost' || host === 'host.docker.internal') return true
+  // A name without dots is a machine on the local network, such as a Compose service.
+  if (!host.includes('.') && !host.includes(':') && !/^\d+$/.test(host)) return true
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(host)
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])]
+    return a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)
+  }
+  if (host.includes(':')) return host === '::1' || /^f[cd][0-9a-f]{2}:/.test(host) || /^fe[89ab][0-9a-f]:/.test(host)
+  return false
+}
+
+/**
+ * Where pforte itself sends a request (back-channel logout): https, or http for `localhost`. Where the operator has said
+ * that the network is trusted (`OUTBOUND_ALLOW_PRIVATE_ADDRESSES`), http is also fine for private addresses, so that a
+ * development setup with pforte in a container and the application beside it can be tried out.
+ */
+export const isAllowedOutboundUri = (value: string, { allowPrivateAddresses = false }: ClientRules = {}) => {
+  if (isAllowedUri(value)) return true
+  try {
+    const url = new URL(value)
+    return allowPrivateAddresses && url.protocol === 'http:' && !url.hash && !value.includes('*') && isPrivateHost(url.hostname)
+  } catch {
+    return false
+  }
+}
+
+/** Settings of the installation that the rules depend on. */
+export interface ClientRules {
+  allowPrivateAddresses?: boolean
+}
+
 const subsetOf = (values: string[], allowed: readonly string[]) => values.every((value) => allowed.includes(value))
 
 /**
@@ -48,7 +83,7 @@ const subsetOf = (values: string[], allowed: readonly string[]) => values.every(
  * - a machine (client_credentials, confidential) with admin scopes, for the admin API.
  * Returns every problem, so a form can show them all at once.
  */
-export const validateClientConfig = (config: ClientConfig): Problem[] => {
+export const validateClientConfig = (config: ClientConfig, rules: ClientRules = {}): Problem[] => {
   const problems: Problem[] = []
   const add = (path: string, message: string) => problems.push({ path, message })
   const machine = config.allowedGrants.includes('client_credentials')
@@ -62,8 +97,13 @@ export const validateClientConfig = (config: ClientConfig): Problem[] => {
   if (config.clientUri && !isAllowedUri(config.clientUri)) {
     add('/clientUri', 'The start address must be an https URL (http only for localhost) without wildcards or fragment.')
   }
-  if (config.backchannelLogoutUri && !isAllowedUri(config.backchannelLogoutUri)) {
-    add('/backchannelLogoutUri', 'Logout tokens are sent here, so it must be an https URL (http only for localhost).')
+  if (config.backchannelLogoutUri && !isAllowedOutboundUri(config.backchannelLogoutUri, rules)) {
+    add(
+      '/backchannelLogoutUri',
+      'Logout tokens are sent here, so it must be an https URL (http only for localhost' +
+        (rules.allowPrivateAddresses ? ', or for a private address or a host name without dots' : ', or for private addresses when OUTBOUND_ALLOW_PRIVATE_ADDRESSES is set') +
+        ').',
+    )
   }
   if (config.pkceRequired === false && config.type === 'public') {
     add('/pkceRequired', 'Public clients always require PKCE.')
@@ -178,8 +218,9 @@ export const createClient = async (
   tx: DatabaseOrTransaction,
   context: RequestContext,
   input: { clientId: string; secretHash?: string } & ClientConfig,
+  rules: ClientRules = {},
 ) => {
-  const problems = validateClientConfig(input)
+  const problems = validateClientConfig(input, rules)
   if (problems.length > 0) throw new AdminError('The client is not valid.', 'invalid', problems)
 
   const { secretHash, ...values } = input
@@ -197,6 +238,7 @@ export const updateClient = async (
   context: RequestContext,
   client: ClientRow,
   wanted: Partial<Omit<ClientConfig, 'type'>>,
+  rules: ClientRules = {},
 ) => {
   assertEditable(client)
   const current = configOf(client)
@@ -207,7 +249,7 @@ export const updateClient = async (
   }
   if (Object.keys(changes).length === 0) return { client, changed: false as const }
 
-  const problems = validateClientConfig(next)
+  const problems = validateClientConfig(next, rules)
   if (problems.length > 0) throw new AdminError('The client is not valid.', 'invalid', problems)
   if (holdsAdminScope(current) && !holdsAdminScope(next)) await assertAnotherAdminClient(tx, client.clientId)
 

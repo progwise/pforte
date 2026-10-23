@@ -292,3 +292,67 @@ describe.skipIf(!hasDatabase)('admin API: clients', () => {
     })
   })
 })
+
+describe.skipIf(!hasDatabase)('admin API: back-channel logout addresses on a private network', () => {
+  const app = (extra: Record<string, unknown>) => ({
+    clientId: 'bc-app',
+    name: 'Back-channel app',
+    type: 'public',
+    redirectUris: ['https://bc.example.com/cb'],
+    ...extra,
+  })
+
+  const accepted = [
+    'http://host.docker.internal:3000/auth/backchannel-logout',
+    'http://api:3000/auth/backchannel-logout',
+    'http://127.0.0.1:3000/logout',
+    'http://10.1.2.3/logout',
+    'http://172.16.0.5/logout',
+    'http://192.168.1.20:8080/logout',
+    'http://169.254.10.10/logout',
+    'http://[::1]:3000/logout',
+    'http://[fd12:3456::1]/logout',
+    'http://localhost:3000/logout',
+    'https://bc.example.com/logout',
+  ]
+  const refused = ['http://example.com/logout', 'http://8.8.8.8/logout', 'http://172.32.0.1/logout', 'http://203.0.113.9/logout', 'http://app.example.internal/logout', 'ftp://api/logout', 'http://api/logout#x']
+
+  it('is refused when the operator has not allowed private addresses, except for localhost', async () => {
+    const h = await createAdminHarness()
+    try {
+      for (const uri of accepted.filter((uri) => !/localhost|127\.0\.0\.1|\[::1\]|^https/.test(uri))) {
+        const response = await h.api('POST', '/clients', { body: app({ clientId: 'bc-refused', backchannelLogoutUri: uri }) })
+        expect(response.statusCode, uri).toBe(400)
+        expect(JSON.stringify(response.json().errors)).toContain('OUTBOUND_ALLOW_PRIVATE_ADDRESSES')
+      }
+      for (const uri of ['http://localhost:3000/logout', 'https://bc.example.com/logout']) {
+        const response = await h.api('POST', '/clients', { body: app({ clientId: `bc-${uri.length}`, backchannelLogoutUri: uri }) })
+        expect(response.statusCode, uri).toBe(201)
+      }
+    } finally {
+      await h.close()
+    }
+  })
+
+  it('is accepted for private addresses when the operator allows them, and nothing else changes', async () => {
+    const h = await createAdminHarness({ allowPrivateAddresses: true })
+    try {
+      let n = 0
+      for (const uri of accepted) {
+        const response = await h.api('POST', '/clients', { body: app({ clientId: `bc-ok-${++n}`, backchannelLogoutUri: uri }) })
+        expect(response.statusCode, uri).toBe(201)
+      }
+      for (const uri of refused) {
+        const response = await h.api('POST', '/clients', { body: app({ clientId: `bc-no-${++n}`, backchannelLogoutUri: uri }) })
+        expect(response.statusCode, uri).toBe(400)
+      }
+      // The same rule when changing a client, and redirect URIs keep theirs.
+      const changed = await h.api('PATCH', '/clients/bc-ok-1', { body: { backchannelLogoutUri: 'http://api:3000/logout' } })
+      expect(changed.statusCode).toBe(200)
+      const redirect = await h.api('PATCH', '/clients/bc-ok-1', { body: { redirectUris: ['http://api:3000/cb'] } })
+      expect(redirect.statusCode).toBe(400)
+    } finally {
+      await h.close()
+    }
+  })
+})
