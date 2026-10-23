@@ -31,6 +31,8 @@ const clientSchema = z.object({
   clientId: z.string(),
   name: z.string(),
   type: z.enum(['public', 'confidential']),
+  /** Where the application starts. The page after choosing a password leads here; null if not set. */
+  clientUri: z.string().nullable(),
   redirectUris: z.array(z.string()),
   postLogoutRedirectUris: z.array(z.string()),
   backchannelLogoutUri: z.string().nullable(),
@@ -52,6 +54,7 @@ const toClientDto = (client: ClientRow, claimTypes: string[]): z.infer<typeof cl
   clientId: client.clientId,
   name: client.name,
   type: client.type,
+  clientUri: client.clientUri,
   redirectUris: client.redirectUris,
   postLogoutRedirectUris: client.postLogoutRedirectUris,
   backchannelLogoutUri: client.backchannelLogoutUri,
@@ -125,11 +128,12 @@ export const clientsRoutes =
             'Two kinds exist. An **application** signs users in (authorization code flow, public or confidential) and has ' +
             'OpenID scopes and redirect URIs. A **machine** calls the admin API with the client_credentials grant and has ' +
             'only the scopes `admin` and/or `directory`. They never mix. A confidential client gets a generated secret, ' +
-            'returned here once and never again. Redirect URIs must be https (http only for localhost).',
+            'returned here once and never again. Redirect URIs and the start address (`clientUri`) must be https (http only for localhost).',
           body: z.object({
             clientId,
             name: z.string().trim().min(1).max(200),
             type: z.enum(['public', 'confidential']),
+            clientUri: z.string().max(2000).nullable().optional(),
             redirectUris: uris.optional(),
             postLogoutRedirectUris: uris.optional(),
             backchannelLogoutUri: z.string().max(2000).nullable().optional(),
@@ -154,6 +158,7 @@ export const clientsRoutes =
                 clientId: body.clientId,
                 name: body.name,
                 type: body.type,
+                clientUri: body.clientUri ?? null,
                 secretHash: secret ? await hash(secret) : undefined,
                 redirectUris: body.redirectUris ?? [],
                 postLogoutRedirectUris: body.postLogoutRedirectUris ?? [],
@@ -190,6 +195,7 @@ export const clientsRoutes =
           body: z
             .object({
               name: z.string().trim().min(1).max(200).optional(),
+              clientUri: z.string().max(2000).nullable().optional(),
               redirectUris: uris.optional(),
               postLogoutRedirectUris: uris.optional(),
               backchannelLogoutUri: z.string().max(2000).nullable().optional(),

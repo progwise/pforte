@@ -86,6 +86,7 @@ In the administration open *Clients → New client → Application* ([the admini
 | Setting | What to know |
 | --- | --- |
 | Public or confidential | **Public** for an application that cannot keep a secret: a browser or mobile app. **Confidential** for one that runs on a server: it gets a secret, shown once, and uses it at the token endpoint. |
+| Start address | Where your application starts, for example `https://app.example.com/`. Optional, `https` only (`http` for `localhost`). When a person has chosen their password from an activation link, or has reset it, the last page of pforte shows a button *Continue to your application* that leads here, because the mail is often opened on another device than the application. It is not a redirect URI: it carries no code or token, and your application starts its own sign-in. Only this registered address is ever linked. In the Admin API it is `clientUri`. |
 | Redirect URIs | Where pforte may send the browser back. They must match **exactly** (scheme, host, port, path, a trailing slash). `https` only; `http` is allowed for `localhost`, `127.0.0.1` and `[::1]` during development. No wildcards, no fragments. |
 | After signing out, return to | The addresses the application may name as `post_logout_redirect_uri`, again exactly. |
 | Scopes | `openid` is always there. `profile` adds the name and language, `email` the address (it is part of `openid` anyway), `phone` the mobile number. |

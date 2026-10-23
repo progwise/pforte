@@ -96,7 +96,7 @@ export const deactivateUser = async (tx: DatabaseOrTransaction, context: Request
   assertAllowed(user, 'deactivate')
   await assertAdminStays(tx, context, user, 'deactivate')
   // A pending activation link must not work for someone who was deactivated.
-  const updated = await setStatus(tx, user, { status: 'deactivated', activationTokenHash: null, activationExpiresAt: null })
+  const updated = await setStatus(tx, user, { status: 'deactivated', activationTokenHash: null, activationExpiresAt: null, activationClientId: null })
   const { sessionsEnded, devicesRevoked } = await endUserSessions(tx, user.id)
   await recordAuditEvent(tx, audit(context, 'user.deactivate', user, { from: user.status, to: 'deactivated', sessionsEnded, devicesRevoked }))
   return updated
@@ -109,7 +109,7 @@ const hashToken = (token: string) => createHash('sha256').update(token).digest('
  * once, for the notifier, and only its hash is stored. A deactivated user who already has a
  * password simply becomes active again.
  */
-export const activateUser = async (tx: DatabaseOrTransaction, context: RequestContext, user: UserRow) => {
+export const activateUser = async (tx: DatabaseOrTransaction, context: RequestContext, user: UserRow, options: { clientId?: string } = {}) => {
   assertAllowed(user, 'activate')
 
   if (user.status === 'deactivated' && user.passwordHash) {
@@ -124,11 +124,12 @@ export const activateUser = async (tx: DatabaseOrTransaction, context: RequestCo
     status: 'created',
     activationTokenHash: hashToken(token),
     activationExpiresAt: expiresAt,
+    activationClientId: options.clientId ?? null,
   })
   // The audit event never contains the token.
   await recordAuditEvent(
     tx,
-    audit(context, 'user.activate', user, { from: user.status, to: 'created', linkSent: true, expiresAt: expiresAt.toISOString() }),
+    audit(context, 'user.activate', user, { from: user.status, to: 'created', linkSent: true, expiresAt: expiresAt.toISOString(), ...(options.clientId ? { clientId: options.clientId } : {}) }),
   )
   return { user: updated, activation: { token, expiresAt } }
 }

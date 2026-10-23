@@ -25,6 +25,11 @@ export const clients = pgTable(
      * does not let it be changed, rotated or deleted, since pforte could not work without it.
      */
     system: boolean().notNull().default(false),
+    /**
+     * Where the application starts (client metadata `client_uri`). Pages that end a flow in pforte, such as choosing
+     * a password, link to it so the person can continue. Not a redirect URI: it carries no code or token.
+     */
+    clientUri: text(),
     redirectUris: text().array().notNull().default(sql`'{}'`),
     postLogoutRedirectUris: text().array().notNull().default(sql`'{}'`),
     /** Where pforte sends back-channel logout tokens when a session ends. Null disables it. */

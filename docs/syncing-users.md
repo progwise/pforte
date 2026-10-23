@@ -86,6 +86,19 @@ link, where they choose their password (`{"activation": {"linkSent": true, "expi
 call replaces it). Do it for new people; in the administration the same is the button *Send activation link* on the person's page.
 For a deactivated person who already has a password, the same call makes them active again, without a link.
 
+Name the application the person is invited to, so the mail says what the account is for and the page after choosing the password
+leads on to it:
+
+```sh
+curl -X POST "$PFORTE/admin/users/$ID/activate" -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' -d '{"clientId": "my-app"}'
+```
+
+`clientId` is optional. It must be a registered client (otherwise the answer is a 400), and the button on the page appears if that
+client has a *start address* (see [integrating an application](integrating-a-client.md)). The same button ends a password reset
+that began on the sign-in page of that application. Without a `clientId` nothing changes: the page only says to sign in from the
+application you came from.
+
 ## People who are no longer in the source
 
 Locking is the safe answer: it ends their sessions and they cannot sign in, and `POST /admin/users/{id}/unlock` brings them back.

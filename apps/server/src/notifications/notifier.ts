@@ -24,7 +24,7 @@ export interface Notifier {
   /** The code that confirms the user's phone number; always an SMS to that number. */
   sendPhoneCode(user: NotifiableUser, phone: { code: string; expiresAt: Date }): Promise<void>
   /** The link a new user opens to set their first password. */
-  sendActivationLink(user: NotifiableUser, link: { url: string; expiresAt: Date }): Promise<void>
+  sendActivationLink(user: NotifiableUser, link: { url: string; expiresAt: Date; applicationName?: string }): Promise<void>
 }
 
 /** No way to reach the user is configured. */
@@ -104,12 +104,11 @@ export const createMailNotifier = ({ mailer, sms, organisation, i18n }: MailNoti
       if (channel === 'sms') return sendSms(user, text(user, 'sms.login', values))
       await mailer.send({ to: user.email, subject: text(user, 'mail.loginCode.subject'), text: text(user, 'mail.loginCode.text', values) })
     },
-    async sendActivationLink(user, { url, expiresAt }) {
-      await mailer.send({
-        to: user.email,
-        subject: text(user, 'mail.activation.subject'),
-        text: text(user, 'mail.activation.text', { url, hours: hoursUntil(expiresAt) }),
-      })
+    async sendActivationLink(user, { url, expiresAt, applicationName }) {
+      // Naming the application tells the person what the account is for.
+      const kind = applicationName ? 'mail.activationFor' : 'mail.activation'
+      const values = { url, hours: hoursUntil(expiresAt), ...(applicationName ? { application: applicationName } : {}) }
+      await mailer.send({ to: user.email, subject: text(user, `${kind}.subject`, values), text: text(user, `${kind}.text`, values) })
     },
     async sendResetCode(user, { code, expiresAt, url, channel }) {
       const values = { code, minutes: minutesUntil(expiresAt), url }

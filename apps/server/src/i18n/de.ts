@@ -96,6 +96,10 @@ export const de: Catalog = {
   'mail.activation.subject': 'Aktivieren Sie Ihr Konto bei {organisation}',
   'mail.activation.text':
     'Guten Tag {firstName},\n\nfür Sie wurde ein Konto bei {organisation} angelegt. Über diesen Link wählen Sie Ihr Passwort:\n\n{url}\n\nDer Link ist {hours} Stunden gültig. Wenn Sie diese Nachricht nicht erwartet haben, können Sie sie ignorieren.\n',
+  'mail.activationFor.subject': 'Aktivieren Sie Ihr Konto für {application}',
+  'mail.activationFor.text':
+    'Guten Tag {firstName},\n\nfür Sie wurde bei {organisation} ein Konto für {application} angelegt. Über diesen Link wählen Sie Ihr Passwort:\n\n{url}\n\nDer Link ist {hours} Stunden gültig. Wenn Sie diese Nachricht nicht erwartet haben, können Sie sie ignorieren.\n',
+  'continue.button': 'Weiter zu {name}',
   'mail.resetCode.subject': 'Neues Passwort für {organisation}',
   'mail.resetCode.text':
     'Guten Tag {firstName},\n\nIhr Code für ein neues Passwort lautet {code}. Er ist {minutes} Minuten gültig. Geben Sie ihn hier ein:\n\n{url}\n\nWenn Sie kein neues Passwort angefordert haben, ignorieren Sie diese Nachricht; Ihr Passwort bleibt unverändert.\n',

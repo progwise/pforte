@@ -8,6 +8,14 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
 
 ## Unreleased
 
+### Added
+
+- **Continue to the application.** A client has an optional start address (`clientUri`, settable in the administration and the
+  Admin API). `POST /admin/users/{id}/activate` accepts an optional `clientId`: the e-mail then names the application, and the
+  page after choosing a password (also after confirming the phone number) has a button to its start address. A password reset
+  that began on the sign-in page of an application ends with the same button. Needs a database migration (`pforte migrate`, or MIGRATE_ON_START)
+  ([#28](https://github.com/progwise/pforte/issues/28)).
+
 ### Changed
 
 - **Cross-origin requests (CORS) are limited to registered applications.** Until now pforte repeated whatever origin a page

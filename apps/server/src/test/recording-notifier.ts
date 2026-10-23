@@ -7,6 +7,7 @@ export interface Notification {
   url?: string
   code?: string
   expiresAt?: Date
+  applicationName?: string
 }
 
 /** A notifier that keeps what it was asked to send, and can be told to fail. */
@@ -26,7 +27,7 @@ export const createRecordingNotifier = () => {
     },
     async sendActivationLink(user, link) {
       if (notifier.failWith) throw notifier.failWith
-      notifications.push({ kind: 'activation', user, url: link.url, expiresAt: link.expiresAt })
+      notifications.push({ kind: 'activation', user, url: link.url, expiresAt: link.expiresAt, applicationName: link.applicationName })
     },
     async sendResetCode(user, reset) {
       await notifier.hold

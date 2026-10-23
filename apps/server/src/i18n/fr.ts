@@ -97,6 +97,10 @@ export const fr: Catalog = {
   'mail.activation.subject': 'Activez votre compte chez {organisation}',
   'mail.activation.text':
     "Bonjour {firstName},\n\nun compte a été créé pour vous chez {organisation}. Ouvrez ce lien pour choisir votre mot de passe :\n\n{url}\n\nLe lien est valable {hours} heures. Si vous n'attendiez pas ce message, vous pouvez l'ignorer.\n",
+  'mail.activationFor.subject': 'Activez votre compte pour {application}',
+  'mail.activationFor.text':
+    "Bonjour {firstName},\n\nun compte a été créé pour vous chez {organisation} pour vous connecter à {application}. Ouvrez ce lien pour choisir votre mot de passe :\n\n{url}\n\nLe lien est valable {hours} heures. Si vous n'attendiez pas ce message, vous pouvez l'ignorer.\n",
+  'continue.button': 'Continuer vers {name}',
   'mail.resetCode.subject': 'Nouveau mot de passe pour {organisation}',
   'mail.resetCode.text':
     "Bonjour {firstName},\n\nvotre code pour choisir un nouveau mot de passe est {code}. Il est valable {minutes} minutes. Saisissez-le ici :\n\n{url}\n\nSi vous n'avez pas demandé de nouveau mot de passe, ignorez ce message ; votre mot de passe reste inchangé.\n",

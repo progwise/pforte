@@ -186,6 +186,9 @@ export const adminDe: AdminCatalog = {
   'manage.clientForm.type': 'Typ',
   'manage.clientForm.typePublic': 'Öffentlich: eine Browser- oder mobile App, ohne Geheimnis',
   'manage.clientForm.typeConfidential': 'Vertraulich: hat ein Geheimnis, das auf einem Server bleibt',
+  'manage.clientForm.clientUri': 'Startadresse',
+  'manage.clientForm.clientUriHint':
+    'Wo die Anwendung beginnt. Nach dem Wählen des Passworts erscheint eine Schaltfläche, die hierher führt. https (http nur für localhost). Optional.',
   'manage.clientForm.redirectUris': 'Redirect-URIs',
   'manage.clientForm.redirectUrisHint': 'Wohin Personen nach der Anmeldung zurückkehren. Eine pro Zeile, https (http nur für localhost).',
   'manage.clientForm.postLogoutRedirectUris': 'Nach der Abmeldung zurück zu',

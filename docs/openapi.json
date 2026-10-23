@@ -6817,7 +6817,31 @@
         "tags": [
           "Lifecycle"
         ],
-        "description": "For a created user: sends the activation link, where they choose their first password; a new call replaces the earlier link. For a deactivated user who already has a password: makes them active again, without a link. The link is never returned or logged by pforte.",
+        "description": "For a created user: sends the activation link, where they choose their first password; a new call replaces the earlier link. For a deactivated user who already has a password: makes them active again, without a link. The link is never returned or logged by pforte. The body is optional; with `clientId` (a registered client) the e-mail names the application and the page after choosing the password leads to its start address (`clientUri`); an unknown client is a 400.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "clientId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 63
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        },
         "parameters": [
           {
             "schema": {
@@ -10050,6 +10074,12 @@
                               "confidential"
                             ]
                           },
+                          "clientUri": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "redirectUris": {
                             "type": "array",
                             "items": {
@@ -10104,6 +10134,7 @@
                           "clientId",
                           "name",
                           "type",
+                          "clientUri",
                           "redirectUris",
                           "postLogoutRedirectUris",
                           "backchannelLogoutUri",
@@ -10379,7 +10410,7 @@
         "tags": [
           "Clients"
         ],
-        "description": "Two kinds exist. An **application** signs users in (authorization code flow, public or confidential) and has OpenID scopes and redirect URIs. A **machine** calls the admin API with the client_credentials grant and has only the scopes `admin` and/or `directory`. They never mix. A confidential client gets a generated secret, returned here once and never again. Redirect URIs must be https (http only for localhost).",
+        "description": "Two kinds exist. An **application** signs users in (authorization code flow, public or confidential) and has OpenID scopes and redirect URIs. A **machine** calls the admin API with the client_credentials grant and has only the scopes `admin` and/or `directory`. They never mix. A confidential client gets a generated secret, returned here once and never again. Redirect URIs and the start address (`clientUri`) must be https (http only for localhost).",
         "requestBody": {
           "required": true,
           "content": {
@@ -10401,6 +10432,17 @@
                     "enum": [
                       "public",
                       "confidential"
+                    ]
+                  },
+                  "clientUri": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
                     ]
                   },
                   "redirectUris": {
@@ -10488,6 +10530,12 @@
                             "confidential"
                           ]
                         },
+                        "clientUri": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
                         "redirectUris": {
                           "type": "array",
                           "items": {
@@ -10542,6 +10590,7 @@
                         "clientId",
                         "name",
                         "type",
+                        "clientUri",
                         "redirectUris",
                         "postLogoutRedirectUris",
                         "backchannelLogoutUri",
@@ -10863,6 +10912,12 @@
                         "confidential"
                       ]
                     },
+                    "clientUri": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "redirectUris": {
                       "type": "array",
                       "items": {
@@ -10917,6 +10972,7 @@
                     "clientId",
                     "name",
                     "type",
+                    "clientUri",
                     "redirectUris",
                     "postLogoutRedirectUris",
                     "backchannelLogoutUri",
@@ -11198,6 +11254,17 @@
                     "minLength": 1,
                     "maxLength": 200
                   },
+                  "clientUri": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "redirectUris": {
                     "maxItems": 50,
                     "type": "array",
@@ -11286,6 +11353,12 @@
                         "confidential"
                       ]
                     },
+                    "clientUri": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "redirectUris": {
                       "type": "array",
                       "items": {
@@ -11340,6 +11413,7 @@
                     "clientId",
                     "name",
                     "type",
+                    "clientUri",
                     "redirectUris",
                     "postLogoutRedirectUris",
                     "backchannelLogoutUri",

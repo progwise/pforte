@@ -73,6 +73,17 @@ describe('mail notifier', () => {
     expect(sent[0]!.text).toContain('72 hours')
   })
 
+  it('names the application in the activation e-mail when there is one, in the language of the user', async () => {
+    sent.length = 0
+    const base = { url: link.url, expiresAt: new Date(Date.now() + 72 * 3_600_000), applicationName: 'Partner Portal' }
+    await notifier.sendActivationLink(user, base)
+    await notifier.sendActivationLink({ ...user, language: 'de' }, base)
+    expect(sent[0]!.subject).toBe('Activate your account for Partner Portal')
+    expect(sent[0]!.text).toContain('to sign in to Partner Portal')
+    expect(sent[0]!.text).toContain(link.url)
+    expect(sent[1]!.subject).toBe('Aktivieren Sie Ihr Konto für Partner Portal')
+  })
+
   it('sends the password reset code with the page to enter it, in the language of the user', async () => {
     sent.length = 0
     const reset = { code: '654321', channel: 'email' as const, expiresAt: new Date(Date.now() + 10 * 60_000), url: 'https://id.example.com/reset/code?email=ada%40example.com' }

@@ -42,6 +42,7 @@ export const completeActivation = (
         status: 'active',
         activationTokenHash: null,
         activationExpiresAt: null,
+        activationClientId: null,
         emailVerifiedAt: sql`coalesce(${users.emailVerifiedAt}, ${now.toISOString()}::timestamptz)`,
       })
       .where(

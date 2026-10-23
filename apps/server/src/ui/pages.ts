@@ -17,7 +17,7 @@ export interface PageSet {
   language: string
   /** A text in this language, for the parts of a page that routes fill in themselves. */
   t(key: MessageKey, values?: Values): string
-  login(options: { uid: string; clientName?: string; email?: string; error?: string }): string
+  login(options: { uid: string; clientName?: string; /** Carried to the page for a forgotten password. */ clientId?: string; email?: string; error?: string }): string
   code(options: {
     uid: string
     channel: 'email' | 'sms'
@@ -31,8 +31,9 @@ export interface PageSet {
     phoneHint?: boolean
   }): string
   activation(options: { token: string; error?: string }): string
-  forgotPassword(options: { email?: string; error?: string }): string
-  resetCode(options: { email: string; notice?: string; error?: string }): string
+  /** `clientId` is the application the person came from, so the last page of the reset can lead back to it. */
+  forgotPassword(options: { email?: string; error?: string; clientId?: string }): string
+  resetCode(options: { email: string; notice?: string; error?: string; clientId?: string }): string
   phoneConfirm(options: { sentTo: string; error?: string; notice?: string }): string
   /** A page that only says something: a title and a text, both already in the right language, and perhaps a button. */
   notice(title: string, message: string, action?: { href: string; label: string }): string
@@ -119,12 +120,14 @@ ${footer}</body>
 <label for="confirm">${escapeHtml(t('password.confirm'))}</label>
 <input id="confirm" name="confirm" type="password" autocomplete="new-password" minlength="10" maxlength="128" required>`
     const hiddenLanguage = `<input type="hidden" name="lang" value="${escapeHtml(language)}">`
+    const hiddenClient = (clientId?: string) => (clientId ? `<input type="hidden" name="client_id" value="${escapeHtml(clientId)}">` : '')
+    const clientQuery = (clientId?: string) => (clientId ? `&amp;client_id=${encodeURIComponent(clientId)}` : '')
 
     return {
       language,
       t,
 
-      login: ({ uid, clientName, email = '', error }) =>
+      login: ({ uid, clientName, clientId, email = '', error }) =>
         page(
           t('login.title'),
           `<h1>${escapeHtml(clientName ? t('login.titleTo', { client: clientName }) : t('login.title'))}</h1>
@@ -136,7 +139,7 @@ ${alert(error)}
 <input id="password" name="password" type="password" autocomplete="current-password" required>
 <button type="submit">${escapeHtml(t('login.submit'))}</button>
 </form>
-<p><a href="/reset?lang=${encodeURIComponent(language)}">${escapeHtml(t('login.forgot'))}</a></p>
+<p><a href="/reset?lang=${encodeURIComponent(language)}${clientQuery(clientId)}">${escapeHtml(t('login.forgot'))}</a></p>
 <form method="post" action="/interaction/${encodeURIComponent(uid)}/abort">
 <button type="submit" class="secondary">${escapeHtml(t('common.cancel'))}</button>
 </form>`,
@@ -183,7 +186,7 @@ ${passwordFields}
 </form>`,
         ),
 
-      forgotPassword: ({ email = '', error }) =>
+      forgotPassword: ({ email = '', error, clientId }) =>
         page(
           t('reset.title'),
           `<h1>${escapeHtml(t('reset.title'))}</h1>
@@ -191,13 +194,14 @@ ${passwordFields}
 ${alert(error)}
 <form method="post" action="/reset">
 ${hiddenLanguage}
+${hiddenClient(clientId)}
 <label for="email">${escapeHtml(t('common.email'))}</label>
 <input id="email" name="email" type="email" autocomplete="username" required autofocus value="${escapeHtml(email)}">
 <button type="submit">${escapeHtml(t('reset.send'))}</button>
 </form>`,
         ),
 
-      resetCode: ({ email, notice, error }) =>
+      resetCode: ({ email, notice, error, clientId }) =>
         page(
           t('reset.codeTitle'),
           `<h1>${escapeHtml(t('reset.codeTitle'))}</h1>
@@ -205,12 +209,13 @@ ${status(notice)}
 ${alert(error)}
 <form method="post" action="/reset/code">
 ${hiddenLanguage}
+${hiddenClient(clientId)}
 <input type="hidden" name="email" value="${escapeHtml(email)}">
 ${codeField}
 ${passwordFields}
 <button type="submit">${escapeHtml(t('reset.codeSubmit'))}</button>
 </form>
-<p><a href="/reset?email=${encodeURIComponent(email)}&amp;lang=${encodeURIComponent(language)}">${escapeHtml(t('common.sendNewCode'))}</a></p>`,
+<p><a href="/reset?email=${encodeURIComponent(email)}&amp;lang=${encodeURIComponent(language)}${clientQuery(clientId)}">${escapeHtml(t('common.sendNewCode'))}</a></p>`,
         ),
 
       phoneConfirm: ({ sentTo, error, notice }) =>

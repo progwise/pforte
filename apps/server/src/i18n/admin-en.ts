@@ -188,6 +188,9 @@ export const adminEn = {
   'manage.clientForm.type': 'Type',
   'manage.clientForm.typePublic': 'Public: a browser or mobile app, without a secret',
   'manage.clientForm.typeConfidential': 'Confidential: has a secret that stays on a server',
+  'manage.clientForm.clientUri': 'Start address',
+  'manage.clientForm.clientUriHint':
+    'Where the application starts. After choosing a password the person gets a button that leads here. https (http only for localhost). Optional.',
   'manage.clientForm.redirectUris': 'Redirect URIs',
   'manage.clientForm.redirectUrisHint': 'Where people return after signing in. One per line, https (http only for localhost).',
   'manage.clientForm.postLogoutRedirectUris': 'After signing out, return to',

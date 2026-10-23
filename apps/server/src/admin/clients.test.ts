@@ -122,6 +122,20 @@ describe.skipIf(!hasDatabase)('admin API: clients', () => {
       expect(JSON.stringify(event)).not.toContain(response.json().clientSecret)
     })
 
+    it('keeps a start address, which can be changed and removed', async () => {
+      const created = await create({ ...shop, clientId: 'with-start', clientUri: 'https://shop.example.com/start' })
+      expect(created.statusCode).toBe(201)
+      expect(created.json().client.clientUri).toBe('https://shop.example.com/start')
+
+      const moved = await h.api('PATCH', '/clients/with-start', { body: { clientUri: 'http://localhost:5173/' } })
+      expect(moved.json().clientUri).toBe('http://localhost:5173/')
+      const refused = await h.api('PATCH', '/clients/with-start', { body: { clientUri: 'http://shop.example.com/' } })
+      expect(refused.statusCode).toBe(400)
+      const removed = await h.api('PATCH', '/clients/with-start', { body: { clientUri: null } })
+      expect(removed.json().clientUri).toBeNull()
+      expect((await create({ ...shop, clientId: 'no-start' })).json().client.clientUri).toBeNull()
+    })
+
     it('refuses a client id that exists', async () => {
       expect((await create({ ...shop })).statusCode).toBe(409)
     })
@@ -132,6 +146,9 @@ describe.skipIf(!hasDatabase)('admin API: clients', () => {
       ['an admin scope on an application', { scopes: ['openid', 'admin'] }, '/scopes'],
       ['no redirect URI', { redirectUris: [] }, '/redirectUris'],
       ['an invalid client id', { clientId: 'Not Valid' }, 'clientId'],
+      ['an http start address', { clientUri: 'http://shop.example.com/' }, '/clientUri'],
+      ['a start address with a fragment', { clientUri: 'https://shop.example.com/#top' }, '/clientUri'],
+      ['a start address that is no address', { clientUri: 'shop' }, '/clientUri'],
     ])('refuses %s', async (_name, change, path) => {
       const response = await create({ ...shop, clientId: 'invalid-one', ...change })
 

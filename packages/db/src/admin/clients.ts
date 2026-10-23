@@ -10,6 +10,8 @@ type ClientRow = typeof clients.$inferSelect
 export interface ClientConfig {
   name: string
   type: 'public' | 'confidential'
+  /** Where the application starts; pages that end a flow in pforte lead there. */
+  clientUri: string | null
   redirectUris: string[]
   postLogoutRedirectUris: string[]
   backchannelLogoutUri: string | null
@@ -57,6 +59,9 @@ export const validateClientConfig = (config: ClientConfig): Problem[] => {
   config.postLogoutRedirectUris.forEach((uri, index) => {
     if (!isAllowedUri(uri)) add(`/postLogoutRedirectUris/${index}`, `"${uri}" must be an https URL (http only for localhost) without wildcards or fragment.`)
   })
+  if (config.clientUri && !isAllowedUri(config.clientUri)) {
+    add('/clientUri', 'The start address must be an https URL (http only for localhost) without wildcards or fragment.')
+  }
   if (config.backchannelLogoutUri && !isAllowedUri(config.backchannelLogoutUri)) {
     add('/backchannelLogoutUri', 'Logout tokens are sent here, so it must be an https URL (http only for localhost).')
   }
@@ -70,7 +75,7 @@ export const validateClientConfig = (config: ClientConfig): Problem[] => {
     if (config.scopes.length === 0 || !subsetOf(config.scopes, ADMIN_SCOPES)) {
       add('/scopes', `A machine client needs at least one of ${ADMIN_SCOPES.join(', ')} and nothing else.`)
     }
-    if (config.redirectUris.length > 0 || config.postLogoutRedirectUris.length > 0 || config.backchannelLogoutUri) {
+    if (config.redirectUris.length > 0 || config.postLogoutRedirectUris.length > 0 || config.backchannelLogoutUri || config.clientUri) {
       add('/redirectUris', 'A machine client does not sign users in, so it has no redirect or logout URIs.')
     }
     return problems
@@ -117,6 +122,7 @@ export const ensureSystemClient = async (
   const values = {
     name: client.name,
     type: 'public' as const,
+    clientUri: null,
     secretHash: null,
     pkceRequired: true,
     redirectUris: client.redirectUris,
@@ -135,6 +141,7 @@ export const ensureSystemClient = async (
 const configOf = (client: ClientRow): ClientConfig => ({
   name: client.name,
   type: client.type,
+  clientUri: client.clientUri,
   redirectUris: client.redirectUris,
   postLogoutRedirectUris: client.postLogoutRedirectUris,
   backchannelLogoutUri: client.backchannelLogoutUri,
