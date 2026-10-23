@@ -71,6 +71,13 @@
       "when": 1792486787557,
       "tag": "0009_add_system_clients",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792747753408,
+      "tag": "0010_add_client_uri_and_activation_client",
+      "breakpoints": true
     }
   ]
 }

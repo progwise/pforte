@@ -2,6 +2,7 @@ import formbody from '@fastify/formbody'
 import { hash } from '@node-rs/argon2'
 import type { Database } from '@progwise/pforte-db'
 import { checkCode, CodeLimitError, issueCode, markEmailVerified, markPhoneVerified } from '@progwise/pforte-db/codes'
+import { getClient } from '@progwise/pforte-db/admin'
 import { findActiveUserById } from '@progwise/pforte-db/oidc'
 import { completeActivation, completePasswordReset, findPendingActivation } from '@progwise/pforte-db/credentials'
 import { findUserByEmail } from '@progwise/pforte-db/users'
@@ -48,6 +49,8 @@ const PHONE_STEP_SECONDS = 30 * 60
 interface PhoneStep {
   userId: string
   expiresAt: number
+  /** The application the person was invited to, for the button on the last page. */
+  clientId?: string
 }
 
 const text = (value: unknown) => (typeof value === 'string' ? value : '')
@@ -88,7 +91,16 @@ export const accountRoutes =
 
     const invalidLink = (reply: FastifyReply, view: PageSet) =>
       html(reply, 400, view.notice(view.t('activate.invalidTitle'), view.t('activate.invalid')))
-    const activeAccount = (view: PageSet) => view.notice(view.t('activate.doneTitle'), view.t('activate.done'))
+    /**
+     * The button that leads on to the application, if the client is known and has a start address. Only the address
+     * registered for the client is ever linked, never one that came with the request.
+     */
+    const continueTo = async (view: PageSet, clientId?: string) => {
+      const client = clientId ? await getClient(db, clientId) : undefined
+      return client?.clientUri ? { href: client.clientUri, label: view.t('continue.button', { name: client.name }) } : undefined
+    }
+    const activeAccount = async (view: PageSet, clientId?: string) =>
+      view.notice(view.t('activate.doneTitle'), view.t('activate.done'), await continueTo(view, clientId))
 
     // --- First password, from the link in the activation e-mail
 
@@ -134,18 +146,18 @@ export const accountRoutes =
       if (notifier.smsAvailable && user.phone && !user.phoneVerifiedAt) {
         try {
           await sendPhoneCode(user)
-          reply.header('Set-Cookie', phoneCookie(user.id))
+          reply.header('Set-Cookie', phoneCookie(user.id, pending.activationClientId ?? undefined))
           return html(reply, 200, view.phoneConfirm({ sentTo: maskPhone(user.phone) }))
         } catch (error) {
           if (!(error instanceof NotifierUnavailableError)) throw error
           request.log.error(error, 'the code to confirm the phone number could not be sent')
         }
       }
-      return html(reply, 200, activeAccount(view))
+      return html(reply, 200, await activeAccount(view, pending.activationClientId ?? undefined))
     })
 
-    const phoneCookie = (userId: string) =>
-      setCookieHeader(PHONE_COOKIE, sign(cookieKeys, { userId, expiresAt: Date.now() + PHONE_STEP_SECONDS * 1000 } satisfies PhoneStep), {
+    const phoneCookie = (userId: string, clientId?: string) =>
+      setCookieHeader(PHONE_COOKIE, sign(cookieKeys, { userId, expiresAt: Date.now() + PHONE_STEP_SECONDS * 1000, ...(clientId ? { clientId } : {}) } satisfies PhoneStep), {
         path: '/activate',
         maxAgeSeconds: PHONE_STEP_SECONDS,
         secure,
@@ -161,7 +173,7 @@ export const accountRoutes =
       const step = unsign<PhoneStep>(cookieKeys, readCookie(request.headers.cookie, PHONE_COOKIE))
       if (!step || step.expiresAt < Date.now()) return undefined
       const user = await findActiveUserById(db, step.userId)
-      return user?.phone && !user.phoneVerifiedAt ? user : undefined
+      return user?.phone && !user.phoneVerifiedAt ? { ...user, clientId: step.clientId } : undefined
     }
 
     const finishedPhoneStep = (reply: FastifyReply, page: string) => {
@@ -172,7 +184,7 @@ export const accountRoutes =
     app.post<{ Body: Record<string, unknown> }>('/activate/phone', async (request, reply) => {
       const user = await phoneStep(request)
       const view = ui.pages.for(languageOf(request, undefined, user?.language))
-      if (!user) return html(reply, 200, activeAccount(view))
+      if (!user) return html(reply, 200, await activeAccount(view))
 
       const wait = await limiter.codeBlockedFor(request.ip)
       if (wait > 0) {
@@ -188,13 +200,13 @@ export const accountRoutes =
         return html(reply, 401, view.phoneConfirm({ sentTo: maskPhone(user.phone!), error: view.t('code.badOrExpired') }))
       }
       await markPhoneVerified(db, user.id)
-      return finishedPhoneStep(reply, view.notice(view.t('phone.doneTitle'), view.t('phone.done')))
+      return finishedPhoneStep(reply, view.notice(view.t('phone.doneTitle'), view.t('phone.done'), await continueTo(view, user.clientId)))
     })
 
     app.post('/activate/phone/resend', async (request, reply) => {
       const user = await phoneStep(request)
       const view = ui.pages.for(languageOf(request, undefined, user?.language))
-      if (!user) return html(reply, 200, activeAccount(view))
+      if (!user) return html(reply, 200, await activeAccount(view))
 
       const sendWait = await limiter.codeResend(request.ip)
       if (sendWait > 0) {
@@ -217,19 +229,24 @@ export const accountRoutes =
 
     app.post('/activate/phone/skip', async (request, reply) => {
       const user = await phoneStep(request)
-      return finishedPhoneStep(reply, activeAccount(ui.pages.for(languageOf(request, undefined, user?.language))))
+      return finishedPhoneStep(reply, await activeAccount(ui.pages.for(languageOf(request, undefined, user?.language)), user?.clientId))
     })
 
     // --- Forgotten password
 
-    app.get<{ Querystring: { email?: string; lang?: string } }>('/reset', async (request, reply) =>
-      html(reply, 200, ui.pages.for(languageOf(request, request.query.lang)).forgotPassword({ email: normalizeEmail(request.query.email) })),
+    app.get<{ Querystring: { email?: string; lang?: string; client_id?: string } }>('/reset', async (request, reply) =>
+      html(
+        reply,
+        200,
+        ui.pages.for(languageOf(request, request.query.lang)).forgotPassword({ email: normalizeEmail(request.query.email), clientId: text(request.query.client_id) || undefined }),
+      ),
     )
 
     app.post<{ Body: Record<string, unknown> }>('/reset', async (request, reply) => {
       const email = normalizeEmail(request.body?.email)
+      const clientId = text(request.body?.client_id) || undefined
       const view = ui.pages.for(languageOf(request, request.body?.lang))
-      if (!email.includes('@')) return html(reply, 400, view.forgotPassword({ email, error: view.t('reset.noEmail') }))
+      if (!email.includes('@')) return html(reply, 400, view.forgotPassword({ email, clientId, error: view.t('reset.noEmail') }))
 
       // Every address is counted, existing or not, so being over the limit says nothing about an account.
       const wait = await limiter.resetRequest(email, request.ip)
@@ -257,19 +274,24 @@ export const accountRoutes =
           }
         }),
       )
-      return html(reply, 200, view.resetCode({ email, notice: view.t('reset.sent') }))
+      return html(reply, 200, view.resetCode({ email, clientId, notice: view.t('reset.sent') }))
     })
 
-    app.get<{ Querystring: { email?: string; lang?: string } }>('/reset/code', async (request, reply) =>
-      html(reply, 200, ui.pages.for(languageOf(request, request.query.lang)).resetCode({ email: normalizeEmail(request.query.email) })),
+    app.get<{ Querystring: { email?: string; lang?: string; client_id?: string } }>('/reset/code', async (request, reply) =>
+      html(
+        reply,
+        200,
+        ui.pages.for(languageOf(request, request.query.lang)).resetCode({ email: normalizeEmail(request.query.email), clientId: text(request.query.client_id) || undefined }),
+      ),
     )
 
     app.post<{ Body: Record<string, unknown> }>('/reset/code', async (request, reply) => {
       const email = normalizeEmail(request.body?.email)
+      const clientId = text(request.body?.client_id) || undefined
       const view = ui.pages.for(languageOf(request, request.body?.lang))
       // Before the code is looked at, so that a typo in the password does not use up an attempt.
       const problem = passwordProblem(view, request.body, email)
-      if (problem) return html(reply, 422, view.resetCode({ email, error: problem }))
+      if (problem) return html(reply, 422, view.resetCode({ email, clientId, error: problem }))
 
       const wait = await limiter.codeBlockedFor(request.ip)
       if (wait > 0) {
@@ -283,7 +305,7 @@ export const accountRoutes =
       const refused = async (reason: string) => {
         await limiter.codeFailed(request.ip)
         await audit.codeFailed(origin(request), { userId: user?.id, email, purpose: 'password_reset', reason })
-        return html(reply, 401, view.resetCode({ email, error: view.t('code.badOrExpired') }))
+        return html(reply, 401, view.resetCode({ email, clientId, error: view.t('code.badOrExpired') }))
       }
       if (!user) return refused('unknown_user')
       if (user.status !== 'active' || !user.passwordHash) return refused('not_allowed')
@@ -295,6 +317,6 @@ export const accountRoutes =
       const changed = await completePasswordReset(db, { userId: user.id, passwordHash: await hash(text(request.body?.password)), ...origin(request) })
       if (!changed) return refused('not_allowed')
       if (result.channel === 'email') await markEmailVerified(db, user.id)
-      return html(reply, 200, view.notice(view.t('reset.doneTitle'), view.t('reset.done')))
+      return html(reply, 200, view.notice(view.t('reset.doneTitle'), view.t('reset.done'), await continueTo(view, clientId)))
     })
   }

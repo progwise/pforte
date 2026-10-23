@@ -67,6 +67,7 @@ export class ClientAdapter implements Adapter {
       client_id: client.clientId,
       client_name: client.name,
       application_type: 'web',
+      ...(client.clientUri ? { client_uri: client.clientUri } : {}),
       redirect_uris: client.redirectUris,
       post_logout_redirect_uris: client.postLogoutRedirectUris,
       grant_types: client.allowedGrants,

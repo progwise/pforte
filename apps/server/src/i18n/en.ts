@@ -98,6 +98,10 @@ export const en = {
   'mail.activation.subject': 'Activate your account at {organisation}',
   'mail.activation.text':
     'Hello {firstName},\n\nan account was created for you at {organisation}. Open this link to choose your password:\n\n{url}\n\nThe link is valid for {hours} hours. If you did not expect this message, you can ignore it.\n',
+  'mail.activationFor.subject': 'Activate your account for {application}',
+  'mail.activationFor.text':
+    'Hello {firstName},\n\nan account was created for you at {organisation} to sign in to {application}. Open this link to choose your password:\n\n{url}\n\nThe link is valid for {hours} hours. If you did not expect this message, you can ignore it.\n',
+  'continue.button': 'Continue to {name}',
   'mail.resetCode.subject': 'Choose a new password for {organisation}',
   'mail.resetCode.text':
     'Hello {firstName},\n\nyour code to choose a new password is {code}. It is valid for {minutes} minutes. Enter it here:\n\n{url}\n\nIf you did not ask for a new password, ignore this message; your password stays as it is.\n',

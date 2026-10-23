@@ -150,12 +150,114 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
     })
   })
 
+  describe('continuing to the application', () => {
+    const BUTTON = 'Continue to Demo web app (public client)'
+
+    /** A created user whose invitation named the client. */
+    const invitedTo = async (clientId?: string) => {
+      const email = `account${++counter}@example.com`
+      const created = (await h.api('POST', '/users', { body: { email, firstName: 'Ada', lastName: 'Lovelace' } })).json()
+      const activate = await h.api('POST', `/users/${created.id}/activate`, { body: clientId ? { clientId } : undefined })
+      expect(activate.statusCode, activate.body).toBe(200)
+      const token = tokenOf(h.notifications.findLast((n) => n.kind === 'activation')!.url!)
+      h.notifications.length = 0
+      return { email, id: created.id as string, token }
+    }
+
+    it('leads on to the start address of the client the person was invited to', async () => {
+      const user = await invitedTo('demo-web')
+      const done = await form('POST', '/activate', { token: user.token, password: GOOD, confirm: GOOD })
+      expect(done.statusCode).toBe(200)
+      expect(done.body).toContain(BUTTON)
+      expect(done.body).toContain('href="http://localhost:3400/"')
+    })
+
+    it('shows no button without a client, or when the client has no start address', async () => {
+      const plain = await invitedTo()
+      expect((await form('POST', '/activate', { token: plain.token, password: GOOD, confirm: GOOD })).body).not.toContain('Continue to')
+
+      await h.api('POST', '/clients', { body: { clientId: 'no-start-app', name: 'No start', type: 'public', redirectUris: ['https://nostart.example.com/cb'] } })
+      const user = await invitedTo('no-start-app')
+      const done = await form('POST', '/activate', { token: user.token, password: GOOD, confirm: GOOD })
+      expect(done.statusCode).toBe(200)
+      expect(done.body).not.toContain('Continue to')
+    })
+
+    it('shows no button when the client was deleted after the invitation', async () => {
+      await h.api('POST', '/clients', { body: { clientId: 'gone-app', name: 'Gone', type: 'public', redirectUris: ['https://gone.example.com/cb'], clientUri: 'https://gone.example.com/' } })
+      const user = await invitedTo('gone-app')
+      await h.api('DELETE', '/clients/gone-app')
+      const done = await form('POST', '/activate', { token: user.token, password: GOOD, confirm: GOOD })
+      expect(done.statusCode).toBe(200)
+      expect(done.body).not.toContain('Continue to')
+    })
+
+    it('speaks the language of the person on the button', async () => {
+      const user = await invitedTo('demo-web')
+      await h.database.pool.query(`update users set language = 'de' where id = $1`, [user.id])
+      const done = await form('POST', '/activate', { token: user.token, password: GOOD, confirm: GOOD })
+      expect(done.body).toContain('Weiter zu Demo web app (public client)')
+    })
+
+    it('keeps the client through the confirmation of the phone number', async () => {
+      h.notifier.smsAvailable = true
+      const user = await invitedTo('demo-web')
+      await h.database.pool.query(`update users set phone = '+4915112345678' where id = $1`, [user.id])
+      const password = await form('POST', '/activate', { token: user.token, password: GOOD, confirm: GOOD })
+      expect(password.body).toContain('action="/activate/phone"')
+      expect(password.body).not.toContain('Continue to')
+
+      const cookie = String(password.headers['set-cookie']).split(';')[0]!
+      const skipped = await browser().request('POST', '/activate/phone/skip', { headers: { cookie } })
+      expect(skipped.body).toContain(BUTTON)
+
+      const confirmed = await browser().request('POST', '/activate/phone', { form: { code: h.lastPhoneCode(user.email)! }, headers: { cookie } })
+      expect(confirmed.body).toContain(BUTTON)
+    })
+
+    it('carries the client from the sign-in page through the reset, and ends with the button', async () => {
+      const user = await activated()
+      const b = browser()
+      const authorize = await b.request('GET', '/auth?client_id=demo-web&redirect_uri=http%3A%2F%2Flocalhost%3A3400%2Fcallback&response_type=code&scope=openid&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256')
+      const login = await b.request('GET', authorize.headers.location as string)
+      expect(login.body).toContain('href="/reset?lang=en&amp;client_id=demo-web"')
+
+      const ask = await form('GET', '/reset?lang=en&client_id=demo-web')
+      expect(ask.body).toContain('name="client_id" value="demo-web"')
+      const sent = await form('POST', '/reset', { email: user.email, client_id: 'demo-web' })
+      await h.settle()
+      expect(sent.body).toContain('name="client_id" value="demo-web"')
+
+      const done = await form('POST', '/reset/code', { email: user.email, code: resetCode(user.email), password: 'a brand new password', confirm: 'a brand new password', client_id: 'demo-web' })
+      expect(done.statusCode).toBe(200)
+      expect(done.body).toContain(BUTTON)
+      expect(done.body).toContain('href="http://localhost:3400/"')
+    })
+
+    it('shows no button after a reset without a client, or for a client that does not exist', async () => {
+      for (const client_id of [undefined, 'nobody', 'https://evil.example/']) {
+        const user = await activated()
+        await requestReset(user.email)
+        const done = await form('POST', '/reset/code', {
+          email: user.email,
+          code: resetCode(user.email),
+          password: 'a brand new password',
+          confirm: 'a brand new password',
+          ...(client_id ? { client_id } : {}),
+        })
+        expect(done.statusCode).toBe(200)
+        expect(done.body).not.toContain('Continue to')
+        expect(done.body).not.toContain('evil.example')
+      }
+    })
+  })
+
   describe('forgotten password', () => {
     it('is linked from the login page', async () => {
       const b = browser()
       const authorize = await b.request('GET', '/auth?client_id=demo-web&redirect_uri=http%3A%2F%2Flocalhost%3A3400%2Fcallback&response_type=code&scope=openid&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256')
       const page = await b.request('GET', authorize.headers.location as string)
-      expect(page.body).toContain('href="/reset?lang=en"')
+      expect(page.body).toContain('href="/reset?lang=en&amp;client_id=demo-web"')
       expect((await form('GET', '/reset')).body).toContain('Send the code')
     })
 

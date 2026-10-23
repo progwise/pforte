@@ -95,6 +95,10 @@ export const hu: Catalog = {
   'mail.activation.subject': 'Aktiválja a fiókját: {organisation}',
   'mail.activation.text':
     'Tisztelt {firstName}!\n\nFiókot hoztak létre Önnek itt: {organisation}. Ezen a hivatkozáson választhat jelszót:\n\n{url}\n\nA hivatkozás {hours} óráig érvényes. Ha nem számított erre az üzenetre, figyelmen kívül hagyhatja.\n',
+  'mail.activationFor.subject': 'Aktiválja a fiókját: {application}',
+  'mail.activationFor.text':
+    'Tisztelt {firstName}!\n\nFiókot hoztak létre Önnek itt: {organisation}, a következőhöz: {application}. Ezen a hivatkozáson választhat jelszót:\n\n{url}\n\nA hivatkozás {hours} óráig érvényes. Ha nem számított erre az üzenetre, figyelmen kívül hagyhatja.\n',
+  'continue.button': 'Tovább ide: {name}',
   'mail.resetCode.subject': 'Új jelszó: {organisation}',
   'mail.resetCode.text':
     'Tisztelt {firstName}!\n\nAz új jelszó választásához szükséges kódja: {code}. A kód {minutes} percig érvényes. Itt adhatja meg:\n\n{url}\n\nHa nem kért új jelszót, hagyja figyelmen kívül ezt az üzenetet; a jelszava változatlan marad.\n',

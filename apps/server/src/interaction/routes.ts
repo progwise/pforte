@@ -136,6 +136,7 @@ export const interactionRoutes =
           ui.pages.for(languageOf(request, details.params)).login({
             uid: details.uid,
             clientName: client?.clientName,
+            clientId: client?.clientId,
             // The application may suggest who is signing in (OpenID Connect `login_hint`).
             email: typeof loginHint === 'string' ? loginHint : '',
           }),
@@ -175,6 +176,7 @@ export const interactionRoutes =
               view.login({
                 uid: details.uid,
                 clientName: client?.clientName,
+                clientId: client?.clientId,
                 email: typeof email === 'string' ? email : '',
                 error: view.t('login.wrong'),
               }),

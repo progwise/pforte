@@ -4,6 +4,7 @@ import {
   deactivateUser,
   endSessions,
   findUserById,
+  getClient,
   LifecycleError,
   lockUser,
   requestPasswordReset,
@@ -155,8 +156,11 @@ export const lifecycleRoutes =
           description:
             'For a created user: sends the activation link, where they choose their first password; a new call replaces ' +
             'the earlier link. For a deactivated user who already has a password: makes them active again, without a link. ' +
-            'The link is never returned or logged by pforte.',
+            'The link is never returned or logged by pforte. The body is optional; with `clientId` (a registered client) the e-mail names the ' +
+            'application and the page after choosing the password leads to its start address (`clientUri`); an unknown ' +
+            'client is a 400.',
           params,
+          body: z.object({ clientId: z.string().min(1).max(63).optional() }).nullish(),
           response: {
             200: z.object({ user: userSchema, activation: z.object({ linkSent: z.boolean(), expiresAt: z.string().nullable() }) }),
             ...ERROR_RESPONSES,
@@ -165,15 +169,18 @@ export const lifecycleRoutes =
       },
       async (request, reply) => {
         try {
+          const clientId = request.body?.clientId
+          const client = clientId ? await getClient(db, clientId) : undefined
+          if (clientId && !client) return problem(reply, 400, 'Invalid request', `There is no client "${clientId}".`)
           const result = await db.transaction(async (tx) => {
             const found = await findUserById(tx, request.params.id)
-            return found ? activateUser(tx, requestContext(request), found) : undefined
+            return found ? activateUser(tx, requestContext(request), found, { clientId: client?.clientId }) : undefined
           })
           if (!result) return noUser(reply)
 
           if (result.activation) {
             const url = `${issuer}/activate?token=${encodeURIComponent(result.activation.token)}`
-            await notifier.sendActivationLink(asUser(result.user), { url, expiresAt: result.activation.expiresAt })
+            await notifier.sendActivationLink(asUser(result.user), { url, expiresAt: result.activation.expiresAt, applicationName: client?.name })
           }
           return {
             user: toUserDto(result.user),

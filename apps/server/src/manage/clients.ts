@@ -16,6 +16,7 @@ interface ApiClient {
   clientId: string
   name: string
   type: 'public' | 'confidential'
+  clientUri: string | null
   redirectUris: string[]
   postLogoutRedirectUris: string[]
   backchannelLogoutUri: string | null
@@ -37,6 +38,7 @@ interface ClientForm {
   clientId: string
   name: string
   type: 'public' | 'confidential'
+  clientUri: string
   redirectUris: string
   postLogoutRedirectUris: string
   backchannelLogoutUri: string
@@ -50,6 +52,7 @@ const formOf = (client: ApiClient): ClientForm => ({
   clientId: client.clientId,
   name: client.name,
   type: client.type,
+  clientUri: client.clientUri ?? '',
   redirectUris: client.redirectUris.join('\n'),
   postLogoutRedirectUris: client.postLogoutRedirectUris.join('\n'),
   backchannelLogoutUri: client.backchannelLogoutUri ?? '',
@@ -63,6 +66,7 @@ const emptyForm = (kind: 'application' | 'machine'): ClientForm => ({
   clientId: '',
   name: '',
   type: kind === 'machine' ? 'confidential' : 'public',
+  clientUri: '',
   redirectUris: '',
   postLogoutRedirectUris: '',
   backchannelLogoutUri: '',
@@ -76,6 +80,7 @@ const formFrom = (body: Record<string, unknown> | undefined): ClientForm => ({
   clientId: text(body, 'clientId'),
   name: text(body, 'name'),
   type: text(body, 'type') === 'confidential' ? 'confidential' : 'public',
+  clientUri: text(body, 'clientUri'),
   redirectUris: typeof body?.redirectUris === 'string' ? body.redirectUris : '',
   postLogoutRedirectUris: typeof body?.postLogoutRedirectUris === 'string' ? body.postLogoutRedirectUris : '',
   backchannelLogoutUri: text(body, 'backchannelLogoutUri'),
@@ -91,6 +96,7 @@ const payloadOf = (kind: 'application' | 'machine', form: ClientForm) =>
     ? { name: form.name, scopes: form.scopes.filter((scope) => (MACHINE_SCOPES as readonly string[]).includes(scope)) }
     : {
         name: form.name,
+        clientUri: form.clientUri || null,
         redirectUris: lines(form.redirectUris),
         postLogoutRedirectUris: lines(form.postLogoutRedirectUris),
         backchannelLogoutUri: form.backchannelLogoutUri || null,
@@ -158,6 +164,7 @@ ${checks({ legend: t('manage.clientForm.rights'), name: 'scopes', hint: t('manag
 
     return `${common}
 ${creating ? select({ id: 'type', label: t('manage.clientForm.type'), value: values.type, choices: [{ value: 'public', label: t('manage.clientForm.typePublic') }, { value: 'confidential', label: t('manage.clientForm.typeConfidential') }] }) : ''}
+${field({ id: 'clientUri', label: t('manage.clientForm.clientUri'), value: values.clientUri, hint: t('manage.clientForm.clientUriHint'), error: errors.clientUri })}
 ${textarea({ id: 'redirectUris', label: t('manage.clientForm.redirectUris'), value: values.redirectUris, hint: t('manage.clientForm.redirectUrisHint'), error: errors.redirectUris, rows: 3 })}
 ${textarea({ id: 'postLogoutRedirectUris', label: t('manage.clientForm.postLogoutRedirectUris'), value: values.postLogoutRedirectUris, hint: t('manage.clientForm.postLogoutRedirectUrisHint'), error: errors.postLogoutRedirectUris, rows: 2 })}
 ${field({ id: 'backchannelLogoutUri', label: t('manage.clientForm.backchannelLogoutUri'), value: values.backchannelLogoutUri, hint: t('manage.clientForm.backchannelLogoutUriHint'), error: errors.backchannelLogoutUri })}

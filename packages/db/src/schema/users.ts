@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { boolean, check, pgEnum, pgTable, text } from 'drizzle-orm/pg-core'
+import { clients } from './clients.js'
 import { id, timestamps, timestamptz } from './columns.js'
 
 export const userStatus = pgEnum('user_status', ['created', 'active', 'locked', 'deactivated'])
@@ -27,6 +28,8 @@ export const users = pgTable(
     /** Hash of the activation token; the token itself is only sent by e-mail. */
     activationTokenHash: text().unique('users_activation_token_hash_unique'),
     activationExpiresAt: timestamptz(),
+    /** The application the person was invited to, so that the page after choosing a password can lead there. */
+    activationClientId: text().references(() => clients.clientId, { onDelete: 'set null' }),
     ...timestamps(),
   },
   (table) => [check('users_email_lowercase', sql`${table.email} = lower(${table.email})`)],

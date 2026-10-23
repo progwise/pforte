@@ -158,6 +158,35 @@ describe.skipIf(!hasDatabase)('admin API: user lifecycle', () => {
     const createdUser = async (email: string) =>
       (await h.api('POST', '/users', { body: { email, firstName: 'New', lastName: 'Hire' } })).json() as { id: string; email: string }
 
+    it('names the client in the e-mail and keeps the choice with the link', async () => {
+      const user = await createdUser('hire-client@example.com')
+      const response = await h.api('POST', `/users/${user.id}/activate`, { body: { clientId: 'demo-web' } })
+
+      expect(response.statusCode, response.body).toBe(200)
+      expect(h.notifications.findLast((n) => n.kind === 'activation')).toMatchObject({ applicationName: 'Demo web app (public client)' })
+      const row = (await h.database.pool.query(`select activation_client_id from users where id = $1`, [user.id])).rows[0]
+      expect(row.activation_client_id).toBe('demo-web')
+      const [event] = await h.audit('user.activate', user.id)
+      expect(event.details).toMatchObject({ clientId: 'demo-web' })
+
+      // A later call without a client replaces the choice together with the link.
+      await h.api('POST', `/users/${user.id}/activate`)
+      expect(h.notifications.findLast((n) => n.kind === 'activation')!.applicationName).toBeUndefined()
+      const again = (await h.database.pool.query(`select activation_client_id from users where id = $1`, [user.id])).rows[0]
+      expect(again.activation_client_id).toBeNull()
+    })
+
+    it('answers 400 for a client that does not exist, and sends nothing', async () => {
+      const user = await createdUser('hire-nobody@example.com')
+      const before = h.notifications.length
+      const response = await h.api('POST', `/users/${user.id}/activate`, { body: { clientId: 'nobody' } })
+
+      expect(response.statusCode).toBe(400)
+      expect(response.json().detail).toContain('nobody')
+      expect(h.notifications).toHaveLength(before)
+      expect((await h.api('GET', `/users/${user.id}`)).json().status).toBe('created')
+    })
+
     it('sends the activation link to the notifier and never returns it', async () => {
       const user = await createdUser('hire1@example.com')
 
