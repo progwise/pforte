@@ -8,6 +8,15 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
 
 ## Unreleased
 
+### Changed
+
+- **Cross-origin requests (CORS) are limited to registered applications.** Until now pforte repeated whatever origin a page
+  asked about on its discovery, keys, token and userinfo endpoints. Now discovery and keys answer `*`; the token and userinfo
+  endpoints answer only the origin of a redirect URI of the client (and a preflight request only an origin of any registered
+  client); everything else sends no CORS headers. A browser application whose page is not on the origin of one of its
+  redirect URIs is now blocked: register its callback on the page's origin
+  ([#25](https://github.com/progwise/pforte/issues/25)).
+
 ## 0.1.0 (2026-10-21)
 
 The first release.

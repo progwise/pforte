@@ -8,6 +8,7 @@ import { createUi, type Ui } from '../ui/index.js'
 import { ACR_PASSWORD, ACR_SECOND_FACTOR } from '../auth/assurance.js'
 import { createFindAccount, standardClaims } from './accounts.js'
 import { ClientAdapter, PayloadAdapter } from './adapter.js'
+import { createCors } from './cors.js'
 
 export interface ProviderOptions {
   config: Pick<Config, 'issuer' | 'cookieKeys' | 'jwks'> & Partial<Pick<Config, 'allowPrivateAddresses'>>
@@ -52,6 +53,8 @@ export const createProvider = async ({ config, db, onError, ui = createUi() }: P
   /** The pages in the language of the browser, for what the library renders. */
   const viewFor = (ctx: { get(name: string): string }) => ui.pages.for(ui.i18n.pick(parseAcceptLanguage(ctx.get('accept-language'))))
 
+  const cors = createCors(db)
+
   const provider = new Provider(config.issuer, {
     adapter: (name: string) => (name === 'Client' ? new ClientAdapter(db) : new PayloadAdapter(name, store)),
     cookies: { keys: config.cookieKeys, ...(secureIssuer && { long: { sameSite: 'none' as const } }) },
@@ -68,6 +71,7 @@ export const createProvider = async ({ config, db, onError, ui = createUi() }: P
     // The sign-in pages follow `ui_locales`, so applications can see which languages exist.
     discovery: { ui_locales_supported: ui.i18n.languages },
     findAccount: createFindAccount(db),
+    clientBasedCORS: cors.clientBasedCORS,
     responseTypes: ['code'],
     // OpenID Connect Core requires the authorization endpoint to accept POST as well as GET. A
     // POST comes from the application's site, so the session cookie must be sent cross-site:
@@ -134,6 +138,7 @@ export const createProvider = async ({ config, db, onError, ui = createUi() }: P
     interactions: { url: (_ctx, interaction) => `/interaction/${interaction.uid}` },
   })
 
+  provider.use(cors.middleware)
   provider.on('server_error', (_ctx, error) => onError?.(error))
 
   // Because `expiresWithSession` is false, the library marks every authorization as surviving

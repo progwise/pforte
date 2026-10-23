@@ -192,8 +192,12 @@ These are standard parameters of the authorization request:
 
 ## Browser and mobile applications
 
-- **Browser applications** (single-page apps) register as a **public** client. pforte answers cross-origin requests to its
-  discovery, key, token and userinfo endpoints, so such an application can do the flow itself with PKCE, and keeps no secret.
+- **Browser applications** (single-page apps) register as a **public** client. Such an application can do the flow itself with
+  PKCE and keeps no secret, because pforte answers its cross-origin requests (CORS): the discovery document and the keys to
+  every page, and the token and userinfo endpoints **only to the origin of a redirect URI of the client** (the page at
+  `https://app.example.com/callback` may call from `https://app.example.com`). A page on any other origin, and the origin `null`,
+  cannot read the answers, and nothing else of pforte (the sign-in pages, the administration, the admin API) can be read from
+  another origin. Credentials are never allowed. If your page and its callback are on different origins, put them on one.
   A backend that does the flow and keeps the session in a cookie is the safer design.
 - **Mobile applications** use a public client. The redirect must be an `https` address that your app opens (a universal or app link),
   or `http://127.0.0.1:<port>/callback` with a fixed port. Custom URL schemes such as `myapp://` are not supported yet
