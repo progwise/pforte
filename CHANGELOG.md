@@ -8,6 +8,14 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
 
 ## Unreleased
 
+## 0.2.0 (2026-10-23)
+
+**Before you update:** back up the database. This release has one migration (it adds the client start address and the application of an
+invitation); run it with `pforte migrate`, or let `MIGRATE_ON_START` do it. Two changes can affect what you already run:
+**CORS** (below) now blocks a browser application whose page is not on the origin of one of its registered redirect URIs, and
+**self-service activation** is on by default, so people who were created but never activated can now ask for their link
+(`SELF_SERVICE_ACTIVATION=false` turns that off).
+
 ### Added
 
 - **A person without a password can ask for their activation link.** On the page *Set or reset your password* (from "Forgot your

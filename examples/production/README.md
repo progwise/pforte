@@ -18,7 +18,7 @@ docker compose up -d
 docker compose logs -f pforte
 ```
 
-Use a published version: `PFORTE_IMAGE=ghcr.io/progwise/pforte:0.1.0` in `.env` (the available versions are on the
+Use a published version: `PFORTE_IMAGE=ghcr.io/progwise/pforte:0.2.0` in `.env` (the available versions are on the
 [releases page](https://github.com/progwise/pforte/releases)). **Pin a version** rather than `latest`, so an update is something
 you decide.
 
