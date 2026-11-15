@@ -142,6 +142,15 @@ Keep the link to each test's log. Record the outcome of each run below.
 
 ## Results
 
+### Since the last run
+
+The run below is the last one. Nothing merged after it was checked against the suite: there is no run for 0.2.0, and none for
+the activation that remembers the device ([#44](https://github.com/progwise/pforte/issues/44)), where it was left out on purpose.
+That change adds a cookie to the sign-in (`pforte_device_new`) that only an activation sets, which the suite never does; the
+endpoints of the provider, the session and the tokens are as they were, so no result is expected to change. This is an
+expectation, not a result. A full run is due before 1.0
+([#48](https://github.com/progwise/pforte/issues/48), which lists what changed since).
+
 ### Run of 2026-10-20: no failures
 
 The run for the first release: a complete run on pforte commit `16970cc`, the head of `main` when it started. The release
