@@ -4,7 +4,7 @@
 # ones; both lines change together.
 
 # --- Build: bundle our own code, and install the third-party packages from the lockfile
-FROM node:22.23.3-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS build
+FROM node:22.23.5-alpine@sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a AS build
 WORKDIR /src
 RUN npm install --global pnpm@12.11.2
 COPY . .
@@ -15,7 +15,7 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm --filter @progw
 RUN rm -rf /deploy/node_modules/@progwise
 
 # --- Run
-FROM node:22.23.3-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402
+FROM node:22.23.5-alpine@sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a
 ARG VERSION=development
 ARG REVISION=unknown
 LABEL org.opencontainers.image.title="pforte" \
