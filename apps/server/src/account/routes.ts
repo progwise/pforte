@@ -12,6 +12,7 @@ import type { LoginAudit } from '../auth/login-audit.js'
 import type { RateLimiter } from '../auth/rate-limiter.js'
 import { checkPassword } from '../auth/password-policy.js'
 import type { SendPasswordResetCode } from '../auth/password-reset.js'
+import { newDeviceCookie } from '../interaction/device-cookie.js'
 import { readCookie, setCookieHeader, sign, unsign } from '../interaction/signed-cookie.js'
 import { parseAcceptLanguage } from '../i18n/index.js'
 import { type Notifier, NotifierUnavailableError } from '../notifications/notifier.js'
@@ -138,11 +139,17 @@ export const accountRoutes =
         return invalidLink(reply, view)
       }
 
+      // The link showed that the person reads the mailbox, which is what a sign-in code would show a moment later.
+      // So the browser can be remembered here as it can be with a code: only with the box ticked.
+      const remember = request.body?.remember === 'on'
       const problem = passwordProblem(view, request.body, pending.email)
-      if (problem) return html(reply, 422, view.activation({ token, error: problem }))
+      if (problem) return html(reply, 422, view.activation({ token, error: problem, remember }))
 
-      const user = await completeActivation(db, { token, passwordHash: await hash(text(request.body?.password)), ...origin(request) })
-      if (!user) return invalidLink(reply, view)
+      const activated = await completeActivation(db, { token, passwordHash: await hash(text(request.body?.password)), remember, ...origin(request) })
+      if (!activated) return invalidLink(reply, view)
+      const { user, deviceToken } = activated
+      // Set now, whatever follows: the person may confirm the phone number, skip that, or close the page.
+      if (deviceToken) reply.header('Set-Cookie', newDeviceCookie(deviceToken, secure))
 
       // With SMS available, the number the back office entered is confirmed now, so that codes can go to it.
       if (notifier.smsAvailable && user.phone && !user.phoneVerifiedAt) {

@@ -15,8 +15,9 @@ outlives the user it is about.
 | `login.password_failed` | A password was not accepted. | `reason`: `wrong_password`, `unknown_user` or `not_allowed` (the account is locked, deactivated or has no password yet). For an address that no user has: `emailHash` instead of a target. |
 | `login.code_sent` | A code went out. | `purpose` (`login`, `password_reset`, `activation`), `channel` (`email` or `sms`), `fellBackToEmail` when an SMS could not be sent. |
 | `login.code_failed` | A code was not accepted. | `purpose`, `reason` (`wrong`, `exhausted`, `expired`, `none`, and for a password reset also `unknown_user`, `not_allowed`, `malformed`). |
-| `login.succeeded` | A sign-in was completed. | `method` (`code` or `remembered_device`), `channel`, and `acr`: `urn:pforte:acr:mfa` after a code, `urn:pforte:acr:pwd` on a remembered device. |
+| `login.succeeded` | A sign-in was completed. | `method` (`code` or `remembered_device`), `channel`, and `acr`: `urn:pforte:acr:mfa` after a code, `urn:pforte:acr:pwd` on a remembered device. `deviceRemembered: true` when the person ticked "Remember this device" with the code and the browser was not remembered yet. |
 | `login.blocked` | A rate limit held somebody back. | `scope`: `password`, `code`, `code_resend`, `reset`, `reset_code`, `activation` or `phone_code`. Written **once per 15 minutes** for the same address or IP, not for every refused request, so an attack cannot fill the log. |
+| `user.activate.complete` | A person chose their first password with the activation link. | `email`, and `deviceRemembered: true` when they ticked "Remember this device" on that page. |
 | `user.activation.request` | A person who has no password yet asked for their activation link at `/reset`. The link itself is never recorded. | `self: true`, `expiresAt`. |
 | `user.password_reset.request` | Somebody asked for a password reset at `/reset`, for an address that has an account. | `self: true`. A reset an administrator starts is recorded as `user.password_reset.request` by that client. |
 
@@ -27,6 +28,8 @@ your proxy's address.
 ### What is not stored
 
 - **A password is never stored**, nor is a code or a token.
+- A remembered device is recorded on the event that remembered it (`deviceRemembered`), so the event tells how: after a code
+  (`login.succeeded`) or by an activation (`user.activate.complete`). The token of the device is not recorded.
 - **An address that no user has is not stored**, only `emailHash`: a short keyed hash. The same address gives the same
   hash, so repeated tries show up, but the address cannot be read back. People type passwords into the e-mail field,
   and those must not end up in a log.

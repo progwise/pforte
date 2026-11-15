@@ -8,6 +8,18 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
 
 ## Unreleased
 
+### Added
+
+- **Activation can remember the device.** The page where a person chooses their first password has the box "Remember this
+  device for 90 days", as the code page has. With it ticked, the first sign-in in that browser asks for the password only:
+  no second mail with a code right after the activation link, which had already shown that the person reads that mailbox.
+  The box starts ticked or unticked by `REMEMBER_DEVICE_DEFAULT`; without it nothing is remembered. The device is listed in
+  the administration and can be forgotten there, and an application that asks for `urn:pforte:acr:mfa` still gets the code.
+  The token waits in a new cookie, `pforte_device_new`, until the next sign-in in that browser moves it to the others
+  ([#44](https://github.com/progwise/pforte/issues/44)).
+- **The audit log says when a device was remembered**: `deviceRemembered: true` on `user.activate.complete` (by an activation)
+  and on `login.succeeded` (with a code). Until now remembering a device left no trace in the log.
+
 ## 0.2.0 (2026-10-23)
 
 **Before you update:** back up the database. This release has one migration (it adds the client start address and the application of an

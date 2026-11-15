@@ -2,7 +2,7 @@ import { hasDatabase } from '@progwise/pforte-db/testing'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { NotifierUnavailableError } from '../notifications/notifier.js'
 import { type AdminHarness, createAdminHarness } from '../test/admin-harness.js'
-import { Browser, signIn, verifyJwt } from '../test/browser.js'
+import { Browser, pkcePair, signIn, verifyJwt } from '../test/browser.js'
 
 const WEB = { clientId: 'demo-web', redirectUri: 'http://localhost:3400/callback' }
 const GOOD = 'correct horse battery'
@@ -53,6 +53,27 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
     expect(done.statusCode, done.body).toBe(200)
     h.notifications.length = 0
     return { ...user, password }
+  }
+
+  /**
+   * A new visit to an application in a browser that was used before: the password, and the code if pforte asks
+   * for one (with "remember this device" if wanted). Says whether a code was asked for.
+   */
+  const visit = async (on: Browser, email: string, { password = GOOD, remember = false } = {}) => {
+    // The single sign-on session is gone; what the browser remembers of devices is not.
+    for (const name of on.cookies.keys()) if (!name.startsWith('pforte_device')) on.cookies.delete(name)
+    const query = new URLSearchParams({ client_id: WEB.clientId, redirect_uri: WEB.redirectUri, response_type: 'code', scope: 'openid', code_challenge: pkcePair().challenge, code_challenge_method: 'S256', ui_locales: 'en' })
+    const interaction = (await on.request('GET', `/auth?${query}`)).headers.location as string
+    await on.request('GET', interaction)
+    const afterPassword = await on.request('POST', `${interaction}/login`, { form: { email, password } })
+    expect(afterPassword.statusCode, afterPassword.body).toBe(303)
+    const askedForCode = afterPassword.headers.location === `${interaction}/code`
+    if (askedForCode) {
+      const code = h.notifications.findLast((n) => n.kind === 'login-code' && n.user.email === email)!.code!
+      const afterCode = await on.request('POST', `${interaction}/code`, { form: { code, ...(remember ? { remember: 'on' } : {}) } })
+      expect(afterCode.statusCode, afterCode.body).toBe(303)
+    }
+    return { askedForCode }
   }
 
   /** Asks for a reset and waits for the mail to be sent, which happens after the answer. */
@@ -155,6 +176,142 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
       expect(events[0]).toMatchObject({ actor_type: 'user', actor_id: id })
       expect(JSON.stringify(events[0])).not.toContain(GOOD)
       expect(JSON.stringify(events[0])).not.toContain(token)
+    })
+  })
+
+  describe('remembering the device at activation', () => {
+    const cookiesOf = (response: { headers: Record<string, unknown> }) => [response.headers['set-cookie']].flat().filter((header): header is string => typeof header === 'string')
+    const activateOn = (on: Browser, token: string, fields: Record<string, string> = { remember: 'on' }) =>
+      on.request('POST', '/activate', { form: { token, password: GOOD, confirm: GOOD, ...fields }, headers: { 'user-agent': 'Firefox on a laptop' } })
+    const devicesOf = async (id: string) => (await h.api('GET', `/users/${id}/devices`)).json().items as { id: string; userAgent: string | null }[]
+
+    it('offers the box on the activation page, unticked', async () => {
+      const { token } = await invited()
+      const page = await form('GET', `/activate?token=${token}`)
+      expect(page.body).toContain('name="remember"> Remember this device for 90 days')
+      expect(page.body).not.toMatch(/name="remember" checked/)
+    })
+
+    it('with the box ticked: the next sign-in in that browser asks for no code, in another browser it does', async () => {
+      const { email, token } = await invited()
+      const laptop = browser()
+      const done = await activateOn(laptop, token)
+      expect(done.statusCode).toBe(200)
+      expect(done.body).toContain('Your account is active')
+
+      // The token waits in a cookie of its own for the sign-in pages, which hold the other tokens.
+      const cookie = cookiesOf(done).find((header) => header.startsWith('pforte_device_new='))!
+      expect(cookie).toMatch(/^pforte_device_new=[\w-]{43}; Path=\/interaction; /)
+      expect(cookie).toContain(`Max-Age=${90 * 24 * 60 * 60}`)
+      expect(cookie).toContain('HttpOnly')
+      expect(cookie).toContain('SameSite=Strict')
+      expect(cookie).toContain('Secure')
+      expect(cookiesOf(done).some((header) => header.startsWith('pforte_device='))).toBe(false)
+
+      expect((await visit(laptop, email)).askedForCode).toBe(false)
+      expect(h.notifications).toEqual([])
+      expect((await visit(browser(), email)).askedForCode).toBe(true)
+    })
+
+    it('with the box unticked: nothing is remembered, the first sign-in asks for a code as before', async () => {
+      const { email, id, token } = await invited()
+      const laptop = browser()
+      const done = await activateOn(laptop, token, {})
+      expect(done.statusCode).toBe(200)
+      expect(cookiesOf(done)).toEqual([])
+      expect(await devicesOf(id)).toEqual([])
+      expect((await visit(laptop, email)).askedForCode).toBe(true)
+    })
+
+    it('says in the audit log that the activation remembered the device, and only then', async () => {
+      const remembered = await invited()
+      const done = await activateOn(browser(), remembered.token)
+      const events = await h.audit('user.activate.complete', remembered.id)
+      expect(events).toHaveLength(1)
+      expect(events[0].details).toMatchObject({ deviceRemembered: true })
+      const deviceToken = cookiesOf(done).find((header) => header.startsWith('pforte_device_new='))!.split(';')[0]!.split('=')[1]!
+      expect(JSON.stringify(events[0])).not.toContain(deviceToken)
+
+      const plain = await invited()
+      await activateOn(browser(), plain.token, {})
+      expect((await h.audit('user.activate.complete', plain.id))[0].details).not.toHaveProperty('deviceRemembered')
+    })
+
+    it('lists the device in the administration, where it can be forgotten', async () => {
+      const { email, id, token } = await invited()
+      const laptop = browser()
+      await activateOn(laptop, token)
+      const devices = await devicesOf(id)
+      expect(devices).toEqual([expect.objectContaining({ userAgent: 'Firefox on a laptop' })])
+
+      expect((await h.api('DELETE', `/users/${id}/devices/${devices[0]!.id}`)).statusCode).toBe(204)
+      expect((await visit(laptop, email)).askedForCode).toBe(true)
+    })
+
+    it('remembers nothing when the password is not accepted, and keeps the box as the person left it', async () => {
+      const { id, token } = await invited()
+      const laptop = browser()
+      const short = await laptop.request('POST', '/activate', { form: { token, password: 'short', confirm: 'short', remember: 'on' } })
+      expect(short.statusCode).toBe(422)
+      expect(short.body).toContain('name="remember" checked>')
+      expect(cookiesOf(short)).toEqual([])
+      expect(await devicesOf(id)).toEqual([])
+
+      const unticked = await laptop.request('POST', '/activate', { form: { token, password: 'short', confirm: 'short' } })
+      expect(unticked.body).toContain('name="remember">')
+    })
+
+    it('remembers nothing for a link that is not valid', async () => {
+      const { id, token } = await invited()
+      await h.api('POST', `/users/${id}/deactivate`)
+      const refused = await activateOn(browser(), token)
+      expect(refused.statusCode).toBe(400)
+      expect(cookiesOf(refused)).toEqual([])
+      expect(await h.count('devices', `user_id = '${id}'`)).toBe(0)
+    })
+
+    it('keeps the people who are already remembered in that browser', async () => {
+      const first = await activated()
+      const shared = browser()
+      expect((await visit(shared, first.email, { remember: true })).askedForCode).toBe(true)
+      const before = shared.cookies.get('pforte_device')!
+
+      const second = await invited()
+      await activateOn(shared, second.token)
+      // The activation page cannot see the tokens of the sign-in pages, so it leaves them alone.
+      expect(shared.cookies.get('pforte_device')).toBe(before)
+      const added = shared.cookies.get('pforte_device_new')!
+
+      // The next sign-in moves the new token to the others.
+      expect((await visit(shared, second.email)).askedForCode).toBe(false)
+      expect(shared.cookies.has('pforte_device_new')).toBe(false)
+      expect(shared.cookies.get('pforte_device')).toBe(`${before}.${added}`)
+      expect((await visit(shared, first.email)).askedForCode).toBe(false)
+      expect((await visit(shared, second.email)).askedForCode).toBe(false)
+    })
+
+    it('moves the token over also when the next sign-in there is somebody else, who is asked for a code', async () => {
+      const other = await activated()
+      const { email, token } = await invited()
+      const shared = browser()
+      await activateOn(shared, token)
+      const added = shared.cookies.get('pforte_device_new')!
+
+      expect((await visit(shared, other.email)).askedForCode).toBe(true)
+      expect(shared.cookies.has('pforte_device_new')).toBe(false)
+      expect(shared.cookies.get('pforte_device')).toBe(added)
+      expect((await visit(shared, email)).askedForCode).toBe(false)
+    })
+
+    it('still asks for the code where the application wants the second factor', async () => {
+      const { email, token } = await invited()
+      const laptop = browser()
+      await activateOn(laptop, token)
+      const query = new URLSearchParams({ client_id: WEB.clientId, redirect_uri: WEB.redirectUri, response_type: 'code', scope: 'openid', code_challenge: pkcePair().challenge, code_challenge_method: 'S256', acr_values: 'urn:pforte:acr:mfa' })
+      const interaction = (await laptop.request('GET', `/auth?${query}`)).headers.location as string
+      await laptop.request('GET', interaction)
+      const afterPassword = await laptop.request('POST', `${interaction}/login`, { form: { email, password: GOOD } })
+      expect(afterPassword.headers.location).toBe(`${interaction}/code`)
     })
   })
 
@@ -613,6 +770,21 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
       h.notifications.length = 0
       await signIn(browser(), { ...WEB, email: user.email, password: GOOD })
       expect(h.notifications.findLast((n) => n.kind === 'login-code')).toMatchObject({ channel: 'email' })
+    })
+
+    it('remembers the device when the password is set, whatever happens to the phone number', async () => {
+      h.notifier.smsAvailable = true
+      const user = await invitedWithPhone()
+      const laptop = browser()
+      const done = await laptop.request('POST', '/activate', { form: { token: user.token, password: GOOD, confirm: GOOD, remember: 'on' } })
+      expect(done.body).toContain('Confirm your phone number')
+      const names = [done.headers['set-cookie']].flat().map((header) => header!.split('=')[0])
+      expect(names.sort()).toEqual(['pforte_device_new', 'pforte_phone_step'])
+
+      // The person closes the page here: the phone stays unconfirmed, the browser is remembered.
+      h.notifications.length = 0
+      expect((await visit(laptop, user.email)).askedForCode).toBe(false)
+      expect(h.notifications).toEqual([])
     })
 
     it('does not ask when SMS is not available, or when there is no number', async () => {

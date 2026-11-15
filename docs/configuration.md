@@ -70,7 +70,7 @@ the old one until its tokens and cookies have expired.
 | --- | --- | --- |
 | `DEFAULT_LANGUAGE` | `en` | The language of pages and messages when nothing else decides (`de`, `en`, `fr`, `hu`, or a language you add). |
 | `BRANDING_DIR` | none | A folder with your name, logo, colours, fonts and texts. Mount it into the container and point this at it. See [branding and languages](branding-and-languages.md). |
-| `REMEMBER_DEVICE_DEFAULT` | `false` | `true` ticks "Remember this device" when the code page opens. |
+| `REMEMBER_DEVICE_DEFAULT` | `false` | `true` ticks "Remember this device" when the code page or the activation page opens. |
 | `TIME_ZONE` | `UTC` | The time zone in which the administration shows times, an IANA name such as `Europe/Berlin`. |
 
 ### Safety and data

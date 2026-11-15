@@ -188,6 +188,8 @@ describe.skipIf(!hasDatabase)('the sign-in audit', () => {
       const code = h.notifications.findLast((n) => n.kind === 'login-code')!.code!
       const done = await s.browser.request('POST', `${s.interaction}/code`, { form: { code, remember: 'on' } })
       expect(done.statusCode).toBe(303)
+      // remembering the device is part of the sign-in that did it; a sign-in without the box says nothing about it
+      expect((await events('login.succeeded'))[0]!.details).toEqual({ method: 'code', channel: 'email', acr: 'urn:pforte:acr:mfa', deviceRemembered: true })
       await h.database.pool.query(`delete from audit_events where action like 'login.%'`)
 
       // a new visit in the same browser: the single sign-on session is gone, the device is remembered

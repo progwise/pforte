@@ -44,10 +44,20 @@ affected either.
 | --- | --- | --- |
 | `pforte_second_factor` | The step between password and code: user, sign-in, language, time. Signed. | `HttpOnly`, `Secure` (https), `SameSite=Strict`, 15 minutes, only for that sign-in's path |
 | `pforte_phone_step` | The step of confirming a phone after activation. Signed. | like the above, 30 minutes, path `/activate` |
-| `pforte_device` | Tokens of remembered devices. Their hashes are in the database. | `HttpOnly`, `Secure` (https), `SameSite=Strict`, 90 days |
+| `pforte_device` | Tokens of remembered devices. Their hashes are in the database. | `HttpOnly`, `Secure` (https), `SameSite=Strict`, 90 days, path `/interaction` |
+| `pforte_device_new` | The token of a device that an activation remembered, until the next sign-in in that browser moves it into `pforte_device`. | like `pforte_device` |
 | `_session`, `_interaction`, … | The provider's own: the single sign-on session and the open sign-in. Signed with `COOKIE_KEYS`. | `HttpOnly`, `Secure` (https). `SameSite=None` over https, because OpenID Connect requires the authorization endpoint to accept POST; `Lax` over http |
 
 A test signs in over https and checks that every cookie has `HttpOnly`, `Secure` and a `SameSite` value.
+
+### Remembered devices
+
+A browser is remembered only when the person ticks "Remember this device", in one of two places: with the sign-in code, or on
+the page where they choose their first password. Both show the same thing, that the person holds the mailbox (or the phone):
+the code was sent there, and so was the activation link. So a person who has just activated is not mailed a code for their
+first sign-in in that browser. Everything else is the same for both: 90 days, the administration lists the device and can
+forget it, and an application that asks for `urn:pforte:acr:mfa` gets the code whatever the browser remembers. What this
+means for a link that gets into the wrong hands is in the [threat model](threat-model.md).
 
 ## Weak secrets stop a production start
 
