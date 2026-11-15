@@ -6,7 +6,7 @@ const escapeMap: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt
 export const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => escapeMap[char] as string)
 
 export interface PagesOptions {
-  /** Whether "Remember this device" is ticked when the code page opens. */
+  /** Whether "Remember this device" is ticked when the code page or the activation page opens. */
   rememberDeviceDefault?: boolean
   /** The look of the pages. The neutral one if not given. */
   theme?: Theme
@@ -30,7 +30,8 @@ export interface PageSet {
     /** Shown to users without a phone number, who therefore get codes by e-mail. */
     phoneHint?: boolean
   }): string
-  activation(options: { token: string; error?: string }): string
+  /** `remember` is the box as the person left it, when the page is shown again; without it the configured default. */
+  activation(options: { token: string; error?: string; remember?: boolean }): string
   /** `clientId` is the application the person came from, so the last page of the reset can lead back to it. */
   forgotPassword(options: { email?: string; error?: string; clientId?: string }): string
   resetCode(options: { email: string; notice?: string; error?: string; clientId?: string }): string
@@ -174,7 +175,7 @@ ${
 ${phoneHint ? `<p><small>${escapeHtml(t('code.phoneHint'))}</small></p>` : ''}`,
         ),
 
-      activation: ({ token, error }) =>
+      activation: ({ token, error, remember = rememberDeviceDefault }) =>
         page(
           t('activate.title'),
           `<h1>${escapeHtml(t('activate.title'))}</h1>
@@ -182,6 +183,7 @@ ${alert(error)}
 <form method="post" action="/activate">
 <input type="hidden" name="token" value="${escapeHtml(token)}">
 ${passwordFields}
+<label class="check"><input type="checkbox" name="remember"${remember ? ' checked' : ''}> ${escapeHtml(t('code.remember'))}</label>
 <button type="submit">${escapeHtml(t('activate.submit'))}</button>
 </form>`,
         ),

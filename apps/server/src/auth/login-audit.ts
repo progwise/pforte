@@ -20,7 +20,8 @@ export interface LoginAudit {
   blocked(origin: Origin, attempt: { scope: string; email?: string }): Promise<void>
   codeSent(origin: Origin, sent: { userId: string; purpose: CodePurpose; channel: 'email' | 'sms'; fellBack?: boolean }): Promise<void>
   codeFailed(origin: Origin, failure: { userId?: string; email?: string; purpose: CodePurpose; reason: string }): Promise<void>
-  succeeded(origin: Origin, success: { userId: string; method: 'code' | 'remembered_device'; channel?: 'email' | 'sms'; acr: string }): Promise<void>
+  /** `deviceRemembered`: the person ticked "Remember this device" with the code, and the browser was not remembered yet. */
+  succeeded(origin: Origin, success: { userId: string; method: 'code' | 'remembered_device'; channel?: 'email' | 'sms'; acr: string; deviceRemembered?: boolean }): Promise<void>
   resetRequested(origin: Origin, request: { userId: string }): Promise<void>
 }
 
@@ -78,8 +79,8 @@ export const createLoginAudit = ({ db, secret, onError = () => {} }: LoginAuditO
     codeFailed: (origin, { userId, email, purpose, reason }) =>
       record(origin, { action: 'login.code_failed', userId, details: { purpose, reason, ...(!userId && email ? unknownAddress(email) : {}) } }),
 
-    succeeded: (origin, { userId, method, channel, acr }) =>
-      record(origin, { action: 'login.succeeded', userId, details: { method, ...(channel ? { channel } : {}), acr } }),
+    succeeded: (origin, { userId, method, channel, acr, deviceRemembered }) =>
+      record(origin, { action: 'login.succeeded', userId, details: { method, ...(channel ? { channel } : {}), acr, ...(deviceRemembered ? { deviceRemembered: true } : {}) } }),
 
     resetRequested: (origin, { userId }) => record(origin, { action: 'user.password_reset.request', userId, details: { self: true } }),
   }

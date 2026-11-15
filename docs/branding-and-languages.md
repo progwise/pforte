@@ -167,5 +167,5 @@ as several.
 | --- | --- |
 | `DEFAULT_LANGUAGE` | Language when nothing else decides. Default `en`. |
 | `BRANDING_DIR` | Folder with `brand.json`, its files and `locales/<language>.json`. |
-| `REMEMBER_DEVICE_DEFAULT` | `true` ticks "Remember this device" when the code page opens. Default `false`: on a shared computer nobody is remembered by accident. |
+| `REMEMBER_DEVICE_DEFAULT` | `true` ticks "Remember this device" when the code page or the activation page opens. Default `false`: on a shared computer nobody is remembered by accident. |
 | `ORGANISATION_NAME` | Named in e-mails and SMS, if `brand.json` has no `name`. |

@@ -1,7 +1,7 @@
 import formbody from '@fastify/formbody'
 import type { Database } from '@progwise/pforte-db'
 import { changeCodeChannel, checkCode, CodeLimitError, currentCode, issueCode, markEmailVerified } from '@progwise/pforte-db/codes'
-import { DEVICE_LIFETIME_MS, findRememberedDevice, rememberDevice } from '@progwise/pforte-db/devices'
+import { findRememberedDevice, rememberDevice } from '@progwise/pforte-db/devices'
 import { findActiveUserById } from '@progwise/pforte-db/oidc'
 import { recordLogin } from '@progwise/pforte-db/users'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
@@ -19,6 +19,7 @@ import type { Ui } from '../ui/index.js'
 import type { PageSet } from '../ui/pages.js'
 import { tooManyRequests } from '../ui/too-many.js'
 import { refuseForeignPosts } from '../security/origin-check.js'
+import { adoptNewDevice, deviceCookie, deviceTokens } from './device-cookie.js'
 import { readCookie, setCookieHeader, sign, unsign } from './signed-cookie.js'
 
 export interface InteractionDependencies {
@@ -38,10 +39,6 @@ export interface InteractionDependencies {
 
 const STEP_COOKIE = 'pforte_second_factor'
 const STEP_LIFETIME_SECONDS = 15 * 60
-/** Holds the tokens of remembered devices. Tokens are base64url, so a dot cannot occur inside one. */
-const DEVICE_COOKIE = 'pforte_device'
-/** One browser can be used by several people; each keeps a token, the newest few are kept. */
-const MAX_DEVICE_TOKENS = 5
 
 interface Step {
   uid: string
@@ -188,11 +185,8 @@ export const interactionRoutes =
       },
     )
 
-    const deviceTokens = (request: FastifyRequest) =>
-      (readCookie(request.headers.cookie, DEVICE_COOKIE) ?? '').split('.').filter(Boolean).slice(0, MAX_DEVICE_TOKENS)
-
     const isRemembered = async (request: FastifyRequest, userId: string) =>
-      Boolean(await findRememberedDevice(db, userId, deviceTokens(request)))
+      Boolean(await findRememberedDevice(db, userId, deviceTokens(request.headers.cookie)))
 
     /** Ends the interaction with a successful login. */
     const finishLogin = async (
@@ -277,10 +271,12 @@ export const interactionRoutes =
       // A remembered device skips the code, unless the application asks for the stronger
       // assurance: then the second factor is required whatever the browser remembers.
       const requested = typeof acrValues === 'string' ? acrValues.split(' ') : []
+      // A device that an activation remembered left its token in a cookie of its own; it joins the others now.
+      const adopted = adoptNewDevice(request.headers.cookie, secure)
       if (!requested.includes(ACR_SECOND_FACTOR) && (await isRemembered(request, user.id))) {
         await recordLogin(db, user.id)
         await audit.succeeded(originOf(request), { userId: user.id, method: 'remembered_device', acr: ACR_PASSWORD })
-        return finishLogin(request, reply, user.id, { acr: ACR_PASSWORD, amr: ['pwd'] })
+        return finishLogin(request, reply, user.id, { acr: ACR_PASSWORD, amr: ['pwd'] }, adopted)
       }
 
       // The first code needs no limit per IP: it only goes out after the right password, and per user
@@ -300,7 +296,7 @@ export const interactionRoutes =
       }
 
       const step: Step = { uid, userId, language, expiresAt: Date.now() + STEP_LIFETIME_SECONDS * 1000 }
-      reply.header('Set-Cookie', setCookieHeader(STEP_COOKIE, sign(cookieKeys, step), { path: cookiePath(uid), maxAgeSeconds: STEP_LIFETIME_SECONDS, secure }))
+      reply.header('Set-Cookie', [setCookieHeader(STEP_COOKIE, sign(cookieKeys, step), { path: cookiePath(uid), maxAgeSeconds: STEP_LIFETIME_SECONDS, secure }), ...adopted])
       return reply.redirect(`${cookiePath(uid)}/code`, 303)
     }
 
@@ -339,17 +335,22 @@ export const interactionRoutes =
 
       if (result.channel === 'email') await markEmailVerified(db, user.id)
       await recordLogin(db, user.id)
-      await audit.succeeded(originOf(request), { userId: user.id, method: 'code', channel: result.channel, acr: secondFactorAssurance(result.channel).acr })
 
       const cookies = [setCookieHeader(STEP_COOKIE, '', { path: cookiePath(details.uid), maxAgeSeconds: 0, secure })]
+      const tokens = deviceTokens(request.headers.cookie)
       // A browser that is already remembered for this person stays one device, however often they tick the box.
-      if (request.body?.remember === 'on' && !(await findRememberedDevice(db, user.id, deviceTokens(request)))) {
+      const remember = request.body?.remember === 'on' && !(await findRememberedDevice(db, user.id, tokens))
+      if (remember) {
         const { token } = await rememberDevice(db, { userId: user.id, userAgent: request.headers['user-agent'] })
-        const tokens = [...deviceTokens(request), token].slice(-MAX_DEVICE_TOKENS)
-        cookies.push(
-          setCookieHeader(DEVICE_COOKIE, tokens.join('.'), { path: '/interaction', maxAgeSeconds: DEVICE_LIFETIME_MS / 1000, secure }),
-        )
+        cookies.push(deviceCookie([...tokens, token], secure))
       }
+      await audit.succeeded(originOf(request), {
+        userId: user.id,
+        method: 'code',
+        channel: result.channel,
+        acr: secondFactorAssurance(result.channel).acr,
+        deviceRemembered: remember,
+      })
       return finishLogin(request, reply, user.id, secondFactorAssurance(result.channel), cookies)
     })
 

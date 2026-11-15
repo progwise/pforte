@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { activateUser } from './admin/lifecycle.js'
 import { createUser, findUserById } from './admin/users.js'
 import { completeActivation, completePasswordReset, findPendingActivation } from './credentials.js'
-import { rememberDevice } from './devices.js'
+import { findRememberedDevice, rememberDevice } from './devices.js'
 import { createTestDatabase, hasDatabase } from './test/test-database.js'
 
 const context = { actor: { type: 'client' as const, id: 'tester' }, ip: '203.0.113.7', userAgent: 'vitest' }
@@ -41,12 +41,39 @@ describe.skipIf(!hasDatabase)('activation and password reset', () => {
     const { user, token } = await withLink()
     const done = await completeActivation(database.db, { token, passwordHash: 'hash-1', ip: '198.51.100.9', userAgent: 'Firefox' })
 
-    expect(done).toMatchObject({ id: user.id, status: 'active', passwordHash: 'hash-1', activationTokenHash: null })
-    expect(done!.emailVerifiedAt).not.toBeNull()
+    expect(done!.user).toMatchObject({ id: user.id, status: 'active', passwordHash: 'hash-1', activationTokenHash: null })
+    expect(done!.user.emailVerifiedAt).not.toBeNull()
     const { rows } = await database.pool.query(`select * from audit_events where action = 'user.activate.complete' and target_id = $1`, [user.id])
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({ actor_type: 'user', actor_id: user.id, ip: '198.51.100.9' })
     expect(JSON.stringify(rows[0].details)).not.toContain('hash-1')
+  })
+
+  it('remembers the device only when asked to, and says so in the audit event', async () => {
+    const plain = await withLink()
+    const without = await completeActivation(database.db, { token: plain.token, passwordHash: 'h' })
+    expect(without!.deviceToken).toBeUndefined()
+    expect(await findRememberedDevice(database.db, plain.user.id, ['anything'])).toBeUndefined()
+    const { rows: quiet } = await database.pool.query(`select details from audit_events where action = 'user.activate.complete' and target_id = $1`, [plain.user.id])
+    expect(quiet[0].details).not.toHaveProperty('deviceRemembered')
+
+    const { user, token } = await withLink()
+    const done = await completeActivation(database.db, { token, passwordHash: 'h', remember: true, userAgent: 'Firefox' })
+    expect(done!.deviceToken).toBeTruthy()
+    expect(await findRememberedDevice(database.db, user.id, [done!.deviceToken!])).toBeDefined()
+    const { rows: devices } = await database.pool.query(`select user_agent, token_hash from devices where user_id = $1`, [user.id])
+    expect(devices).toHaveLength(1)
+    expect(devices[0].user_agent).toBe('Firefox')
+    expect(devices[0].token_hash).not.toBe(done!.deviceToken)
+    const { rows } = await database.pool.query(`select details from audit_events where action = 'user.activate.complete' and target_id = $1`, [user.id])
+    expect(rows[0].details).toMatchObject({ deviceRemembered: true })
+    expect(JSON.stringify(rows[0].details)).not.toContain(done!.deviceToken)
+  })
+
+  it('remembers no device when the link is not valid', async () => {
+    const { user, token, expiresAt } = await withLink()
+    expect(await completeActivation(database.db, { token, passwordHash: 'h', remember: true }, new Date(expiresAt.getTime() + day))).toBeUndefined()
+    expect((await database.pool.query(`select count(*) from devices where user_id = $1`, [user.id])).rows[0].count).toBe('0')
   })
 
   it('works once, even when two requests race', async () => {

@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { and, eq, gt, inArray, isNull, lt, or } from 'drizzle-orm'
+import type { DatabaseOrTransaction } from './audit.js'
 import type { Database } from './index.js'
 import { devices } from './schema/index.js'
 
@@ -8,9 +9,12 @@ export const DEVICE_LIFETIME_MS = 90 * 24 * 60 * 60 * 1000
 
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex')
 
-/** Remembers a device after the user passed the second factor. The token goes into a cookie; only its hash is stored. */
+/**
+ * Remembers a device after the user showed that they hold their mailbox or phone: with a code, or with the
+ * activation link. The token goes into a cookie; only its hash is stored.
+ */
 export const rememberDevice = async (
-  db: Database,
+  db: DatabaseOrTransaction,
   { userId, userAgent }: { userId: string; userAgent?: string },
   now = new Date(),
 ) => {

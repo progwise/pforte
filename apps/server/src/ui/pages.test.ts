@@ -43,6 +43,14 @@ describe('pages', () => {
     expect(createUi({ rememberDeviceDefault: true }).pages.for('en').code(code)).toContain('name="remember" checked>')
   })
 
+  it('offer the same box on the activation page, and keep it as the person left it when the page comes again', () => {
+    const ticked = createUi({ rememberDeviceDefault: true }).pages.for('en')
+    expect(pages.for('en').activation({ token: 't' })).toContain('name="remember"> Remember this device for 90 days')
+    expect(ticked.activation({ token: 't' })).toContain('name="remember" checked>')
+    expect(pages.for('en').activation({ token: 't', error: 'x', remember: true })).toContain('name="remember" checked>')
+    expect(ticked.activation({ token: 't', error: 'x', remember: false })).toContain('name="remember">')
+  })
+
   it('show where the code went in the right words', () => {
     expect(pages.for('en').code({ uid: 'u', channel: 'sms', sentTo: '+49•78' })).toContain('by SMS to +49•78')
     expect(pages.for('de').code({ uid: 'u', channel: 'email', sentTo: 'a***@b.c' })).toContain('per E-Mail an a***@b.c')

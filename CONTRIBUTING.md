@@ -62,7 +62,7 @@ curl -H "authorization: Bearer $TOKEN" 'http://localhost:3300/admin/users?search
 Add `?dryRun=true` to the upsert to see what it would do (`created`, `updated` or `unchanged`, and
 what would change) without writing anything or recording an audit event.
 
-Users can ask pforte to remember a device after entering the code (90 days). `GET
+Users can ask pforte to remember a device (90 days) when they enter the code, or when they choose their first password. `GET
 /admin/users/{id}/devices` lists them and `DELETE /admin/users/{id}/devices[/{deviceId}]` revokes one or
 all, so the next sign-in asks for a code again. Locking, deactivating, resetting the password and ending
 sessions revoke them too.

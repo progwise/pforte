@@ -1,6 +1,7 @@
 import { and, eq, gt, sql } from 'drizzle-orm'
 import { activationTokenHash, endUserSessions } from './admin/lifecycle.js'
 import { recordAuditEvent } from './audit.js'
+import { rememberDevice } from './devices.js'
 import type { Database } from './index.js'
 import { users } from './schema/index.js'
 
@@ -27,11 +28,13 @@ export const findPendingActivation = async (db: Database, token: string, now = n
 /**
  * Sets the first password and activates the user. The link works once: the token is cleared in the same
  * statement that checks it, so two requests cannot both succeed. Opening the link proves the mailbox,
- * so the e-mail address counts as verified. Returns undefined if the link is not valid (any more).
+ * so the e-mail address counts as verified. For the same reason the browser can be remembered at once
+ * (`remember`): the token of the device is returned for its cookie, and the audit event says so.
+ * Returns undefined if the link is not valid (any more).
  */
 export const completeActivation = (
   db: Database,
-  { token, passwordHash, ip, userAgent }: { token: string; passwordHash: string } & Origin,
+  { token, passwordHash, remember = false, ip, userAgent }: { token: string; passwordHash: string; remember?: boolean } & Origin,
   now = new Date(),
 ) =>
   db.transaction(async (tx) => {
@@ -54,15 +57,16 @@ export const completeActivation = (
       )
       .returning()
     if (!user) return undefined
+    const device = remember ? await rememberDevice(tx, { userId: user.id, userAgent }, now) : undefined
     await recordAuditEvent(tx, {
       actor: { type: 'user', id: user.id },
       ip,
       userAgent,
       action: 'user.activate.complete',
       target: { type: 'user', id: user.id },
-      details: { email: user.email },
+      details: { email: user.email, ...(device ? { deviceRemembered: true } : {}) },
     })
-    return user
+    return { user, deviceToken: device?.token }
   })
 
 /**
