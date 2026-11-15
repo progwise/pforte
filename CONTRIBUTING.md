@@ -14,7 +14,7 @@ commits fail the DCO check. There is no contributor agreement.
 
 You need:
 
-- Node.js 22.23.3 (see `.nvmrc`; `nvm use` picks it up)
+- Node.js 22.23.5 (see `.nvmrc`; `nvm use` picks it up)
 - pnpm 12.11.2 (see `packageManager` in `package.json`)
 - Docker, for the local Postgres
 
