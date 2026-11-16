@@ -1,7 +1,7 @@
-import { listPasskeys, MAX_PASSKEYS, type RequestContext, removePasskey } from '@progwise/pforte-db/admin'
+import { isGrantLive, listPasskeys, MAX_PASSKEYS, type RequestContext, removePasskey } from '@progwise/pforte-db/admin'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { escapeHtml } from '../ui/pages.js'
-import { ACCOUNT_PATH } from './constants.js'
+import { ACCOUNT_PATH, ACCOUNT_UI_CLIENT_ID } from './constants.js'
 import type { AccountContext } from './routes.js'
 import { STEP_UP_SECONDS } from './routes.js'
 import type { AccountSession, AccountUser } from './session.js'
@@ -104,7 +104,11 @@ ${passkeys.script.tag}`
     if (!signedIn) return reply
     const { user, session } = signedIn
 
-    const outcome = await passkeys.enrolment.complete(request, user, boundTo(session), request.body?.credential)
+    // The sign-in this session came from must still exist when the passkey is stored, not only when the request came in.
+    const outcome = await passkeys.enrolment.complete(request, user, boundTo(session), request.body?.credential, (tx) =>
+      isGrantLive(tx, { grantId: session.grantId, userId: user.id, clientId: ACCOUNT_UI_CLIENT_ID }),
+    )
+    if (outcome === 'revoked') return reply.header('Set-Cookie', gate.end()).redirect(`${ACCOUNT_PATH}/login`, 303)
     if (outcome === 'too-many') return redirectWith(reply, PASSKEYS, { kind: 'error', key: 'account.passkeys.tooMany', values: { count: String(MAX_PASSKEYS) } })
     if (outcome !== 'added') return redirectWith(reply, PASSKEYS, { kind: 'error', key: `account.passkeys.${outcome}` })
     return redirectWith(reply, PASSKEYS, { kind: 'ok', key: 'account.passkeys.added' })

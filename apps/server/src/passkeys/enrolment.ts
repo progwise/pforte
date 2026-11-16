@@ -1,5 +1,5 @@
 import type { Database } from '@progwise/pforte-db'
-import { addPasskey, listPasskeys, MAX_PASSKEYS, openPasskeyChallenge, type RequestContext, takePasskeyChallenge } from '@progwise/pforte-db/admin'
+import { addPasskey, listPasskeys, MAX_PASSKEYS, openPasskeyChallenge, type RequestContext, takePasskeyChallenge, type Transaction } from '@progwise/pforte-db/admin'
 import type { findActiveUserById } from '@progwise/pforte-db/oidc'
 import type { FastifyRequest } from 'fastify'
 import { type Notifier, NotifierUnavailableError } from '../notifications/notifier.js'
@@ -22,8 +22,18 @@ export interface PasskeyEnrolmentDependencies {
   accountUrl?: string
 }
 
-/** How an attempt to add a passkey ended. */
-export type EnrolmentOutcome = 'added' | 'rejected' | 'expired' | 'duplicate' | 'too-many'
+/**
+ * How an attempt to add a passkey ended. `revoked`: what entitled the person to a new passkey no longer holds;
+ * nothing was stored.
+ */
+export type EnrolmentOutcome = 'added' | 'rejected' | 'expired' | 'duplicate' | 'too-many' | 'revoked'
+
+/**
+ * Whether the person may still have a new passkey, asked in the transaction that stores it, with the person's row
+ * locked: the offer is open, the sign-in exists. The place that offers the passkey answers; it may close its offer
+ * in the same breath, which is then committed with the passkey or not at all.
+ */
+export type StillAllowed = (tx: Transaction) => Promise<boolean>
 
 /**
  * Making a passkey for a person, the same wherever it is offered: on the account pages, after a sign-in with a
@@ -44,9 +54,10 @@ export const createPasskeyEnrolment = ({ db, ceremonies, ui, notifier, backgroun
 
   /**
    * Takes what the form brought back (`credential`, the device's answer as JSON) and stores the passkey if the
-   * answer holds. The person is told by e-mail, after the answer to the browser.
+   * answer holds and `allowed` still says yes when it is stored. The person is told by e-mail, after the answer
+   * to the browser.
    */
-  complete: async (request: FastifyRequest, user: ActiveUser, boundTo: string, credential: unknown): Promise<EnrolmentOutcome> => {
+  complete: async (request: FastifyRequest, user: ActiveUser, boundTo: string, credential: unknown, allowed: StillAllowed): Promise<EnrolmentOutcome> => {
     let answer: unknown
     try {
       answer = JSON.parse(typeof credential === 'string' ? credential : '')
@@ -67,7 +78,9 @@ export const createPasskeyEnrolment = ({ db, ceremonies, ui, notifier, backgroun
     const label = passkeyLabel(request.headers['user-agent'])
     // The person themselves, wherever they are asked: nobody makes a passkey for somebody else.
     const context: RequestContext = { actor: { type: 'user', id: user.id }, ip: request.ip, userAgent: request.headers['user-agent'], self: true }
-    const added = await db.transaction((tx) => addPasskey(tx, context, user, { ...created, label }))
+    // Checking the answer took a moment, and the person's sessions may have been ended in it. So what entitles
+    // them is asked again here, where ending sessions cannot slip in between the question and the passkey.
+    const added = await db.transaction((tx) => addPasskey(tx, context, user, { ...created, label }, allowed))
     if (added.kind !== 'added') return added.kind
 
     // The rightful person learns of a passkey that somebody else added. Not tied to the response: a mail server

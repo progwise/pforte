@@ -131,6 +131,13 @@ password and code ([passkeys](passkeys.md)). What pforte insists on, when one is
   The offer ends when it is answered, after a quarter of an hour, and **when the person's sessions are ended**: by
   "sign out everywhere", a password reset, locking or deactivating. From then on the token finishes no sign-in and
   makes no passkey, whoever holds a copy, and every question about a new passkey that was still open is gone with it.
+  At an activation the offer is opened once, when the password is chosen; confirming the phone number in between
+  only carries it on and cannot open another.
+- **What entitles a person is asked again where the passkey is stored.** Checking a device's answer takes a moment.
+  So the passkey is stored in a transaction that first locks the person's row and then asks once more: is the offer
+  still open (it is closed in that same transaction), does the sign-in at the account pages still exist? Ending a
+  person's sessions locks the same row first. The two therefore happen one after the other: a passkey is stored
+  before the sessions were ended, or it is not stored.
 - **A passkey is known once.** A credential that is stored already, for this person or another, is not stored again.
 - **Twenty per person, also under load.** The person's row is locked while their passkeys are counted and the new one
   is stored, so passkeys that arrive at the same moment are counted one after the other.

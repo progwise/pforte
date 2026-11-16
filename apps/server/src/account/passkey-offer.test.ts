@@ -4,6 +4,7 @@ import { unsign } from '../interaction/signed-cookie.js'
 import { type AdminHarness, createAdminHarness, ISSUER } from '../test/admin-harness.js'
 import { createAuthenticator, type CreationQuestion } from '../test/authenticator.js'
 import { Browser } from '../test/browser.js'
+import { endSessionsDuring } from '../test/held-user.js'
 import { openLogin, post, questionIn, tokensAfter } from '../test/passkey-flows.js'
 
 const COOKIE_KEYS = ['k'.repeat(40)]
@@ -273,6 +274,24 @@ describe.skipIf(!hasDatabase)('the offer of a passkey at the end of an activatio
       expect(await passkeysOf(user.id)).toHaveLength(made)
     })
 
+    it('stores no passkey when the sessions are ended while the answer of the device is being checked', async () => {
+      const user = await invited()
+      const browser = new Browser(h.app)
+      const { question } = await offered(browser, await activate(browser, user.token))
+      const credential = JSON.stringify(phone.create(question))
+
+      const response = await endSessionsDuring(h, user.id, () => post(browser, '/activate/passkey', { credential }))
+
+      expect(response.statusCode).toBe(200)
+      expect(response.body).toContain('Your account is active')
+      expect(await passkeysOf(user.id)).toEqual([])
+      expect(await h.audit('user.passkey.add', user.id)).toEqual([])
+      await h.settle()
+      expect(mails()).toEqual([])
+      // And the answer to the offer was not theirs to give any more: nothing is noted for this browser.
+      expect([response.headers['set-cookie']].flat().join(';')).not.toContain('pforte_passkey_offer=')
+    })
+
     it('takes its question from its own person only', async () => {
       const one = await invited()
       const other = await invited()
@@ -336,6 +355,49 @@ describe.skipIf(!hasDatabase)('the offer of a passkey at the end of an activatio
       await offered(browser, await post(browser, '/activate/phone/skip'))
 
       expect((await post(browser, '/activate/passkey/skip')).body).toContain('Your account is active')
+    })
+
+    it('is opened by the activation and only carried on by the phone step: that step cannot open another', async () => {
+      h.notifier.smsAvailable = true
+      const user = await invited({ withPhone: true })
+      const browser = new Browser(h.app)
+      await activate(browser, user.token)
+      const offers = async () => (await h.database.pool.query(`select details, expires_at from passkey_offers where user_id = $1`, [user.id])).rows
+      // One offer, from the moment the password is chosen, good for as long as the phone step.
+      expect(await offers()).toMatchObject([{ details: { done: 'account' } }])
+      const phoneStep = browser.cookies.get('pforte_phone_step')!
+      const token = browser.cookies.get('pforte_activation_passkey')!
+
+      await offered(browser, await post(browser, '/activate/phone/skip'))
+      const [carried] = await offers()
+      expect(carried.expires_at.getTime() - Date.now()).toBeLessThanOrEqual(15 * 60_000)
+      await post(browser, '/activate/passkey/skip')
+      expect(await offers()).toEqual([])
+
+      // Somebody kept both cookies. The phone step is run again, and again: it has nothing to carry on.
+      browser.cookies.set('pforte_phone_step', phoneStep)
+      browser.cookies.set('pforte_activation_passkey', token)
+      for (const again of [await post(browser, '/activate/phone/skip'), await post(browser, '/activate/phone/skip')]) {
+        expect(again.statusCode).toBe(200)
+        expect(again.body).toContain('Your account is active')
+      }
+      expect(await offers()).toEqual([])
+      expect((await browser.request('GET', '/activate/passkey')).body).not.toContain('data-passkey')
+    })
+
+    it('is not there after the phone step when the sessions were ended meanwhile', async () => {
+      h.notifier.smsAvailable = true
+      const user = await invited({ withPhone: true })
+      const browser = new Browser(h.app)
+      await activate(browser, user.token)
+
+      expect((await h.api('POST', `/users/${user.id}/end-sessions`)).statusCode).toBe(200)
+      const confirmed = await post(browser, '/activate/phone', { code: phoneCode(user.email) })
+
+      // The phone number is confirmed, as before; no passkey is offered.
+      expect(confirmed.statusCode).toBe(200)
+      expect(confirmed.body).toContain('Phone number confirmed')
+      expect((await browser.request('GET', '/activate/passkey')).body).not.toContain('data-passkey')
     })
 
     it('does not come on a device that cannot make a passkey', async () => {

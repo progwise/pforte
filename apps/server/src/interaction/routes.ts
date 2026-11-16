@@ -462,14 +462,16 @@ export const interactionRoutes =
     }
     type Waiting = NonNullable<Awaited<ReturnType<typeof offerFor>>>
 
-    /**
-     * Ends the sign-in that waited, as the code had ended it without the offer. The offer is closed first, and
-     * only the request that closed it goes on: an offer finishes one sign-in, once.
-     */
-    const finishOffered = async (request: FastifyRequest, reply: FastifyReply, { uid, user }: Waiting, answer: 'later' | 'done') => {
-      const closed = await closePasskeyOffer(db, { token: tokenOf(request), boundTo: offerOf(uid) })
-      if (!closed || closed.userId !== user.id || !isOffer(closed.details)) return reply.header('Set-Cookie', clearOffer(uid)).redirect(cookiePath(uid), 303)
-      return finishLogin(request, reply, user.id, { acr: closed.details.acr, amr: closed.details.amr }, [clearOffer(uid), passkeys.offers.answered(request.headers.cookie, user.id, answer)])
+    const backToLogin = (reply: FastifyReply, uid: string) => reply.header('Set-Cookie', clearOffer(uid)).redirect(cookiePath(uid), 303)
+
+    /** Ends the sign-in that waited, as the code had ended it without the offer. For the request that closed the offer, and no other. */
+    const finishClosed = (request: FastifyRequest, reply: FastifyReply, { uid, user, offer }: Waiting, answer: 'later' | 'done') =>
+      finishLogin(request, reply, user.id, { acr: offer.acr, amr: offer.amr }, [clearOffer(uid), passkeys.offers.answered(request.headers.cookie, user.id, answer)])
+
+    /** Closes the offer and ends the sign-in. Only the request that closed it goes on: an offer finishes one sign-in, once. */
+    const finishOffered = async (request: FastifyRequest, reply: FastifyReply, waiting: Waiting, answer: 'later' | 'done') => {
+      const closed = await closePasskeyOffer(db, { token: tokenOf(request), boundTo: offerOf(waiting.uid) })
+      return closed?.userId === waiting.user.id ? finishClosed(request, reply, waiting, answer) : backToLogin(reply, waiting.uid)
     }
 
     const offerPage = async (request: FastifyRequest, reply: FastifyReply, waiting: Waiting, error?: string) => {
@@ -498,10 +500,17 @@ export const interactionRoutes =
       const waiting = await offerFor(request, details.uid)
       if (!waiting) return reply.redirect(cookiePath(details.uid), 303)
 
-      const outcome = await passkeys.enrolment.complete(request, waiting.user, offerOf(details.uid), request.body?.credential)
-      // Made, or there already: either way this browser has nothing more to be offered.
-      if (outcome === 'added' || outcome === 'duplicate' || outcome === 'too-many') return finishOffered(request, reply, waiting, 'done')
-      // Not made. The person is signed in all the same: they try again, or go on with "not now".
+      // The offer is closed in the transaction that stores the passkey, with the person's row locked. Ending their
+      // sessions locks the same row: it has either ended the offer by then, and nothing is stored, or it comes after.
+      const outcome = await passkeys.enrolment.complete(request, waiting.user, offerOf(details.uid), request.body?.credential, async (tx) => {
+        const closed = await closePasskeyOffer(tx, { token: tokenOf(request), boundTo: offerOf(details.uid) })
+        return closed?.userId === waiting.user.id
+      })
+      // The offer was over before the passkey could be stored: answered by another request, or ended with the sessions.
+      if (outcome === 'revoked') return backToLogin(reply, details.uid)
+      // Made, or there already: the offer is closed, and this browser has nothing more to be offered.
+      if (outcome === 'added' || outcome === 'duplicate' || outcome === 'too-many') return finishClosed(request, reply, waiting, 'done')
+      // Not made, and the offer is as it was. The person is signed in all the same: they try again, or go on with "not now".
       return offerPage(request, reply, waiting, ui.pages.for(waiting.offer.language).t('passkeyOffer.failed'))
     })
 

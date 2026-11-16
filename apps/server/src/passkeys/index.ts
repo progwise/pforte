@@ -39,5 +39,5 @@ export const createPasskeys = ({ issuer, ui, db, notifier, background, cookieKey
 export type Passkeys = ReturnType<typeof createPasskeys>
 
 export { isHandleOf, namedBy } from './ceremonies.js'
-export type { EnrolmentOutcome } from './enrolment.js'
+export type { EnrolmentOutcome, StillAllowed } from './enrolment.js'
 export { passkeyLabel } from './label.js'

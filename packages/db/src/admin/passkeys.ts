@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
-import { and, count, desc, eq, isNull, lt } from 'drizzle-orm'
+import { and, count, desc, eq, gt, isNull, lt, sql } from 'drizzle-orm'
 import { type DatabaseOrTransaction, recordAuditEvent, type Transaction } from '../audit.js'
 import type { Database } from '../index.js'
 import { passkeyChallenges, passkeyOffers, passkeys, users } from '../schema/index.js'
@@ -50,9 +50,15 @@ export interface NewPasskey {
  *
  * Needs a transaction: the person's row is locked until it ends, so that two passkeys arriving at the same moment
  * are counted one after the other and the limit holds.
+ *
+ * `allowed` is asked once the row is locked, in the same transaction: whether what entitles the person to a new
+ * passkey still holds (the offer is open, the sign-in exists). Ending a person's sessions locks the same row, so
+ * it has either happened by then, and the answer is no (`revoked`), or it waits until the passkey is stored.
+ * Whatever `allowed` changes (closing the offer) is committed with the passkey or not at all.
  */
-export const addPasskey = async (tx: Transaction, context: RequestContext, user: UserRow, passkey: NewPasskey) => {
+export const addPasskey = async (tx: Transaction, context: RequestContext, user: UserRow, passkey: NewPasskey, allowed?: (tx: Transaction) => Promise<boolean>) => {
   await tx.select({ id: users.id }).from(users).where(eq(users.id, user.id)).for('update')
+  if (allowed && !(await allowed(tx))) return { kind: 'revoked' } as const
   const [existing] = await tx.select({ count: count() }).from(passkeys).where(eq(passkeys.userId, user.id))
   if ((existing?.count ?? 0) >= MAX_PASSKEYS) return { kind: 'too-many' } as const
 
@@ -182,6 +188,19 @@ export const findPasskeyOffer = async (db: DatabaseOrTransaction, offer: Passkey
 export const closePasskeyOffer = async (db: DatabaseOrTransaction, offer: PasskeyOffer, now = new Date()) => {
   const [closed] = await db.delete(passkeyOffers).where(sameOffer(offer)).returning({ userId: passkeyOffers.userId, details: passkeyOffers.details, expiresAt: passkeyOffers.expiresAt })
   return closed && closed.expiresAt > now ? { userId: closed.userId, details: closed.details } : undefined
+}
+
+/**
+ * Carries an offer that was opened earlier on to its next step: more is noted about it (merged into what is there)
+ * and it runs until `expiresAt`. False if it is not open any more; nothing is opened in its place.
+ */
+export const continuePasskeyOffer = async (db: DatabaseOrTransaction, offer: PasskeyOffer, { details, expiresAt }: { details: Record<string, unknown>; expiresAt: Date }, now = new Date()) => {
+  const continued = await db
+    .update(passkeyOffers)
+    .set({ details: sql`${passkeyOffers.details} || ${JSON.stringify(details)}::jsonb`, expiresAt })
+    .where(and(sameOffer(offer), gt(passkeyOffers.expiresAt, now)))
+    .returning({ userId: passkeyOffers.userId })
+  return continued.length === 1
 }
 
 /**

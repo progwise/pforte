@@ -112,10 +112,13 @@ const clientsToNotify = (logouts: ClientLogout[]) => new Set(logouts.map(({ clie
  * Deletes every session, grant and token of a user and revokes their remembered devices, so they
  * must sign in again, with the second factor. A sign-in that is complete but waits for the answer to the offer
  * of a passkey ends too, as does every question about a passkey that is still open: neither is a session yet,
- * and both would otherwise outlive this. Returns how many of each went, how many applications are to be
+ * and both would otherwise outlive this. Call it in a transaction. Returns how many of each went, how many applications are to be
  * told (for the audit event of the caller) and the logouts to send them once the change is committed.
  */
 export const endUserSessions = async (tx: DatabaseOrTransaction, userId: string) => {
+  // The person's row is locked first, as it is by whatever stores something for them on the strength of a sign-in
+  // (a new passkey). So the two happen one after the other: what is stored was stored before this, or is refused.
+  await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).for('update')
   const logouts = await logoutsFor(tx, userId)
   const deleted = await tx.delete(oidcPayloads).where(eq(oidcPayloads.accountId, userId)).returning({ id: oidcPayloads.id })
   await endPasskeySteps(tx, userId)

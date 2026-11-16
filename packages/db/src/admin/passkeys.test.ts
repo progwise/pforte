@@ -5,6 +5,7 @@ import { endSessions, lockUser, requestPasswordReset } from './lifecycle.js'
 import {
   addPasskey,
   closePasskeyOffer,
+  continuePasskeyOffer,
   deleteExpiredPasskeyChallenges,
   deleteExpiredPasskeyOffers,
   findPasskeyByCredentialId,
@@ -95,6 +96,66 @@ describe.skipIf(!hasDatabase)('passkeys', () => {
     expect(await listPasskeys(database.db, anna.id)).toHaveLength(MAX_PASSKEYS)
     // Somebody else is not held up by it, nor counted with it.
     expect((await add(context, ben, passkey('bens'))).kind).toBe('added')
+  })
+
+  describe('what entitles the person is asked again where the passkey is stored', () => {
+    it('stores nothing when the answer is no, and keeps what the question changed', async () => {
+      const token = await openPasskeyOffer(database.db, { userId: anna.id, boundTo: 'activation', details: {} }, new Date(Date.now() + 60_000))
+      const closeIt = async (tx: Transaction) => Boolean(await closePasskeyOffer(tx, { token, boundTo: 'activation' }))
+
+      expect((await database.db.transaction((tx) => addPasskey(tx, context, anna, passkey('first'), closeIt))).kind).toBe('added')
+      // The offer went with the first passkey. A second answer finds it closed.
+      expect(await database.db.transaction((tx) => addPasskey(tx, context, anna, passkey('second'), closeIt))).toEqual({ kind: 'revoked' })
+
+      expect((await listPasskeys(database.db, anna.id)).map((row) => row.label)).toEqual(['first'])
+      expect(await events('user.passkey.add')).toHaveLength(1)
+    })
+
+    it('keeps the offer open when the passkey cannot be stored after all', async () => {
+      const token = await openPasskeyOffer(database.db, { userId: anna.id, boundTo: 'activation', details: {} }, new Date(Date.now() + 60_000))
+
+      await expect(
+        database.db.transaction(async (tx) => {
+          await addPasskey(tx, context, anna, passkey('lost'), async (inner) => Boolean(await closePasskeyOffer(inner, { token, boundTo: 'activation' })))
+          throw new Error('something went wrong afterwards')
+        }),
+      ).rejects.toThrow('something went wrong afterwards')
+
+      expect(await listPasskeys(database.db, anna.id)).toEqual([])
+      expect(await findPasskeyOffer(database.db, { token, boundTo: 'activation' })).toBeDefined()
+    })
+
+    it('happens after sessions that are being ended, never in the middle: both take the person\'s row first', async () => {
+      const token = await openPasskeyOffer(database.db, { userId: anna.id, boundTo: 'activation', details: {} }, new Date(Date.now() + 60_000))
+      await database.pool.query(`update users set status = 'active', password_hash = 'x' where id = $1`, [anna.id])
+      const order: string[] = []
+      let holding!: () => void
+      const held = new Promise<void>((resolve) => (holding = resolve))
+      let go!: () => void
+      const released = new Promise<void>((resolve) => (go = resolve))
+
+      // The sessions are being ended: the row is taken, the offer deleted, the transaction not finished yet.
+      const ending = database.db.transaction(async (tx) => {
+        await endSessions(tx, context, (await findUserById(tx, anna.id))!)
+        holding()
+        await released
+        order.push('sessions ended')
+      })
+      await held
+      const adding = database.db
+        .transaction((tx) => addPasskey(tx, context, anna, passkey('too-late'), async (inner) => Boolean(await closePasskeyOffer(inner, { token, boundTo: 'activation' }))))
+        .then((result) => {
+          order.push(`passkey: ${result.kind}`)
+        })
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      // The passkey waits. It has not been stored on the strength of an offer that is about to be gone.
+      expect(order).toEqual([])
+      go()
+      await Promise.all([ending, adding])
+
+      expect(order).toEqual(['sessions ended', 'passkey: revoked'])
+      expect(await listPasskeys(database.db, anna.id)).toEqual([])
+    })
   })
 
   it('removes a passkey of the person and no other', async () => {
@@ -201,6 +262,25 @@ describe.skipIf(!hasDatabase)('passkeys', () => {
       expect(closed.filter(Boolean)).toEqual([{ userId: anna.id, details: { acr: 'x', amr: ['pwd', 'otp'] } }])
       expect(await findPasskeyOffer(database.db, offer)).toBeUndefined()
       expect(await closePasskeyOffer(database.db, offer)).toBeUndefined()
+    })
+
+    it('is carried on to its next step while it is open, and not opened again once it is over', async () => {
+      const token = await openPasskeyOffer(database.db, { userId: anna.id, boundTo: 'activation', details: { clientId: 'demo-web', done: 'account' } }, soon())
+      const offer = { token, boundTo: 'activation' }
+      const later = new Date(Date.now() + 60 * 60_000)
+
+      expect(await continuePasskeyOffer(database.db, offer, { details: { done: 'phone' }, expiresAt: later })).toBe(true)
+      expect(await findPasskeyOffer(database.db, offer)).toEqual({ userId: anna.id, details: { clientId: 'demo-web', done: 'phone' } })
+      expect((await database.pool.query('select expires_at from passkey_offers')).rows[0].expires_at).toEqual(later)
+
+      // Not in another place, not with another token, and not after it was closed or has run out.
+      expect(await continuePasskeyOffer(database.db, { token, boundTo: 'offer:interaction-1' }, { details: {}, expiresAt: later })).toBe(false)
+      expect(await continuePasskeyOffer(database.db, { token: 'another', boundTo: 'activation' }, { details: {}, expiresAt: later })).toBe(false)
+      await closePasskeyOffer(database.db, offer)
+      expect(await continuePasskeyOffer(database.db, offer, { details: {}, expiresAt: later })).toBe(false)
+      const old = await open(anna, 'activation', new Date(Date.now() - 1000))
+      expect(await continuePasskeyOffer(database.db, { token: old, boundTo: 'activation' }, { details: {}, expiresAt: later })).toBe(false)
+      expect(await offers()).toBe(1)
     })
 
     it('runs out', async () => {

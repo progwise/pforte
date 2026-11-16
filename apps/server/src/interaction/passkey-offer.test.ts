@@ -4,6 +4,7 @@ import { sign, unsign } from './signed-cookie.js'
 import { type AdminHarness, createAdminHarness, ISSUER } from '../test/admin-harness.js'
 import { type AnswerOptions, createAuthenticator, type CreationQuestion } from '../test/authenticator.js'
 import { Browser } from '../test/browser.js'
+import { endSessionsDuring } from '../test/held-user.js'
 import { driveSignIn } from '../test/manage-session.js'
 import { openLogin, post, questionIn, tokensAfter } from '../test/passkey-flows.js'
 
@@ -65,7 +66,7 @@ describe.skipIf(!hasDatabase)('the offer of a passkey after a sign-in with a cod
     expect(flow.afterCode.headers.location).toBe(flow.offer)
     const page = await browser.request('GET', flow.offer)
     expect(page.statusCode, page.body).toBe(200)
-    return { ...flow, page, question: questionIn<CreationQuestion>(page.body, 'create') }
+    return { ...flow, browser, page, question: questionIn<CreationQuestion>(page.body, 'create') }
   }
 
   describe('the code page', () => {
@@ -314,6 +315,27 @@ describe.skipIf(!hasDatabase)('the offer of a passkey after a sign-in with a cod
         // The login page is what is left, and it asks for everything again.
         expect((await browser.request('GET', interaction)).body).toContain('name="password"')
       })
+    })
+
+    it('stores no passkey when the sessions are ended while the answer of the device is being checked', async () => {
+      const browser = new Browser(h.app)
+      const { offer, interaction, question } = await offered(browser, A.email)
+      const credential = JSON.stringify(phone.create(question))
+
+      // The request finds the offer open, uses up its question and checks the answer. Then, before it stores
+      // the passkey, the sessions are ended.
+      const response = await endSessionsDuring(h, annaId, () => post(browser, offer, { credential }))
+
+      expect(response.statusCode).toBe(303)
+      expect(response.headers.location).toBe(interaction)
+      expect(await passkeysOf(A.email)).toEqual([])
+      expect(await h.audit('user.passkey.add', annaId)).toEqual([])
+      await h.settle()
+      expect(mails()).toEqual([])
+      expect((await h.database.pool.query(`select count(*) from oidc_payloads where account_id = $1 and type = 1`, [annaId])).rows[0].count).toBe('0')
+      // It was the answer to the real question: without the ending of the sessions it makes a passkey.
+      const again = await offered(new Browser(h.app), A.email)
+      expect((await post(again.browser, again.offer, { credential: JSON.stringify(phone.create(again.question)) })).headers.location).toContain('/auth/')
     })
 
     it('finishes one sign-in, once: a copy of its token is worth nothing after the answer', async () => {

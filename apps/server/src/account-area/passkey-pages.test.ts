@@ -6,6 +6,7 @@ import { NotifierUnavailableError } from '../notifications/notifier.js'
 import { type AdminHarness, createAdminHarness, ISSUER } from '../test/admin-harness.js'
 import { type AnswerOptions, createAuthenticator, type CreationQuestion } from '../test/authenticator.js'
 import { Browser } from '../test/browser.js'
+import { endSessionsDuring } from '../test/held-user.js'
 import { driveSignIn } from '../test/manage-session.js'
 
 const COOKIE_KEYS = ['k'.repeat(40)]
@@ -388,6 +389,22 @@ describe.skipIf(!hasDatabase)('the account pages: passkeys', () => {
       expect(await passkeysOf(A.email)).toHaveLength(1)
       await h.settle()
       expect(mails()).toHaveLength(1)
+    })
+
+    it('stores no passkey when the sessions are ended while the answer of the device is being checked', async () => {
+      const browser = await signedIn(A.email)
+      const asked = await question(browser)
+      const credential = JSON.stringify(device.create(asked))
+
+      const response = await endSessionsDuring(h, idOfAnna, () => post(browser, '/account/passkeys/new', { credential }))
+
+      // The session of the account pages is over, and so is what it was about to do.
+      expect(response.statusCode).toBe(303)
+      expect(response.headers.location).toBe('/account/login')
+      expect(await passkeysOf(A.email)).toEqual([])
+      expect(await h.audit('user.passkey.add', idOfAnna)).toEqual([])
+      await h.settle()
+      expect(mails()).toEqual([])
     })
 
     it('does not store a credential that is known already, whoever has it', async () => {
