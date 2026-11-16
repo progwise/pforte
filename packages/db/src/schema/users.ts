@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { boolean, check, pgEnum, pgTable, text } from 'drizzle-orm/pg-core'
+import { boolean, check, integer, pgEnum, pgTable, text } from 'drizzle-orm/pg-core'
 import { clients } from './clients.js'
 import { id, timestamps, timestamptz } from './columns.js'
 
@@ -25,6 +25,12 @@ export const users = pgTable(
     isAdmin: boolean().notNull().default(false),
     lockedAt: timestamptz(),
     lastLoginAt: timestamptz(),
+    /**
+     * Counts how often this person's sessions were ended: by "sign out everywhere", a password reset, locking,
+     * deactivating. A sign-in that is under way notes the count when the password is accepted and is refused if
+     * it has moved on since, so what was begun before the sessions were ended cannot be finished after.
+     */
+    sessionEpoch: integer().notNull().default(0),
     /** Hash of the activation token; the token itself is only sent by e-mail. */
     activationTokenHash: text().unique('users_activation_token_hash_unique'),
     activationExpiresAt: timestamptz(),

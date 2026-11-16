@@ -4,7 +4,7 @@ import { closePasskeyOffer, findPasskeyByCredentialId, findPasskeyOffer, openPas
 import { changeCodeChannel, checkCode, CodeLimitError, currentCode, issueCode, markEmailVerified } from '@progwise/pforte-db/codes'
 import { findRememberedDevice, rememberDevice } from '@progwise/pforte-db/devices'
 import { findActiveUserById } from '@progwise/pforte-db/oidc'
-import { recordLogin, whileUserHeld } from '@progwise/pforte-db/users'
+import { recordLogin, sessionEpochOf, whileUserHeld } from '@progwise/pforte-db/users'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { ACR_PASSWORD, ACR_SECOND_FACTOR, passkeyAssurance, secondFactorAssurance } from '../auth/assurance.js'
 import { channelFor, maskEmail, maskPhone } from '../auth/channels.js'
@@ -64,6 +64,12 @@ interface Step {
   uid: string
   userId: string
   expiresAt: number
+  /**
+   * How often the person's sessions had been ended when their password was accepted. If they were ended since
+   * (a password reset, "sign out everywhere", a lock), this step is over: the password it rests on may be the
+   * one that was just replaced, and the person signs in again from the start.
+   */
+  epoch: number
   /** The language of the pages, fixed when the password was accepted. */
   language: string
 }
@@ -205,7 +211,7 @@ export const interactionRoutes =
         }
 
         await limiter.passwordSucceeded(address, request.ip)
-        return startSecondFactor(request, reply, details, result.userId)
+        return startSecondFactor(request, reply, details, result)
       },
     )
 
@@ -227,12 +233,25 @@ export const interactionRoutes =
         .interactionFinished(request.raw, reply.raw, { login: { accountId, ...assurance } }, { mergeWithLastSubmission: false })
     }
 
-    /** The step cookie, if it is valid, belongs to this interaction and the user can still sign in. */
-    const stepFor = async (request: FastifyRequest, uid: string) => {
+    /**
+     * The step cookie, if it is valid, belongs to this interaction and the user can still sign in. `over` says
+     * that their sessions were ended since the password was accepted: the step is then of no use any more.
+     */
+    const anyStepFor = async (request: FastifyRequest, uid: string) => {
       const step = unsign<Step>(cookieKeys, readCookie(request.headers.cookie, STEP_COOKIE))
       if (!step || step.uid !== uid || step.expiresAt < Date.now()) return undefined
       const user = await findActiveUserById(db, step.userId)
-      return user ? { step, user } : undefined
+      return user ? { step, user, over: user.sessionEpoch !== step.epoch } : undefined
+    }
+    /** The step this request may go on with: as above, and not over. */
+    const stepFor = async (request: FastifyRequest, uid: string) => {
+      const current = await anyStepFor(request, uid)
+      return current && !current.over ? current : undefined
+    }
+    /** Ends a step whose sign-in is over: recorded, the cookie removed, back to the start for the password as it is now. */
+    const stepIsOver = async (request: FastifyRequest, reply: FastifyReply, uid: string, userId: string) => {
+      await audit.codeFailed(originOf(request), { userId, purpose: 'login', reason: 'sessions_ended' })
+      return reply.header('Set-Cookie', setCookieHeader(STEP_COOKIE, '', { path: cookiePath(uid), maxAgeSeconds: 0, secure })).redirect(cookiePath(uid), 303)
     }
 
     type StepUser = NonNullable<Awaited<ReturnType<typeof stepFor>>>['user']
@@ -287,11 +306,13 @@ export const interactionRoutes =
       request: FastifyRequest,
       reply: FastifyReply,
       { uid, params }: { uid: string; params: Record<string, unknown> },
-      userId: string,
+      { userId, sessionEpoch }: { userId: string; sessionEpoch: number },
     ) => {
       const acrValues = params.acr_values
       const user = await findActiveUserById(db, userId)
       if (!user) return expired(request, reply)
+      // The sessions were ended in the moment since the password was checked: back to the start.
+      if (user.sessionEpoch !== sessionEpoch) return reply.redirect(cookiePath(uid), 303)
       const language = languageOf(request, params, user.language)
       const view = ui.pages.for(language)
 
@@ -322,7 +343,7 @@ export const interactionRoutes =
         // A code went out a moment ago and still works.
       }
 
-      const step: Step = { uid, userId, language, expiresAt: Date.now() + STEP_LIFETIME_SECONDS * 1000 }
+      const step: Step = { uid, userId, language, expiresAt: Date.now() + STEP_LIFETIME_SECONDS * 1000, epoch: sessionEpoch }
       reply.header('Set-Cookie', [setCookieHeader(STEP_COOKIE, sign(cookieKeys, step), { path: cookiePath(uid), maxAgeSeconds: STEP_LIFETIME_SECONDS, secure }), ...adopted])
       return reply.redirect(`${cookiePath(uid)}/code`, 303)
     }
@@ -338,9 +359,11 @@ export const interactionRoutes =
     app.post<{ Params: { uid: string }; Body: { code?: unknown; remember?: unknown } }>('/interaction/:uid/code', async (request, reply) => {
       const details = await interactionFor(request, reply, request.params.uid)
       if (!details) return expired(request, reply)
-      const current = await stepFor(request, details.uid)
+      const current = await anyStepFor(request, details.uid)
       if (!current) return reply.redirect(cookiePath(details.uid), 303)
       const { user } = current
+      // A code for a sign-in whose password was accepted before the person's sessions were ended.
+      if (current.over) return stepIsOver(request, reply, details.uid, user.id)
 
       const wait = await limiter.codeBlockedFor(request.ip)
       if (wait > 0) {
@@ -355,13 +378,19 @@ export const interactionRoutes =
       // The code is accepted and the offer opened in one transaction that holds the person's row, as ending their
       // sessions does. So there is no moment at which the code is used up and the offer not yet there to be ended:
       // an offer never rests on a code that was accepted before the sessions were ended.
-      const { result, offerToken } = await whileUserHeld(db, user.id, async (tx) => {
+      const accepted = await whileUserHeld(db, user.id, async (tx): Promise<{ over: true } | { over: false; result: Awaited<ReturnType<typeof checkCode>>; offerToken?: string }> => {
+        // Asked again here, where it is certain: the sessions cannot be ended while this transaction holds the row.
+        // If they were ended since the password was accepted, the code is not even looked at.
+        if ((await sessionEpochOf(tx, user.id)) !== current.step.epoch) return { over: true }
         const result = /^\d{6}$/.test(code) ? await checkCode(tx, { userId: user.id, purpose: 'login', code }, { secrets: codeSecrets }) : ({ ok: false, reason: 'wrong' } as const)
-        if (!result.ok || !offerWanted) return { result }
+        if (!result.ok || !offerWanted) return { over: false, result }
         const offer: Offer = { ...secondFactorAssurance(result.channel), language: current.step.language }
-        return { result, offerToken: await openPasskeyOffer(tx, { userId: user.id, boundTo: offerOf(details.uid), details: { ...offer } }, new Date(Date.now() + OFFER_LIFETIME_SECONDS * 1000)) }
+        return { over: false, result, offerToken: await openPasskeyOffer(tx, { userId: user.id, boundTo: offerOf(details.uid), details: { ...offer } }, new Date(Date.now() + OFFER_LIFETIME_SECONDS * 1000)) }
       })
 
+      // The sessions were ended between the look above and here: the same end.
+      if (accepted.over) return stepIsOver(request, reply, details.uid, user.id)
+      const { result, offerToken } = accepted
       if (!result.ok) {
         if (result.reason === 'wrong' || result.reason === 'exhausted') await limiter.codeFailed(request.ip)
         await audit.codeFailed(originOf(request), { userId: user.id, purpose: 'login', reason: result.reason })

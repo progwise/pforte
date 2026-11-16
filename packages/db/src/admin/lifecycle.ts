@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
-import { and, eq, gt, inArray, isNotNull, isNull, or } from 'drizzle-orm'
+import { and, eq, gt, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm'
 import { type DatabaseOrTransaction, recordAuditEvent } from '../audit.js'
 import { MODEL_TYPES } from '../oidc.js'
 import { clients, oidcPayloads, users } from '../schema/index.js'
@@ -111,15 +111,17 @@ const clientsToNotify = (logouts: ClientLogout[]) => new Set(logouts.map(({ clie
 
 /**
  * Deletes every session, grant and token of a user and revokes their remembered devices, so they
- * must sign in again, with the second factor. A sign-in that is complete but waits for the answer to the offer
- * of a passkey ends too, as does every question about a passkey that is still open: neither is a session yet,
- * and both would otherwise outlive this. Call it in a transaction. Returns how many of each went, how many applications are to be
+ * must sign in again, with the second factor. What is under way ends too, none of it a session yet: a sign-in
+ * between password and code (it is refused from now on, see `users.sessionEpoch`), a sign-in that is complete
+ * but waits for the answer to the offer of a passkey, and every question about a passkey that is still open. Call it in a transaction. Returns how many of each went, how many applications are to be
  * told (for the audit event of the caller) and the logouts to send them once the change is committed.
  */
 export const endUserSessions = async (tx: DatabaseOrTransaction, userId: string) => {
   // The person's row first, as with whatever keeps something for them on the strength of having just shown who
   // they are (see `lockUserRow`). So that is kept before this, and ended here, or it comes after and starts anew.
   await lockUserRow(tx, userId)
+  // A sign-in that is under way (the password accepted, the code not yet) noted the count. It finds it changed.
+  await tx.update(users).set({ sessionEpoch: sql`${users.sessionEpoch} + 1` }).where(eq(users.id, userId))
   const logouts = await logoutsFor(tx, userId)
   const deleted = await tx.delete(oidcPayloads).where(eq(oidcPayloads.accountId, userId)).returning({ id: oidcPayloads.id })
   await endPasskeySteps(tx, userId)

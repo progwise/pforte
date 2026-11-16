@@ -317,7 +317,7 @@ describe.skipIf(!hasDatabase)('the offer of a passkey after a sign-in with a cod
       })
     })
 
-    it('is opened together with the acceptance of the code, behind the ending of sessions that got there first', async () => {
+    it('is not opened by a code that arrives while the sessions are being ended: the code is not used, the sign-in starts again', async () => {
       const browser = new Browser(h.app)
       const login = await openLogin(browser)
       await post(browser, `${login.interaction}/login`, { email: A.email, password: 'dev-password' })
@@ -337,14 +337,31 @@ describe.skipIf(!hasDatabase)('the offer of a passkey after a sign-in with a cod
         },
       )
 
-      // Then both happen, after the sessions were ended: a code entered now is a sign-in of now.
-      expect(afterCode.headers.location).toBe(`${login.interaction}/passkey-offer`)
-      expect((await codes())[0].consumed_at).not.toBeNull()
-      expect(await offers()).toBe('1')
-      // And what ends the sessions from here on finds the offer.
-      await h.api('POST', `/users/${annaId}/end-sessions`)
+      // Then it learns that the sign-in it belongs to is over: the password was accepted before the sessions were ended.
+      expect(afterCode.statusCode).toBe(303)
+      expect(afterCode.headers.location).toBe(login.interaction)
+      expect(await codes()).toEqual([{ consumed_at: null }])
       expect(await offers()).toBe('0')
-      expect((await post(browser, `${login.interaction}/passkey-offer/skip`)).headers.location).toBe(login.interaction)
+      expect((await h.database.pool.query(`select count(*) from oidc_payloads where account_id = $1 and type = 1`, [annaId])).rows[0].count).toBe('0')
+    })
+
+    it.each([
+      ['a password reset an administrator starts', () => h.api('POST', `/users/${annaId}/reset-password`)],
+      ['"sign out everywhere"', () => h.api('POST', `/users/${annaId}/end-sessions`)],
+    ])('is not opened for a sign-in whose password was accepted before %s', async (_name, end) => {
+      const browser = new Browser(h.app)
+      const login = await openLogin(browser)
+      await post(browser, `${login.interaction}/login`, { email: A.email, password: 'dev-password' })
+      const code = codeFor(A.email)
+
+      expect((await end()).statusCode).toBeLessThan(400)
+      const afterCode = await post(browser, `${login.interaction}/code`, { code, passkeys: '1' })
+
+      // No offer, no passkey, no session: the old password and its code open nothing any more.
+      expect(afterCode.headers.location).toBe(login.interaction)
+      expect((await h.database.pool.query(`select count(*) from passkey_offers where user_id = $1`, [annaId])).rows[0].count).toBe('0')
+      expect((await browser.request('GET', `${login.interaction}/passkey-offer`)).headers.location).toBe(login.interaction)
+      expect(await passkeysOf(A.email)).toEqual([])
     })
 
     it('stores no passkey when the sessions are ended while the answer of the device is being checked', async () => {

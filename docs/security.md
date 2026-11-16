@@ -44,7 +44,7 @@ affected either.
 
 | Cookie | Holds | Flags |
 | --- | --- | --- |
-| `pforte_second_factor` | The step between password and code: user, sign-in, language, time. Signed. | `HttpOnly`, `Secure` (https), `SameSite=Strict`, 15 minutes, only for that sign-in's path |
+| `pforte_second_factor` | The step between password and code: user, sign-in, language, time, and how often the person's sessions had been ended when the password was accepted (see [below](#a-sign-in-under-way-ends-with-the-persons-sessions)). Signed. | `HttpOnly`, `Secure` (https), `SameSite=Strict`, 15 minutes, only for that sign-in's path |
 | `pforte_phone_step` | The step of confirming a phone after activation. Signed. | like the above, 30 minutes, path `/activate` |
 | `pforte_device` | Tokens of remembered devices. Their hashes are in the database. | `HttpOnly`, `Secure` (https), `SameSite=Strict`, 90 days, path `/interaction` |
 | `pforte_device_new` | The token of a device that an activation remembered, until the next sign-in in that browser moves it into `pforte_device`. | like `pforte_device` |
@@ -77,6 +77,18 @@ reset forgets every device that was remembered, so the next sign-in always asks 
 thing as that sign-in code, but a reset is also what a person does after a takeover, and what an administrator starts when
 an account may be compromised: it is the moment to take trust away, not to hand it out. The price is one more mail after a
 forgotten password ([#46](https://github.com/progwise/pforte/issues/46)).
+
+## A sign-in under way ends with the person's sessions
+
+Ending a person's sessions ("sign out everywhere", a password reset, locking, deactivating) also ends a sign-in of
+theirs that is between password and code. Without this, somebody who typed the password before a reset, and holds the
+code that was sent for it, could finish that sign-in after the reset.
+
+pforte counts on the person how often their sessions were ended. The step between password and code notes the count
+when the password is accepted, read together with the password. The code is refused when the count has moved on:
+the code page, "send a new code" and the code itself all lead back to the login page, and the code is not looked at.
+The check that decides is made with the person's row held, the row that ending sessions takes first, so the two cannot
+cross. A sign-in that is refused this way is recorded (`login.code_failed`, `reason: sessions_ended`).
 
 ## A changed password is announced
 
@@ -132,7 +144,8 @@ password and code ([passkeys](passkeys.md)). What pforte insists on, when one is
   "sign out everywhere", a password reset, locking or deactivating. From then on the token finishes no sign-in and
   makes no passkey, whoever holds a copy, and every question about a new passkey that was still open is gone with it.
 - **An offer is opened in the same step as what entitles to it.** After a sign-in, the code is accepted and the offer
-  opened in one transaction that holds the person's row; at an activation, the offer is opened in the transaction that
+  opened in one transaction that holds the person's row, and only for a sign-in whose password was accepted after the
+  person's sessions were last ended ([above](#a-sign-in-under-way-ends-with-the-persons-sessions)); at an activation, the offer is opened in the transaction that
   activates the account. There is no moment at which the code is used up, or the account active, and the offer not yet
   there for the ending of sessions to find. Confirming the phone number in between only carries the activation's offer
   on and cannot open another.

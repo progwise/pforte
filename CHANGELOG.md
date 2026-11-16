@@ -76,6 +76,13 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
 
 ### Fixed
 
+- **A sign-in that is under way ends with the person's sessions.** Somebody who had typed the password and was at the
+  code step could finish that sign-in after "sign out everywhere", after a lock that was lifted again, and after a
+  password reset, that is with the password that had just been replaced. Now the step between password and code is
+  over when the person's sessions are ended: the code leads back to the login page and is recorded as
+  `login.code_failed` with `reason: sessions_ended`. A person who is in the middle of signing in at that moment starts
+  again. The update adds the column `users.session_epoch`
+  ([security measures](docs/security.md#a-sign-in-under-way-ends-with-the-persons-sessions)).
 - **"Applications that stay signed in" lists only those that do.** A person's page in the administration listed every
   application the person had signed in to, also one that is signed in only as long as its browser session lasts. Now the
   table has the applications that hold a refresh token, such as an app on a phone, as the account pages show them; the

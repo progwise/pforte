@@ -29,3 +29,12 @@ export const whileUserHeld = <Result>(db: Database, userId: string, work: (tx: T
     await lockUserRow(tx, userId)
     return work(tx)
   })
+
+/**
+ * How often the person's sessions were ended so far, or undefined if there is no such person. Asked with the
+ * person's row held, it says for certain whether they were ended since a sign-in noted the count.
+ */
+export const sessionEpochOf = async (tx: DatabaseOrTransaction, userId: string) => {
+  const [user] = await tx.select({ sessionEpoch: users.sessionEpoch }).from(users).where(eq(users.id, userId))
+  return user?.sessionEpoch
+}
