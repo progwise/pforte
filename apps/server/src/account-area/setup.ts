@@ -18,6 +18,8 @@ export const ensureAccountUiClient = async (db: Database, issuer: string): Promi
     await ensureSystemClient(db, {
       clientId: ACCOUNT_UI_CLIENT_ID,
       name: 'Account',
+      // Where the page that ends a password reset leads on to, when the reset began at the sign-in of these pages.
+      clientUri: `${issuer}${ACCOUNT_PATH}`,
       redirectUris: [`${issuer}${ACCOUNT_PATH}/callback`],
       postLogoutRedirectUris: [`${issuer}${ACCOUNT_PATH}/signed-out`],
       scopes: ['openid'],

@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createRecordingNotifier } from '../test/recording-notifier.js'
 import { createTestDatabase } from '@progwise/pforte-db/testing'
 import { bootstrapAdministrator } from './bootstrap.js'
+import { ensureAdminUiClient } from './setup.js'
 
 describe.skipIf(!hasDatabase)('setting up the first administrator at start', () => {
   let database: Awaited<ReturnType<typeof createTestDatabase>>
@@ -10,6 +11,7 @@ describe.skipIf(!hasDatabase)('setting up the first administrator at start', () 
 
   beforeAll(async () => {
     database = await createTestDatabase()
+    await ensureAdminUiClient(database.db, 'https://id.example.com')
   })
 
   afterAll(async () => {
@@ -23,6 +25,12 @@ describe.skipIf(!hasDatabase)('setting up the first administrator at start', () 
     expect(recording.notifications).toEqual([expect.objectContaining({ kind: 'activation', user: expect.objectContaining({ email: 'boss@example.com' }) })])
     expect(recording.notifications[0]!.url).toMatch(/^https:\/\/id\.example\.com\/activate\?token=[\w-]{43}$/)
     expect(message).not.toContain('token=')
+  })
+
+  it('says what the account is for, and has the page after choosing the password lead on to the administration', async () => {
+    expect(recording.notifications[0]!.applicationName).toBe('Administration')
+    const { rows } = await database.pool.query(`select u.activation_client_id, c.client_uri from users u join clients c on c.client_id = u.activation_client_id`)
+    expect(rows).toEqual([{ activation_client_id: 'pforte-admin-ui', client_uri: 'https://id.example.com/manage' }])
   })
 
   it('says nothing and sends nothing at the next start', async () => {

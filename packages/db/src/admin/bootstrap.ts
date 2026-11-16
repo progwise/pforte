@@ -18,12 +18,14 @@ const context: RequestContext = { actor: { type: 'system' }, userAgent: 'bootstr
  * nothing happens, so this can run at every start.
  *
  * `deliver` sends the link and runs before the change is committed: if it cannot be sent, nothing is changed and the
- * next start tries again. Otherwise the link would be lost with nobody left to ask for another.
+ * next start tries again. Otherwise the link would be lost with nobody left to ask for another. `clientId` is the
+ * registered client the page after choosing the password leads on to, as for any activation.
  */
 export const ensureAdministrator = (
   db: Database,
   email: string,
   deliver: (user: UserRow, activation: { token: string; expiresAt: Date }) => Promise<void>,
+  options: { clientId?: string } = {},
 ): Promise<BootstrapResult> =>
   db.transaction(async (tx) => {
     // The same lock the rule "the last administrator stays" takes, and for the same reason: starts at the same moment.
@@ -38,7 +40,7 @@ export const ensureAdministrator = (
 
     let activation: { token: string; expiresAt: Date } | undefined
     if (user.status === 'created') {
-      const started = await activateUser(tx, context, user)
+      const started = await activateUser(tx, context, user, options)
       user = started.user
       activation = started.activation
       if (activation) await deliver(user, activation)
