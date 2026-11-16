@@ -44,7 +44,8 @@ export const renderMarkdown = (source: string, resolveLink: (href: string) => st
       if (token.type === 'inline') {
         for (const child of token.children ?? []) {
           if (child.type === 'link_open') {
-            const href = child.attrGet('href') ?? ''
+            // markdown-it 15 types an attribute as text or number; an address is text.
+            const href = String(child.attrGet('href') ?? '')
             links.push(href)
             child.attrSet('href', resolveLink(href))
           }
