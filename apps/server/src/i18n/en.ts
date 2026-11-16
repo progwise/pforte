@@ -105,6 +105,9 @@ export const en = {
   'mail.resetCode.subject': 'Choose a new password for {organisation}',
   'mail.resetCode.text':
     'Hello {firstName},\n\nyour code to choose a new password is {code}. It is valid for {minutes} minutes. Enter it here:\n\n{url}\n\nIf you did not ask for a new password, ignore this message; your password stays as it is.\n',
+  'mail.passwordChanged.subject': 'Your password for {organisation} was changed',
+  'mail.passwordChanged.text':
+    'Hello {firstName},\n\nthe password of your account at {organisation} was just changed, and you were signed out everywhere.\n\nIf that was you, there is nothing to do.\n\nIf it was not you, choose a new password now:\n\n{url}\n\nThen tell your administration.\n',
 
   'sms.login': '{code} is your sign-in code for {organisation}. Valid for {minutes} minutes. Do not share it.',
   'sms.reset':

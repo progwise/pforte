@@ -102,6 +102,9 @@ export const hu: Catalog = {
   'mail.resetCode.subject': 'Új jelszó: {organisation}',
   'mail.resetCode.text':
     'Tisztelt {firstName}!\n\nAz új jelszó választásához szükséges kódja: {code}. A kód {minutes} percig érvényes. Itt adhatja meg:\n\n{url}\n\nHa nem kért új jelszót, hagyja figyelmen kívül ezt az üzenetet; a jelszava változatlan marad.\n',
+  'mail.passwordChanged.subject': 'Megváltozott a jelszava: {organisation}',
+  'mail.passwordChanged.text':
+    'Tisztelt {firstName}!\n\nA(z) {organisation} fiókjának jelszavát az imént megváltoztatták, és mindenhol kijelentkeztettük.\n\nHa Ön volt az, nincs teendője.\n\nHa nem Ön volt az, most válasszon új jelszót:\n\n{url}\n\nEzután értesítse az adminisztrációt.\n',
 
   'sms.login': 'A(z) {organisation} bejelentkezési kódja: {code}. {minutes} percig érvényes. Ne adja át senkinek.',
   'sms.reset': 'A(z) {organisation} új jelszavához szükséges kód: {code}. {minutes} percig érvényes. Ne adja át senkinek.',

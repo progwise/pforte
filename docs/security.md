@@ -65,6 +65,18 @@ thing as that sign-in code, but a reset is also what a person does after a takeo
 an account may be compromised: it is the moment to take trust away, not to hand it out. The price is one more mail after a
 forgotten password ([#46](https://github.com/progwise/pforte/issues/46)).
 
+## A changed password is announced
+
+When a password was changed with a reset code, pforte sends the person an e-mail that says so. It names no time, no
+address and no browser (an administrator finds those in the [audit log](audit-log.md), under
+`user.password_reset.complete`); it gives the page where a new password is chosen and asks the person to tell their
+administration if the change was not theirs. The notice is always an e-mail, also when the reset code went by SMS, so
+it reaches the mailbox, which somebody who holds only the phone cannot read. The page does not wait for it: a mail
+server that is down does not undo the reset, the failure is in the server log. Nothing is sent for a first
+password, chosen with an activation link, and the mail cannot be turned off; its text can be replaced like every other
+(see [languages and texts](branding-and-languages.md#changing-texts-and-adding-languages)). What the notice is worth
+against each attacker is in the [threat model](threat-model.md).
+
 ## Weak secrets stop a production start
 
 With `NODE_ENV=production` pforte checks its configuration and refuses to start, listing **every** problem at once so they

@@ -103,6 +103,9 @@ export const de: Catalog = {
   'mail.resetCode.subject': 'Neues Passwort für {organisation}',
   'mail.resetCode.text':
     'Guten Tag {firstName},\n\nIhr Code für ein neues Passwort lautet {code}. Er ist {minutes} Minuten gültig. Geben Sie ihn hier ein:\n\n{url}\n\nWenn Sie kein neues Passwort angefordert haben, ignorieren Sie diese Nachricht; Ihr Passwort bleibt unverändert.\n',
+  'mail.passwordChanged.subject': 'Ihr Passwort für {organisation} wurde geändert',
+  'mail.passwordChanged.text':
+    'Guten Tag {firstName},\n\ndas Passwort Ihres Kontos bei {organisation} wurde soeben geändert, und Sie wurden überall abgemeldet.\n\nWenn Sie das waren, müssen Sie nichts tun.\n\nWenn Sie das nicht waren, wählen Sie jetzt ein neues Passwort:\n\n{url}\n\nInformieren Sie danach Ihre Administration.\n',
 
   'sms.login': '{code} ist Ihr Anmeldecode für {organisation}. Gültig {minutes} Minuten. Nicht weitergeben.',
   'sms.reset': '{code} ist Ihr Code für ein neues Passwort bei {organisation}. Gültig {minutes} Minuten. Nicht weitergeben.',

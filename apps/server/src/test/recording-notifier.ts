@@ -1,7 +1,7 @@
 import { type NotifiableUser, type Notifier, NotifierUnavailableError } from '../notifications/notifier.js'
 
 export interface Notification {
-  kind: 'activation' | 'reset-code' | 'login-code' | 'phone-code'
+  kind: 'activation' | 'reset-code' | 'login-code' | 'phone-code' | 'password-changed'
   user: NotifiableUser
   channel?: 'email' | 'sms'
   url?: string
@@ -35,6 +35,10 @@ export const createRecordingNotifier = () => {
       if (notifier.failWith) throw notifier.failWith
       if (reset.channel === 'sms' && notifier.failSms) throw new NotifierUnavailableError('SMS is down')
       notifications.push({ kind: 'reset-code', user, channel: reset.channel, code: reset.code, url: reset.url, expiresAt: reset.expiresAt })
+    },
+    async sendPasswordChanged(user, notice) {
+      if (notifier.failWith) throw notifier.failWith
+      notifications.push({ kind: 'password-changed', user, channel: 'email', url: notice.url })
     },
   }
   /** The newest sign-in code sent to this e-mail address. */

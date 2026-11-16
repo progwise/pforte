@@ -17,6 +17,12 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   the administration and can be forgotten there, and an application that asks for `urn:pforte:acr:mfa` still gets the code.
   The token waits in a new cookie, `pforte_device_new`, until the next sign-in in that browser moves it to the others
   ([#44](https://github.com/progwise/pforte/issues/44)).
+- **A changed password is announced by e-mail.** After a password reset the person gets a mail that says their password was
+  changed, with the page where they choose another one and the request to tell their administration if it was not them. Until
+  now a reset that somebody else did showed only when the old password stopped working. The mail is always an e-mail, also
+  when the reset code went by SMS; it is not sent for a first password, and it cannot be turned off. **After the update
+  every installation sends it.** To reword it, replace `mail.passwordChanged.subject` and `mail.passwordChanged.text` in
+  your `locales` folder ([#51](https://github.com/progwise/pforte/issues/51)).
 - **The audit log says when a device was remembered**: `deviceRemembered: true` on `user.activate.complete` (by an activation)
   and on `login.succeeded` (with a code). Until now remembering a device left no trace in the log.
 

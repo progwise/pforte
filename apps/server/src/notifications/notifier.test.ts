@@ -21,12 +21,20 @@ describe('development notifier', () => {
     expect(lines[1]).toContain('654321')
   })
 
+  it('writes the notice that a password was changed to the log', async () => {
+    const lines: string[] = []
+    await createLogNotifier({ log: (message) => lines.push(message), production: false }).sendPasswordChanged(user, { url: 'https://id.example.com/reset?email=ada%40example.com' })
+    expect(lines).toEqual([expect.stringContaining('ada@example.com: the password was changed')])
+    expect(lines[0]).toContain('https://id.example.com/reset?email=ada%40example.com')
+  })
+
   it('refuses in production and keeps secrets out of the log', async () => {
     const lines: string[] = []
     const notifier = createLogNotifier({ log: (message) => lines.push(message), production: true })
 
     await expect(notifier.sendActivationLink(user, link)).rejects.toBeInstanceOf(NotifierUnavailableError)
     await expect(notifier.sendResetCode(user, { code: '1', expiresAt: new Date(), url: 'x', channel: 'email' as const })).rejects.toBeInstanceOf(NotifierUnavailableError)
+    await expect(notifier.sendPasswordChanged(user, { url: 'x' })).rejects.toBeInstanceOf(NotifierUnavailableError)
     expect(lines).toEqual([])
   })
 })
@@ -94,6 +102,25 @@ describe('mail notifier', () => {
     expect(sent[0]!.text).toContain(reset.url)
     expect(sent[1]!.subject).toBe('Neues Passwort für Example Inc.')
   })
+
+  it('tells the user that their password was changed, in their language, with the page to choose another', async () => {
+    sent.length = 0
+    const notice = { url: 'https://id.example.com/reset?email=ada%40example.com&lang=en' }
+    for (const language of ['en', 'de', 'fr', 'hu']) await notifier.sendPasswordChanged({ ...user, language }, notice)
+    expect(sent.map((mail) => mail.subject)).toEqual([
+      'Your password for Example Inc. was changed',
+      'Ihr Passwort für Example Inc. wurde geändert',
+      'Votre mot de passe pour Example Inc. a été modifié',
+      'Megváltozott a jelszava: Example Inc.',
+    ])
+    for (const mail of sent) {
+      expect(mail.to).toBe('ada@example.com')
+      expect(mail.text).toContain('Ada')
+      expect(mail.text).toContain(notice.url)
+      // Every value was filled in, and nothing in the notice is a secret.
+      expect(mail.text).not.toMatch(/[{}]/)
+    }
+  })
 })
 
 describe('mail notifier with SMS', () => {
@@ -131,6 +158,14 @@ describe('mail notifier with SMS', () => {
     expect(texts[0]!.text).toContain('https://id.example.com/reset/code?email=a')
     expect(texts[1]!.text).toContain('333444')
     expect(texts[1]!.text).toContain('confirm this phone number')
+  })
+
+  it('sends the notice that a password was changed by e-mail, also to a user with a phone', async () => {
+    mails.length = 0
+    texts.length = 0
+    await notifier.sendPasswordChanged(user, { url: 'https://id.example.com/reset' })
+    expect(texts).toEqual([])
+    expect(mails).toEqual([expect.objectContaining({ to: 'ada@example.com', subject: 'Your password for Example Inc. was changed' })])
   })
 
   it('cannot send an SMS to a user without a number, or without a configured sender', async () => {
