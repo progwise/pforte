@@ -35,6 +35,14 @@ case "${DATA_DIR}" in /*) ;; *) fail "DATA_DIR must be an absolute path on the n
 if [ -n "${SMS_PROVIDER:-}" ]; then
   [ -z "${SMS_HEADERS:-}" ] || fail "SMS_HEADERS is set in .env. The headers carry the credentials of the SMS provider: put the JSON object into the file secrets/sms_headers and remove the line."
   [ -s secrets/sms_headers ] || fail "SMS_PROVIDER is set, but secrets/sms_headers is missing or empty. It holds the headers for the SMS provider as a JSON object (README.md)."
+  # pforte refuses to start with headers that are not a JSON object of strings, and the one instance is stopped
+  # before the new one starts: a typo in the file would take sign-in offline. So the file is read here as pforte
+  # reads it. What is in it is never shown, also not the part that is wrong.
+  json_string='"([^"\\[:cntrl:]]|\\(["\\/bfnrt]|u[0-9a-fA-F]{4}))*"'
+  json_pair="${json_string}[[:space:]]*:[[:space:]]*${json_string}"
+  json_object="^[[:space:]]*\\{[[:space:]]*(${json_pair}([[:space:]]*,[[:space:]]*${json_pair})*)?[[:space:]]*\\}[[:space:]]*\$"
+  [[ "$(< secrets/sms_headers)" =~ ${json_object} ]] \
+    || fail 'secrets/sms_headers is not a JSON object whose values are all strings, such as {"X-Api-Key":"...","Accept":"application/json"}. pforte would not start with it. Look for a missing or doubled quote, comma or brace.'
   [ -n "${SMS_BODY:-}" ] || fail "SMS_BODY is not set in .env."
 fi
 
@@ -93,8 +101,14 @@ echo "pforte:     https://${PFORTE_HOST}  (${PFORTE_IMAGE})"
 [ -z "${APP_HOST:-}" ] || echo "Application: https://${APP_HOST}  (${APP_IMAGE}, client ${APP_CLIENT_ID:-example-app})"
 echo "Runs on:    ${NODE:-the node of the Docker of this shell}, and only there; data in ${DATA_DIR}"
 echo "Mail from:  ${MAIL_FROM}"
-# Only the host: with some providers the address itself carries an account or a key.
-[ -z "${SMS_PROVIDER:-}" ] || echo "SMS:        through $(printf '%s' "${SMS_URL:-}" | sed -E 's#^[a-z]+://([^/@]*@)?([^/:?]+).*#\2#')"
+if [ -n "${SMS_PROVIDER:-}" ]; then
+  # Only the host, and only what is certainly one: with some providers the address carries an account or a key,
+  # and an address that cannot be read is not shown at all.
+  sms_host=''
+  case "${SMS_URL:-}" in *://*) sms_host="${SMS_URL#*://}" && sms_host="${sms_host%%[/?#]*}" && sms_host="${sms_host##*@}" && sms_host="${sms_host%%:*}" ;; esac
+  [[ "${sms_host}" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] || sms_host=''
+  echo "SMS:        on${sms_host:+, through ${sms_host}}"
+fi
 [ -z "${BOOTSTRAP_ADMIN_EMAIL:-}" ] || echo "First administrator: ${BOOTSTRAP_ADMIN_EMAIL} (gets the activation link while the database has no administrator)"
 
 if ${CHECK}; then

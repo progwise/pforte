@@ -70,7 +70,8 @@ Optional. Without it every code goes by e-mail ([sending codes by SMS](../../doc
    chmod 600 secrets/sms_headers
    ```
 
-3. `./deploy.sh --check`, then `./deploy.sh`. With `SMS_PROVIDER` set it adds `stack.sms.yml`.
+3. `./deploy.sh --check`, then `./deploy.sh`. With `SMS_PROVIDER` set it adds `stack.sms.yml`. Both first read the
+   file as pforte will and stop when it is not a JSON object of strings: pforte would not start with it.
 
 `SMS_URL` is part of the service definition, where everybody who may use Docker on the swarm can read it. That is fine
 for an address; a provider that wants a key in the address itself does not fit this example.
