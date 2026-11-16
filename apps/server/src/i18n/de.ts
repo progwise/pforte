@@ -142,6 +142,7 @@ export const de: Catalog = {
   'account.sessions.noApplications': 'Noch keine',
   'account.sessions.grants': 'Anwendungen, die angemeldet bleiben',
   'account.sessions.grantsHelp': 'Sie bleiben angemeldet, auch wenn der Browser geschlossen ist, wie eine App auf dem Telefon.',
+  'account.sessions.noGrants': 'Keine Anwendung bleibt ohne Browser angemeldet.',
   'account.sessions.since': 'Seit',
   'account.sessions.endAll.title': 'Überall abmelden',
   'account.sessions.endAll.help': 'Beendet jede Anmeldung, in allen Browsern und Anwendungen und auch auf dieser Seite, und vergisst Ihre gemerkten Geräte. Die nächste Anmeldung fragt nach einem Code.',

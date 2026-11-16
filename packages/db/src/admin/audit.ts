@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, like, lt } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, like, lt, or, sql } from 'drizzle-orm'
 import type { DatabaseOrTransaction } from '../audit.js'
 import { auditEvents } from '../schema/index.js'
 
@@ -48,14 +48,28 @@ export const listAuditEvents = async (db: DatabaseOrTransaction, options: ListAu
   return { items, nextCursor: rows.length > options.limit ? items.at(-1)?.id : undefined }
 }
 
-/** What a person is shown of their own sign-ins: that they got in, or that somebody was turned away. Not every code that was sent. */
-export const SIGN_IN_ACTIONS = ['login.succeeded', 'login.password_failed', 'login.code_failed', 'login.blocked'] as const
-
-/** The newest sign-in events about one user, for that user to look at. Only events that name them as the target. */
+/**
+ * The newest sign-in events about one user, for that user to look at: that somebody got in, or was turned away at
+ * the sign-in. Only events that name the user as the target.
+ *
+ * `login.code_failed` and `login.blocked` are also written by the password reset, the activation and the
+ * confirmation of a phone number. Those are not sign-ins and are left out here, in the query and not afterwards,
+ * so that they cannot push sign-ins out of the newest few. Codes that were sent are not listed either.
+ */
 export const listSignInEvents = async (db: DatabaseOrTransaction, userId: string, limit: number) =>
   db
     .select({ id: auditEvents.id, action: auditEvents.action, details: auditEvents.details, ip: auditEvents.ip, userAgent: auditEvents.userAgent, createdAt: auditEvents.createdAt })
     .from(auditEvents)
-    .where(and(eq(auditEvents.targetType, 'user'), eq(auditEvents.targetId, userId), inArray(auditEvents.action, [...SIGN_IN_ACTIONS])))
+    .where(
+      and(
+        eq(auditEvents.targetType, 'user'),
+        eq(auditEvents.targetId, userId),
+        or(
+          inArray(auditEvents.action, ['login.succeeded', 'login.password_failed']),
+          and(eq(auditEvents.action, 'login.code_failed'), sql`${auditEvents.details}->>'purpose' = 'login'`),
+          and(eq(auditEvents.action, 'login.blocked'), sql`${auditEvents.details}->>'scope' in ('password', 'code', 'code_resend')`),
+        ),
+      ),
+    )
     .orderBy(desc(auditEvents.id))
     .limit(limit)

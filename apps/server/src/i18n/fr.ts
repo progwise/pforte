@@ -143,6 +143,7 @@ export const fr: Catalog = {
   'account.sessions.noApplications': 'Aucune pour le moment',
   'account.sessions.grants': 'Applications qui restent connectées',
   'account.sessions.grantsHelp': 'Elles restent connectées même quand le navigateur est fermé, comme une application sur un téléphone.',
+  'account.sessions.noGrants': 'Aucune application ne reste connectée sans navigateur.',
   'account.sessions.since': 'Depuis le',
   'account.sessions.endAll.title': 'Se déconnecter partout',
   'account.sessions.endAll.help': 'Met fin à chaque connexion, dans tous les navigateurs et toutes les applications, y compris sur cette page, et oublie vos appareils mémorisés. La prochaine connexion demandera un code.',

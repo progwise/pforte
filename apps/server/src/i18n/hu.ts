@@ -141,6 +141,7 @@ export const hu: Catalog = {
   'account.sessions.noApplications': 'Még nincs',
   'account.sessions.grants': 'Alkalmazások, amelyek bejelentkezve maradnak',
   'account.sessions.grantsHelp': 'Akkor is bejelentkezve maradnak, ha a böngészőt bezárja, mint egy telefonos alkalmazás.',
+  'account.sessions.noGrants': 'Egy alkalmazás sem marad bejelentkezve böngésző nélkül.',
   'account.sessions.since': 'Ettől',
   'account.sessions.endAll.title': 'Kijelentkezés mindenhol',
   'account.sessions.endAll.help': 'Minden bejelentkezést megszüntet, minden böngészőben és alkalmazásban, ezen az oldalon is, és elfelejti a megjegyzett eszközeit. A következő bejelentkezéskor kódot kérünk.',

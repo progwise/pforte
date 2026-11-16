@@ -61,10 +61,15 @@ ${rows.join('\n')}
           `<tr>${cell(formatTime(session.startedAt, language))}${cell(formatTime(session.expiresAt, language))}${cell(t(session.acr === ACR_SECOND_FACTOR ? 'account.sessions.withCode' : 'account.sessions.withoutCode'))}${cell(session.clientIds.length ? session.clientIds.map(nameOf).join(', ') : t('account.sessions.noApplications'))}</tr>`,
       ),
     )
-    const applications = table(
-      [t('account.sessions.applications'), t('account.sessions.since'), t('account.sessions.until')],
-      grants.map((grant) => `<tr>${cell(nameOf(grant.clientId))}${cell(formatTime(grant.since, language))}${cell(formatTime(grant.expiresAt, language))}</tr>`),
-    )
+    // Every sign-in in a browser leaves a grant, also for an application that is signed in only as long as that
+    // browser session lasts. Those are in the table above. Here are the ones that hold a refresh token.
+    const staying = grants.filter((grant) => grant.staysSignedIn)
+    const applications = staying.length
+      ? table(
+          [t('account.sessions.applications'), t('account.sessions.since'), t('account.sessions.until')],
+          staying.map((grant) => `<tr>${cell(nameOf(grant.clientId))}${cell(formatTime(grant.since, language))}${cell(formatTime(grant.expiresAt, language))}</tr>`),
+        )
+      : `<p class="muted">${escapeHtml(t('account.sessions.noGrants'))}</p>`
     const content = `<h1>${escapeHtml(t('account.sessions.title'))}</h1>
 <h2>${escapeHtml(t('account.sessions.browsers'))}</h2>
 <div class="panel">

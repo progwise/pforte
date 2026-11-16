@@ -144,6 +144,7 @@ export const en = {
   'account.sessions.noApplications': 'None yet',
   'account.sessions.grants': 'Applications that stay signed in',
   'account.sessions.grantsHelp': 'They keep you signed in when the browser is closed, as an app on a phone does.',
+  'account.sessions.noGrants': 'No application stays signed in without a browser.',
   'account.sessions.since': 'Since',
   'account.sessions.endAll.title': 'Sign out everywhere',
   'account.sessions.endAll.help': 'Ends every sign-in, in all browsers and applications and on this page too, and forgets your remembered devices. The next sign-in asks for a code.',

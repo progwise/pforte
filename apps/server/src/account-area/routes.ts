@@ -41,6 +41,8 @@ export interface AccountAreaDependencies {
 const LOGIN_COOKIE = 'pforte_account_login'
 /** How old a sign-in may be for a change. Looking needs a session; changing needs a person who was just there. */
 export const STEP_UP_SECONDS = 5 * 60
+/** What a sign-in that was started as a step-up carries along, so its end knows to say "now repeat it". */
+const STEP_UP_NOTE = 'step-up'
 
 /**
  * The account pages: server-rendered pages under `/account` where every person who has an account sees how they
@@ -127,7 +129,6 @@ export const accountAreaRoutes =
      */
     const requireRecentSignIn = (reply: FastifyReply, session: AccountSession, back: string) => {
       if (session.acr === ACR_SECOND_FACTOR && Date.now() / 1000 - session.authTime <= STEP_UP_SECONDS) return true
-      flash.set(reply, cookieKeys, secure, { kind: 'ok', key: 'account.stepUp.again' })
       void reply.redirect(`${ACCOUNT_PATH}/login?again=1&next=${encodeURIComponent(back)}`, 303)
       return false
     }
@@ -147,10 +148,13 @@ export const accountAreaRoutes =
     // its own cookie again when it comes back.
     const signIn = createOwnSignIn(app, { issuer, cookieKeys, clientId: ACCOUNT_UI_CLIENT_ID, basePath: ACCOUNT_PATH, loginCookie: LOGIN_COOKIE, scope: 'openid', sameSite: 'Lax', acceptedLanguages })
 
-    // `again` asks for a new sign-in although the browser has a session: the step-up before a change.
-    app.get<{ Querystring: { next?: string; again?: string } }>(`${ACCOUNT_PATH}/login`, async (request, reply) =>
-      signIn.begin(request, reply, safeNext(request.query.next, ACCOUNT_PATH), request.query.again === '1'),
-    )
+    // `again` asks for a new sign-in although the browser has a session: the step-up before a change. That it is
+    // one is noted in the sign-in itself, so the reminder to repeat the action is there however long the person
+    // takes over password and code; a message left in a cookie now would have run out before a slow sign-in ended.
+    app.get<{ Querystring: { next?: string; again?: string } }>(`${ACCOUNT_PATH}/login`, async (request, reply) => {
+      const stepUp = request.query.again === '1'
+      return signIn.begin(request, reply, safeNext(request.query.next, ACCOUNT_PATH), stepUp, stepUp ? STEP_UP_NOTE : undefined)
+    })
 
     const failed = (request: FastifyRequest, reply: FastifyReply, status = 400) =>
       reply.code(status).type('text/html').header('Set-Cookie', signIn.clearCookie()).send(publicPage(request, reply, 'account.loginFailed.title', 'account.loginFailed.text'))
@@ -168,6 +172,7 @@ export const accountAreaRoutes =
       if (!grant || grant.userId !== sub || grant.clientId !== ACCOUNT_UI_CLIENT_ID) return failed(request, reply)
 
       reply.header('Set-Cookie', [gate.start({ userId: sub, grantId: grant.grantId, acr, authTime }), signIn.clearCookie()])
+      if (outcome.note === STEP_UP_NOTE) flash.set(reply, cookieKeys, secure, { kind: 'ok', key: 'account.stepUp.again' })
       return reply.redirect(outcome.next, 303)
     })
 

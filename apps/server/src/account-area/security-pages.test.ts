@@ -66,6 +66,16 @@ describe.skipIf(!hasDatabase)('the account pages: sessions, devices, sign-ins an
   /** The page the browser lands on after an answer that sent it elsewhere. */
   const follow = async (browser: Browser, response: { headers: Record<string, unknown> }) => browser.request('GET', response.headers.location as string)
   const rowsOf = (body: string) => body.match(/<tr><td>/g)?.length ?? 0
+  /** The part of the sessions page about applications that stay signed in. */
+  const staying = (body: string) => body.slice(body.indexOf('<h2>Applications that stay signed in</h2>'), body.indexOf('<h2>Sign out everywhere</h2>'))
+  /** Signs the person in to the web application and takes the tokens, as the application does: now it holds a refresh token. */
+  const signInWithTokens = async (email: string) => {
+    const browser = new Browser(h.app)
+    const { code, verifier } = await signIn(browser, { ...WEB, email })
+    const response = await browser.request('POST', '/token', { form: { grant_type: 'authorization_code', code: code!, redirect_uri: WEB.redirectUri, client_id: WEB.clientId, code_verifier: verifier } })
+    expect(response.statusCode, response.body).toBe(200)
+    return { browser, tokens: response.json() as { refresh_token: string } }
+  }
   const lastAudit = async (action: string, email: string) => (await h.audit(action, await idOf(email))).at(-1)
 
   const PAGES = ['/account/sessions', '/account/devices', '/account/sign-ins', '/account/password']
@@ -140,6 +150,8 @@ describe.skipIf(!hasDatabase)('the account pages: sessions, devices, sign-ins an
       const back = url === '/account/password' ? url : url.replace(/\/[^/]+$/, '')
       expect(response.statusCode).toBe(303)
       expect(response.headers.location).toBe(`/account/login?again=1&next=${encodeURIComponent(back)}`)
+      // No message is left in a cookie here: it would run out before a slow sign-in is over.
+      expect(browser.cookies.has('pforte_account_flash')).toBe(false)
       expect(await liveDevices(A.email)).toBe(1)
       expect(await payloads(A.email)).toBe(before)
       expect(h.notifications).toEqual([])
@@ -164,6 +176,13 @@ describe.skipIf(!hasDatabase)('the account pages: sessions, devices, sign-ins an
       const again = await post(browser, '/account/devices/forget-all')
       expect(again.headers.location).toBe('/account/devices')
       expect(await liveDevices(A.email)).toBe(0)
+    })
+
+    it('is reminded to repeat the action only after a step-up, not after an ordinary sign-in', async () => {
+      const browser = new Browser(h.app)
+      const { response } = await driveSignIn(h, browser, '/account/devices', A.email)
+      expect(response.statusCode).toBe(200)
+      expect(response.body).not.toContain('you had to sign in again')
     })
 
     it('still goes through at the end of the five minutes', async () => {
@@ -201,6 +220,25 @@ describe.skipIf(!hasDatabase)('the account pages: sessions, devices, sign-ins an
       expect(page.body).toContain('<td>Demo web app (public client)</td>')
       expect(page.body).not.toContain('Demo backend')
       expect(page.body).toContain('action="/account/sessions/end"')
+      // Both are signed in only as long as their browser session lasts: neither holds a refresh token.
+      expect(staying(page.body)).toContain('No application stays signed in without a browser.')
+      expect(staying(page.body)).not.toContain('<table')
+    })
+
+    it('lists an application as staying signed in only when it holds a refresh token, and once however often it refreshed', async () => {
+      const account = await signedIn(A.email)
+      const { browser, tokens } = await signInWithTokens(A.email)
+      const refreshed = await browser.request('POST', '/token', { form: { grant_type: 'refresh_token', refresh_token: tokens.refresh_token, client_id: WEB.clientId } })
+      expect(refreshed.statusCode, refreshed.body).toBe(200)
+      // Somebody else's application with a refresh token is not this person's.
+      await signInWithTokens(B.email)
+
+      const part = staying((await account.request('GET', '/account/sessions')).body)
+
+      expect(rowsOf(part)).toBe(1)
+      expect(part).toContain('<td>Demo web app (public client)</td>')
+      // The account pages themselves hold no refresh token: they are a browser sign-in, listed above.
+      expect(part).not.toContain('<td>Account</td>')
     })
 
     it('says so when a browser signed in without a code, on a remembered device', async () => {
@@ -424,6 +462,56 @@ describe.skipIf(!hasDatabase)('the account pages: sessions, devices, sign-ins an
       expect(page.body).not.toContain('203.0.113.17<')
       expect(page.body).not.toContain('203.0.113.11<')
       expect(page.body.indexOf('203.0.113.16<')).toBeLessThan(page.body.indexOf('203.0.113.15<'))
+    })
+
+    it('leaves out what happened at the password reset, the activation and the phone confirmation, however new and however many', async () => {
+      const userId = await idOf(A.email)
+      const browser = await signedIn(A.email)
+      await h.database.pool.query(`delete from audit_events where action like 'login.%'`)
+      const insert = (action: string, details: object, address: string, minutesAgo: number) =>
+        h.database.pool.query(
+          `insert into audit_events (actor_type, actor_id, action, target_type, target_id, details, ip, user_agent, created_at) values ('user', $1, $2, 'user', $1, $3, $4, 'Probe/1.0', now() - make_interval(mins => $5))`,
+          [userId, action, JSON.stringify(details), address, minutesAgo],
+        )
+      // Three things that happened at the sign-in, some time ago.
+      await insert('login.succeeded', { method: 'code', acr: 'urn:pforte:acr:mfa' }, '198.51.100.1', 300)
+      await insert('login.code_failed', { purpose: 'login', reason: 'wrong' }, '198.51.100.2', 299)
+      await insert('login.blocked', { scope: 'code_resend' }, '198.51.100.3', 298)
+      // And, since then, a dozen that carry the same names but belong to other pages.
+      const others: [string, object][] = [
+        ['login.code_failed', { purpose: 'password_reset', reason: 'wrong' }],
+        ['login.code_failed', { purpose: 'activation', reason: 'expired' }],
+        ['login.blocked', { scope: 'reset' }],
+        ['login.blocked', { scope: 'reset_code' }],
+        ['login.blocked', { scope: 'activation' }],
+        ['login.blocked', { scope: 'phone_code' }],
+      ]
+      for (let index = 0; index < 12; index++) {
+        const [action, details] = others[index % others.length]!
+        await insert(action, details, `203.0.113.${index}`, 100 - index)
+      }
+
+      const page = await browser.request('GET', '/account/sign-ins')
+
+      // The sign-ins are all there, not pushed out of the ten, and nothing else is.
+      expect(rowsOf(page.body)).toBe(3)
+      for (const address of ['198.51.100.1', '198.51.100.2', '198.51.100.3']) expect(page.body).toContain(`<td>${address}</td>`)
+      expect(page.body).not.toContain('203.0.113.')
+    })
+
+    it('does not list the hold on its own password page as a sign-in attempt', async () => {
+      const browser = await signedIn(A.email)
+      await post(browser, '/account/password')
+      // A second request right away is held back by the limit of the public page after a few more.
+      for (let attempt = 0; attempt < 12; attempt++) await new Browser(h.app).request('POST', '/reset', { form: { email: A.email } })
+      await h.settle()
+      await post(browser, '/account/password')
+      expect(await count(`audit_events where action = 'login.blocked' and target_id = $1 and details->>'scope' = 'reset'`, [await idOf(A.email)])).toBeGreaterThan(0)
+
+      const page = await browser.request('GET', '/account/sign-ins')
+
+      expect(page.body).not.toContain('Held back after too many attempts')
+      expect(rowsOf(page.body)).toBe(1)
     })
 
     it('says so when nothing is recorded', async () => {
