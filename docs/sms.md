@@ -60,8 +60,8 @@ SMS_SUCCESS_PATTERN='^\s*\{\s*"success"\s*:\s*"100"'
 ```
 
 seven.io reports a refused message (wrong key, no credit) in the body of a `200` answer, with `"success"` other
-than `"100"`, which is why the pattern is needed. This recipe follows seven.io's documentation; it has not been
-tried against a live account.
+than `"100"`, which is why the pattern is needed. This recipe has been tried against a live account: the message
+was accepted and delivered.
 
 ## Any other provider
 
