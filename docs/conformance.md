@@ -150,7 +150,8 @@ That change adds a cookie to the sign-in (`pforte_device_new`) that only an acti
 endpoints of the provider, the session and the tokens are as they were, so no result is expected to change. The same holds
 for the logout token that applications now get when an administrator ends a person's sessions
 ([#27](https://github.com/progwise/pforte/issues/27)): it is the token of a sign-out, sent on an occasion the suite does not
-have. This is an expectation, not a result. A full run is due before 1.0
+have. The account pages ([#18](https://github.com/progwise/pforte/issues/18)) add a second built-in client, and the ID tokens of
+the two built-in clients now always carry `auth_time`; no other client and no endpoint is touched. This is an expectation, not a result. A full run is due before 1.0
 ([#48](https://github.com/progwise/pforte/issues/48), which lists what changed since).
 
 ### Run of 2026-10-20: no failures

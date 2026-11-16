@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { sign } from '../interaction/signed-cookie.js'
 import { type AdminHarness, createAdminHarness } from '../test/admin-harness.js'
 import { Browser, signIn } from '../test/browser.js'
-import { isForThisSignIn, readIdToken, safeNext } from './oidc.js'
+import { isForThisSignIn, readIdToken, safeNext } from '../own-login/oidc.js'
 
 const COOKIE_KEYS = ['k'.repeat(40)]
 const WEB = { clientId: 'demo-web', redirectUri: 'http://localhost:3400/callback' }
@@ -23,6 +23,20 @@ describe('where to go after signing in', () => {
       expect(safeNext(next, '/manage')).toBe('/manage')
     },
   )
+})
+
+describe('where to go after signing in, for another area', () => {
+  it.each(['/account', '/account/devices', '/account?x=1'])('keeps %s inside the account pages', (next) => {
+    expect(safeNext(next, '/account')).toBe(next)
+  })
+
+  it.each(['/manage', '/manage/users', '/accountant', '/account-other/x', '//account', 'https://evil.example/account'])('does not let %s pass as part of the account pages', (next) => {
+    expect(safeNext(next, '/account')).toBe('/account')
+  })
+
+  it('does not let an address of the account pages pass as part of the administration', () => {
+    expect(safeNext('/account', '/manage')).toBe('/manage')
+  })
 })
 
 describe('the ID token of a sign-in', () => {

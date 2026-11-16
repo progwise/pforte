@@ -108,6 +108,25 @@ export const fr: Catalog = {
   'mail.passwordChanged.text':
     "Bonjour {firstName},\n\nle mot de passe de votre compte chez {organisation} vient d'être modifié, et vous avez été déconnecté partout.\n\nSi c'était vous, vous n'avez rien à faire.\n\nSi ce n'était pas vous, choisissez maintenant un nouveau mot de passe :\n\n{url}\n\nInformez ensuite votre administration.\n",
 
+  // The account pages, where a person sees how they are signed in.
+  'account.title': 'Votre compte',
+  'account.nav.label': 'Rubriques',
+  'account.nav.start': "Vue d'ensemble",
+  'account.signedInAs': 'Connecté en tant que {name}',
+  'account.signOut': 'Se déconnecter',
+  'account.signIn': 'Se connecter',
+  'account.profile.title': 'Vos informations',
+  'account.profile.name': 'Nom',
+  'account.profile.email': 'Adresse e-mail',
+  'account.profile.phone': 'Téléphone portable',
+  'account.profile.noPhone': 'Aucun enregistré',
+  'account.profile.language': 'Langue',
+  'account.profile.note': "Ces informations sont gérées par votre organisation. Si quelque chose est inexact, adressez-vous à votre administration ; il n'est pas possible de le modifier ici.",
+  'account.loginFailed.title': "La connexion n'a pas abouti",
+  'account.loginFailed.text': "La connexion n'a pas pu être terminée. Veuillez réessayer.",
+  'account.signedOut.title': 'Vous êtes déconnecté',
+  'account.signedOut.text': 'La page de votre compte est fermée. Reconnectez-vous quand vous en avez besoin.',
+
   'sms.login': '{code} est votre code de connexion pour {organisation}. Valable {minutes} minutes. Ne le communiquez à personne.',
   'sms.reset':
     '{code} est votre code pour choisir un nouveau mot de passe chez {organisation}. Valable {minutes} minutes. Ne le communiquez à personne.',

@@ -36,8 +36,13 @@ export interface CookieOptions {
   path: string
   maxAgeSeconds: number
   secure: boolean
+  /**
+   * `Strict` unless said otherwise. `Lax` is for an area people reach by a link from another site: a browser
+   * then sends the cookie with that click (a GET), but still with no request the other site makes itself.
+   */
+  sameSite?: 'Strict' | 'Lax'
 }
 
 /** A cookie the script of a page cannot read and other sites cannot send along. */
-export const setCookieHeader = (name: string, value: string, { path, maxAgeSeconds, secure }: CookieOptions) =>
-  `${name}=${value}; Path=${path}; Max-Age=${maxAgeSeconds}; HttpOnly; SameSite=Strict${secure ? '; Secure' : ''}`
+export const setCookieHeader = (name: string, value: string, { path, maxAgeSeconds, secure, sameSite = 'Strict' }: CookieOptions) =>
+  `${name}=${value}; Path=${path}; Max-Age=${maxAgeSeconds}; HttpOnly; SameSite=${sameSite}${secure ? '; Secure' : ''}`
