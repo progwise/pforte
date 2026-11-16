@@ -9,8 +9,10 @@ import type { AdminHarness } from './admin-harness.js'
  * `start` begins the request (do not await it). The person's row is locked first, so the request stops where it
  * wants that lock to store something for them. Once it waits there, the sessions are ended in the transaction
  * that holds the lock, and only then may the request go on. Returns what the request answered.
+ *
+ * `whileWaiting` looks at what the request has done by the time it waits, before the sessions are ended.
  */
-export const endSessionsDuring = async <Response>(h: AdminHarness, userId: string, start: () => Promise<Response>) => {
+export const endSessionsDuring = async <Response>(h: AdminHarness, userId: string, start: () => Promise<Response>, whileWaiting: () => Promise<void> = async () => {}) => {
   const user = (await findUserById(h.database.db, userId))!
   let locked!: () => void
   const holding = new Promise<void>((resolve) => (locked = resolve))
@@ -33,7 +35,11 @@ export const endSessionsDuring = async <Response>(h: AdminHarness, userId: strin
     if (attempt > 200) throw new Error('the request never waited for the lock on the person: it stores nothing under that lock')
     await new Promise((resolve) => setTimeout(resolve, 10))
   }
-  go()
-  await ending
+  try {
+    await whileWaiting()
+  } finally {
+    go()
+    await ending
+  }
   return request
 }

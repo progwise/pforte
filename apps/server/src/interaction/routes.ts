@@ -4,7 +4,7 @@ import { closePasskeyOffer, findPasskeyByCredentialId, findPasskeyOffer, openPas
 import { changeCodeChannel, checkCode, CodeLimitError, currentCode, issueCode, markEmailVerified } from '@progwise/pforte-db/codes'
 import { findRememberedDevice, rememberDevice } from '@progwise/pforte-db/devices'
 import { findActiveUserById } from '@progwise/pforte-db/oidc'
-import { recordLogin } from '@progwise/pforte-db/users'
+import { recordLogin, whileUserHeld } from '@progwise/pforte-db/users'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { ACR_PASSWORD, ACR_SECOND_FACTOR, passkeyAssurance, secondFactorAssurance } from '../auth/assurance.js'
 import { channelFor, maskEmail, maskPhone } from '../auth/channels.js'
@@ -349,9 +349,18 @@ export const interactionRoutes =
       }
 
       const code = typeof request.body?.code === 'string' ? request.body.code.replaceAll(' ', '') : ''
-      const result = /^\d{6}$/.test(code)
-        ? await checkCode(db, { userId: user.id, purpose: 'login', code }, { secrets: codeSecrets })
-        : ({ ok: false, reason: 'wrong' } as const)
+      // A person who enters the right code is who they say they are: the moment to offer a passkey, if this device
+      // can make one and they were not asked here before.
+      const offerWanted = passkeys.offers.wanted(request.headers.cookie, user.id, (request.body as { passkeys?: unknown } | undefined)?.passkeys)
+      // The code is accepted and the offer opened in one transaction that holds the person's row, as ending their
+      // sessions does. So there is no moment at which the code is used up and the offer not yet there to be ended:
+      // an offer never rests on a code that was accepted before the sessions were ended.
+      const { result, offerToken } = await whileUserHeld(db, user.id, async (tx) => {
+        const result = /^\d{6}$/.test(code) ? await checkCode(tx, { userId: user.id, purpose: 'login', code }, { secrets: codeSecrets }) : ({ ok: false, reason: 'wrong' } as const)
+        if (!result.ok || !offerWanted) return { result }
+        const offer: Offer = { ...secondFactorAssurance(result.channel), language: current.step.language }
+        return { result, offerToken: await openPasskeyOffer(tx, { userId: user.id, boundTo: offerOf(details.uid), details: { ...offer } }, new Date(Date.now() + OFFER_LIFETIME_SECONDS * 1000)) }
+      })
 
       if (!result.ok) {
         if (result.reason === 'wrong' || result.reason === 'exhausted') await limiter.codeFailed(request.ip)
@@ -378,17 +387,13 @@ export const interactionRoutes =
         acr: secondFactorAssurance(result.channel).acr,
         deviceRemembered: remember,
       })
-      const assurance = secondFactorAssurance(result.channel)
-      // A person who has just entered a code is who they say they are: the moment to offer a passkey, if this
-      // device can make one and they were not asked here before. The sign-in waits for their answer.
-      if (passkeys.offers.wanted(request.headers.cookie, user.id, (request.body as { passkeys?: unknown } | undefined)?.passkeys)) {
-        const offer: Offer = { ...assurance, language: current.step.language }
-        const token = await openPasskeyOffer(db, { userId: user.id, boundTo: offerOf(details.uid), details: { ...offer } }, new Date(Date.now() + OFFER_LIFETIME_SECONDS * 1000))
-        cookies.push(setCookieHeader(OFFER_COOKIE, token, { path: cookiePath(details.uid), maxAgeSeconds: OFFER_LIFETIME_SECONDS, secure }))
+      // With an offer open, the sign-in waits for the answer to it.
+      if (offerToken) {
+        cookies.push(setCookieHeader(OFFER_COOKIE, offerToken, { path: cookiePath(details.uid), maxAgeSeconds: OFFER_LIFETIME_SECONDS, secure }))
         reply.header('Set-Cookie', cookies)
         return reply.redirect(`${cookiePath(details.uid)}/passkey-offer`, 303)
       }
-      return finishLogin(request, reply, user.id, assurance, cookies)
+      return finishLogin(request, reply, user.id, secondFactorAssurance(result.channel), cookies)
     })
 
     // --- Signing in with a passkey: one step, no password and no code

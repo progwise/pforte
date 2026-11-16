@@ -2,7 +2,8 @@ import { createHash, randomBytes } from 'node:crypto'
 import { and, count, desc, eq, gt, isNull, lt, sql } from 'drizzle-orm'
 import { type DatabaseOrTransaction, recordAuditEvent, type Transaction } from '../audit.js'
 import type { Database } from '../index.js'
-import { passkeyChallenges, passkeyOffers, passkeys, users } from '../schema/index.js'
+import { passkeyChallenges, passkeyOffers, passkeys, type users } from '../schema/index.js'
+import { lockUserRow } from '../users.js'
 import type { RequestContext } from './users.js'
 
 type UserRow = typeof users.$inferSelect
@@ -57,7 +58,7 @@ export interface NewPasskey {
  * Whatever `allowed` changes (closing the offer) is committed with the passkey or not at all.
  */
 export const addPasskey = async (tx: Transaction, context: RequestContext, user: UserRow, passkey: NewPasskey, allowed?: (tx: Transaction) => Promise<boolean>) => {
-  await tx.select({ id: users.id }).from(users).where(eq(users.id, user.id)).for('update')
+  await lockUserRow(tx, user.id)
   if (allowed && !(await allowed(tx))) return { kind: 'revoked' } as const
   const [existing] = await tx.select({ count: count() }).from(passkeys).where(eq(passkeys.userId, user.id))
   if ((existing?.count ?? 0) >= MAX_PASSKEYS) return { kind: 'too-many' } as const

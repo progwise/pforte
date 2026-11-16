@@ -28,6 +28,7 @@ describe.skipIf(!hasDatabase)('the offer of a passkey at the end of an activatio
     await h.settle()
     h.notifications.length = 0
     h.notifier.smsAvailable = false
+    h.notifier.hold = undefined
     await h.database.pool.query('delete from rate_limits')
   })
 
@@ -382,6 +383,33 @@ describe.skipIf(!hasDatabase)('the offer of a passkey at the end of an activatio
         expect(again.body).toContain('Your account is active')
       }
       expect(await offers()).toEqual([])
+      expect((await browser.request('GET', '/activate/passkey')).body).not.toContain('data-passkey')
+    })
+
+    it('is there from the moment the account is active, so that sessions ended while the SMS is on its way end it', async () => {
+      h.notifier.smsAvailable = true
+      const user = await invited({ withPhone: true })
+      const browser = new Browser(h.app)
+      let sent!: () => void
+      h.notifier.hold = new Promise<void>((resolve) => (sent = resolve))
+      const offers = async () => (await h.database.pool.query(`select count(*) from passkey_offers where user_id = $1`, [user.id])).rows[0].count
+
+      // The password is chosen and the account active; the code for the phone has not gone out yet.
+      const activating = activate(browser, user.token)
+      await expect.poll(async () => (await h.database.pool.query(`select status from users where id = $1`, [user.id])).rows[0].status).toBe('active')
+      // The offer is there already, with the activation, and so it is found by what ends the sessions now.
+      expect(await offers()).toBe('1')
+      expect((await h.api('POST', `/users/${user.id}/end-sessions`)).statusCode).toBe(200)
+      expect(await offers()).toBe('0')
+      sent()
+      h.notifier.hold = undefined
+      expect((await activating).body).toContain('Confirm your phone number')
+
+      // The activation goes on to its end, and no offer is opened in place of the one that was ended.
+      const skipped = await post(browser, '/activate/phone/skip')
+      expect(skipped.statusCode).toBe(200)
+      expect(skipped.body).toContain('Your account is active')
+      expect(await offers()).toBe('0')
       expect((await browser.request('GET', '/activate/passkey')).body).not.toContain('data-passkey')
     })
 

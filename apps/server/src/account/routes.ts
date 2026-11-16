@@ -2,7 +2,7 @@ import formbody from '@fastify/formbody'
 import { hash } from '@node-rs/argon2'
 import type { Database } from '@progwise/pforte-db'
 import { checkCode, CodeLimitError, issueCode, markEmailVerified, markPhoneVerified } from '@progwise/pforte-db/codes'
-import { closePasskeyOffer, continuePasskeyOffer, findPasskeyOffer, getClient, openPasskeyOffer, requestActivationLink } from '@progwise/pforte-db/admin'
+import { closePasskeyOffer, continuePasskeyOffer, findPasskeyOffer, getClient, requestActivationLink } from '@progwise/pforte-db/admin'
 import { findActiveUserById } from '@progwise/pforte-db/oidc'
 import { completeActivation, completePasswordReset, findPendingActivation } from '@progwise/pforte-db/credentials'
 import { findUserByEmail } from '@progwise/pforte-db/users'
@@ -140,20 +140,11 @@ export const accountRoutes =
     const passkeyCookie = (value: string, maxAgeSeconds: number) => setCookieHeader(PASSKEY_COOKIE, value, { path: '/activate', maxAgeSeconds, secure })
     const passkeyToken = (request: FastifyRequest) => readCookie(request.headers.cookie, PASSKEY_COOKIE) ?? ''
     /**
-     * Opens the offer for somebody who has just chosen their password, and returns the cookie with its token. It
-     * is good for `seconds`: the offer itself, or the phone step that comes before it.
+     * On to the offer that the activation opened, if there is one and it is still open: it now runs for a quarter
+     * of an hour, and `done` is what the last page will say. Returns false where there is nothing to go on to.
      */
-    const openOffer = async (userId: string, clientId: string | undefined, seconds: number) => {
-      const step: PasskeyStep = { ...(clientId ? { clientId } : {}), done: 'account' }
-      const token = await openPasskeyOffer(db, { userId, boundTo: ACTIVATION_OFFER, details: { ...step } }, new Date(Date.now() + seconds * 1000))
-      return passkeyCookie(token, seconds)
-    }
-    /**
-     * After the phone step: on to the offer that the activation opened, if there is one and it is still open.
-     * `done` is what the last page will say. Returns false where there is nothing to go on to.
-     */
-    const continueOffer = (request: FastifyRequest, done: PasskeyStep['done']) =>
-      continuePasskeyOffer(db, { token: passkeyToken(request), boundTo: ACTIVATION_OFFER }, { details: { done }, expiresAt: new Date(Date.now() + PASSKEY_STEP_SECONDS * 1000) })
+    const continueOffer = (token: string, done: PasskeyStep['done']) =>
+      continuePasskeyOffer(db, { token, boundTo: ACTIVATION_OFFER }, { details: { done }, expiresAt: new Date(Date.now() + PASSKEY_STEP_SECONDS * 1000) })
     const toOffer = (reply: FastifyReply, cookies: string[]) => reply.header('Set-Cookie', cookies).redirect('/activate/passkey', 303)
     const isStep = (details: Record<string, unknown>): details is Record<string, unknown> & PasskeyStep =>
       (details.done === 'account' || details.done === 'phone') && (details.clientId === undefined || typeof details.clientId === 'string')
@@ -254,30 +245,40 @@ export const accountRoutes =
       const problem = passwordProblem(view, request.body, pending.email)
       if (problem) return activationPage(reply, view, 422, { token, error: problem, remember })
 
-      const activated = await completeActivation(db, { token, passwordHash: await hash(text(request.body?.password)), remember, ...origin(request) })
-      if (!activated) return invalidLink(reply, view)
-      const { user, deviceToken } = activated
-      // Set now, whatever follows: the person may confirm the phone number, skip that, or close the page.
-      const cookies = deviceToken ? [newDeviceCookie(deviceToken, secure)] : []
       const clientId = pending.activationClientId ?? undefined
-      // The script of the page says whether this device can make a passkey. If so, one is offered at the end.
+      // The script of the page says whether this device can make a passkey. If so, one is offered at the end. The
+      // offer is opened with the activation itself, in its transaction: whatever ends this person's sessions from
+      // now on finds it. It is good for as long as the phone step may take, which may come first.
       const capable = request.body?.passkeys === '1'
+      const step: PasskeyStep = { ...(clientId ? { clientId } : {}), done: 'account' }
+      const activated = await completeActivation(db, {
+        token,
+        passwordHash: await hash(text(request.body?.password)),
+        remember,
+        passkeyOffer: capable ? { boundTo: ACTIVATION_OFFER, details: { ...step }, expiresAt: new Date(Date.now() + PHONE_STEP_SECONDS * 1000) } : undefined,
+        ...origin(request),
+      })
+      if (!activated) return invalidLink(reply, view)
+      const { user, deviceToken, offerToken } = activated
+      // Set now, whatever follows: the person may confirm the phone number, skip that, or close the page.
+      const cookies = [...(deviceToken ? [newDeviceCookie(deviceToken, secure)] : []), ...(offerToken ? [passkeyCookie(offerToken, PHONE_STEP_SECONDS)] : [])]
 
       // With SMS available, the number the back office entered is confirmed now, so that codes can go to it.
       if (notifier.smsAvailable && user.phone && !user.phoneVerifiedAt) {
         try {
           await sendPhoneCode(user)
-          // The offer is opened now, by the activation, and waits behind the phone step.
-          reply.header('Set-Cookie', [...cookies, phoneCookie(user.id, clientId), ...(capable ? [await openOffer(user.id, clientId, PHONE_STEP_SECONDS)] : [])])
+          // The offer, if there is one, waits behind the phone step.
+          reply.header('Set-Cookie', [...cookies, phoneCookie(user.id, clientId)])
           return html(reply, 200, view.phoneConfirm({ sentTo: maskPhone(user.phone) }))
         } catch (error) {
           if (!(error instanceof NotifierUnavailableError)) throw error
           request.log.error(error, 'the code to confirm the phone number could not be sent')
         }
       }
-      // The link showed that the person reads the mailbox, and they have just chosen their password: they are
-      // who the account is for, as much as after a sign-in with a code.
-      if (capable) return toOffer(reply, [...cookies, await openOffer(user.id, clientId, PASSKEY_STEP_SECONDS)])
+      // No phone step: straight on to the offer, if it is still open. The link showed that the person reads the
+      // mailbox, and they have just chosen their password: they are who the account is for, as much as after a
+      // sign-in with a code.
+      if (offerToken && (await continueOffer(offerToken, 'account'))) return toOffer(reply, cookies)
       if (cookies.length > 0) reply.header('Set-Cookie', cookies)
       return html(reply, 200, await activeAccount(view, clientId))
     })
@@ -328,7 +329,7 @@ export const accountRoutes =
       }
       await markPhoneVerified(db, user.id)
       // On to the offer the activation opened, if this device was offered one. The phone step itself opens none.
-      if (await continueOffer(request, 'phone')) return toOffer(reply, [endOfPhoneStep])
+      if (await continueOffer(passkeyToken(request), 'phone')) return toOffer(reply, [endOfPhoneStep])
       return finishedPhoneStep(reply, await confirmedPhone(view, user.clientId))
     })
 
@@ -358,7 +359,7 @@ export const accountRoutes =
 
     app.post('/activate/phone/skip', async (request, reply) => {
       const user = await phoneStep(request)
-      if (user && (await continueOffer(request, 'account'))) return toOffer(reply, [endOfPhoneStep])
+      if (user && (await continueOffer(passkeyToken(request), 'account'))) return toOffer(reply, [endOfPhoneStep])
       return finishedPhoneStep(reply, await activeAccount(ui.pages.for(languageOf(request, undefined, user?.language)), user?.clientId))
     })
 

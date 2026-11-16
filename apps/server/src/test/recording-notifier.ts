@@ -23,6 +23,7 @@ export const createRecordingNotifier = () => {
       notifications.push({ kind: 'login-code', user, channel: login.channel, code: login.code, expiresAt: login.expiresAt })
     },
     async sendPhoneCode(user, phone) {
+      await notifier.hold
       if (notifier.failWith) throw notifier.failWith
       if (notifier.failSms) throw new NotifierUnavailableError('SMS is down')
       notifications.push({ kind: 'phone-code', user, channel: 'sms', code: phone.code, expiresAt: phone.expiresAt })

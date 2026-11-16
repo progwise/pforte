@@ -6,6 +6,7 @@ import { clients, oidcPayloads, users } from '../schema/index.js'
 import { assertAdminStays } from './admins.js'
 import { revokeUserDevices } from './devices.js'
 import { endPasskeySteps } from './passkeys.js'
+import { lockUserRow } from '../users.js'
 import type { RequestContext } from './users.js'
 
 type UserRow = typeof users.$inferSelect
@@ -116,9 +117,9 @@ const clientsToNotify = (logouts: ClientLogout[]) => new Set(logouts.map(({ clie
  * told (for the audit event of the caller) and the logouts to send them once the change is committed.
  */
 export const endUserSessions = async (tx: DatabaseOrTransaction, userId: string) => {
-  // The person's row is locked first, as it is by whatever stores something for them on the strength of a sign-in
-  // (a new passkey). So the two happen one after the other: what is stored was stored before this, or is refused.
-  await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).for('update')
+  // The person's row first, as with whatever keeps something for them on the strength of having just shown who
+  // they are (see `lockUserRow`). So that is kept before this, and ended here, or it comes after and starts anew.
+  await lockUserRow(tx, userId)
   const logouts = await logoutsFor(tx, userId)
   const deleted = await tx.delete(oidcPayloads).where(eq(oidcPayloads.accountId, userId)).returning({ id: oidcPayloads.id })
   await endPasskeySteps(tx, userId)

@@ -317,6 +317,36 @@ describe.skipIf(!hasDatabase)('the offer of a passkey after a sign-in with a cod
       })
     })
 
+    it('is opened together with the acceptance of the code, behind the ending of sessions that got there first', async () => {
+      const browser = new Browser(h.app)
+      const login = await openLogin(browser)
+      await post(browser, `${login.interaction}/login`, { email: A.email, password: 'dev-password' })
+      const code = codeFor(A.email)
+      const codes = async () => (await h.database.pool.query(`select consumed_at from otp_codes where user_id = $1 and purpose = 'login'`, [annaId])).rows
+      const offers = async () => (await h.database.pool.query(`select count(*) from passkey_offers where user_id = $1`, [annaId])).rows[0].count
+
+      // The sessions are being ended when the code arrives. The request waits: it has neither used the code up
+      // nor opened an offer. There is no state in between for the ending of the sessions to miss.
+      const afterCode = await endSessionsDuring(
+        h,
+        annaId,
+        () => post(browser, `${login.interaction}/code`, { code, passkeys: '1' }),
+        async () => {
+          expect(await codes()).toEqual([{ consumed_at: null }])
+          expect(await offers()).toBe('0')
+        },
+      )
+
+      // Then both happen, after the sessions were ended: a code entered now is a sign-in of now.
+      expect(afterCode.headers.location).toBe(`${login.interaction}/passkey-offer`)
+      expect((await codes())[0].consumed_at).not.toBeNull()
+      expect(await offers()).toBe('1')
+      // And what ends the sessions from here on finds the offer.
+      await h.api('POST', `/users/${annaId}/end-sessions`)
+      expect(await offers()).toBe('0')
+      expect((await post(browser, `${login.interaction}/passkey-offer/skip`)).headers.location).toBe(login.interaction)
+    })
+
     it('stores no passkey when the sessions are ended while the answer of the device is being checked', async () => {
       const browser = new Browser(h.app)
       const { offer, interaction, question } = await offered(browser, A.email)

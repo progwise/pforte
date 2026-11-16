@@ -1,5 +1,6 @@
 import { createHmac, randomInt, timingSafeEqual } from 'node:crypto'
 import { and, eq, gt, isNull, sql } from 'drizzle-orm'
+import type { DatabaseOrTransaction } from './audit.js'
 import type { Database } from './index.js'
 import { otpCodes, users } from './schema/index.js'
 
@@ -104,7 +105,7 @@ export type CodeCheck =
  * dead: the sixth is refused even when it is right. A right code works once.
  */
 export const checkCode = async (
-  db: Database,
+  db: DatabaseOrTransaction,
   { userId, purpose, code }: { userId: string; purpose: Purpose; code: string },
   { secrets, now = new Date() }: CodeOptions,
 ): Promise<CodeCheck> => {

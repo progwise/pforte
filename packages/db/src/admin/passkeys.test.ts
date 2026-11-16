@@ -18,6 +18,7 @@ import {
   removePasskey,
   takePasskeyChallenge,
 } from './passkeys.js'
+import { whileUserHeld } from '../users.js'
 import { createUser, deleteUser, findUserById } from './users.js'
 
 const context = { actor: { type: 'client' as const, id: 'tester' }, ip: '203.0.113.7', userAgent: 'vitest' }
@@ -96,6 +97,41 @@ describe.skipIf(!hasDatabase)('passkeys', () => {
     expect(await listPasskeys(database.db, anna.id)).toHaveLength(MAX_PASSKEYS)
     // Somebody else is not held up by it, nor counted with it.
     expect((await add(context, ben, passkey('bens'))).kind).toBe('added')
+  })
+
+  describe('work that holds the person\'s row', () => {
+    it('waits for sessions that are being ended, and is seen whole by sessions that are ended after it', async () => {
+      await database.pool.query(`update users set status = 'active', password_hash = 'x' where id = $1`, [anna.id])
+      const order: string[] = []
+      let holding!: () => void
+      const held = new Promise<void>((resolve) => (holding = resolve))
+      let go!: () => void
+      const released = new Promise<void>((resolve) => (go = resolve))
+      const ending = database.db.transaction(async (tx) => {
+        await endSessions(tx, context, (await findUserById(tx, anna.id))!)
+        holding()
+        await released
+        order.push('sessions ended')
+      })
+      await held
+
+      // Something is kept for the person on the strength of a code: here, an offer.
+      const keeping = whileUserHeld(database.db, anna.id, async (tx) => {
+        order.push('code accepted')
+        return openPasskeyOffer(tx, { userId: anna.id, boundTo: 'offer:interaction-1', details: {} }, new Date(Date.now() + 60_000))
+      })
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      // It has not begun: the code is not accepted while the sessions are being ended.
+      expect(order).toEqual([])
+      go()
+      const token = await keeping
+      await ending
+      expect(order).toEqual(['sessions ended', 'code accepted'])
+
+      // And once it is done, it is all there for the next ending of sessions to find.
+      await database.db.transaction(async (tx) => endSessions(tx, context, (await findUserById(tx, anna.id))!))
+      expect(await findPasskeyOffer(database.db, { token, boundTo: 'offer:interaction-1' })).toBeUndefined()
+    })
   })
 
   describe('what entitles the person is asked again where the passkey is stored', () => {
