@@ -46,7 +46,7 @@ export const hu: Catalog = {
   'logout.yes': 'Igen, kijelentkezem',
   'logout.no': 'Nem, bejelentkezve maradok',
   'logout.titleFrom': 'Teljesen kijelentkezik?',
-  'logout.textFrom': 'Ön kilép innen: {client}. Ez a böngésző még be van jelentkezve itt: {host}, és a jelszava nélkül újra megnyithatja ezt: {client}. Ott is ki szeretne jelentkezni?',
+  'logout.textFrom': 'Ön kilép innen: {client}. Ez a böngésző még be van jelentkezve itt: {host}, és újabb bejelentkezés nélkül ismét megnyithatja ezt: {client}. Ott is ki szeretne jelentkezni?',
   'logout.noFrom': 'Nem, csak innen lépek ki: {client}',
   'logout.doneTitle': 'Ki van jelentkezve',
   'logout.done': 'A kijelentkezés sikeres volt.',

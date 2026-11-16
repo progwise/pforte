@@ -197,7 +197,7 @@ const server = createServer(async (request, response) => {
       if (id) sessions.delete(id)
       response.setHeader('Set-Cookie', `sid=; Path=/; Max-Age=0${secure ? '; Secure' : ''}`)
       // The provider revokes this application's refresh tokens and asks the person whether to end the sign-in
-      // there as well. After a "no" the next sign-in here needs no password.
+      // there as well. After a "no" the provider can reuse its session for the next sign-in here.
       const endSession = client.buildEndSessionUrl(config, {
         ...(idToken ? { id_token_hint: idToken } : {}),
         post_logout_redirect_uri: `${baseUrl}/`,

@@ -99,7 +99,7 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   session before pforte asks anything, and loses its refresh tokens whatever the answer is. The page asked "Sign out?"
   all the same and offered "No, stay signed in", after which the person was signed out of the application. Now it says
   that the application is being left and asks whether to sign out completely: "Yes, sign me out" ends the sign-in at
-  pforte too, "No, only leave *application*" keeps it, so the next sign-in needs no password. Nothing about what the
+  pforte too, "No, only leave *application*" keeps it, so pforte can reuse it for the next sign-in. Nothing about what the
   answers do has changed. When there is no address to go back to, the page after a "no" says "You are still signed in"
   instead of "You are signed out". The new texts are `logout.titleFrom`, `logout.textFrom`, `logout.noFrom`,
   `logout.keptTitle` and `logout.kept`; **if you replaced `logout.text` or `logout.no` in your `locales` folder, or added

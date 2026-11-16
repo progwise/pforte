@@ -46,7 +46,7 @@ export const de: Catalog = {
   'logout.yes': 'Ja, abmelden',
   'logout.no': 'Nein, angemeldet bleiben',
   'logout.titleFrom': 'Vollständig abmelden?',
-  'logout.textFrom': 'Sie verlassen {client}. Dieser Browser ist bei {host} noch angemeldet und kann {client} ohne Ihr Passwort wieder öffnen. Möchten Sie sich auch dort abmelden?',
+  'logout.textFrom': 'Sie verlassen {client}. Dieser Browser ist bei {host} noch angemeldet und kann {client} ohne erneute Anmeldung wieder öffnen. Möchten Sie sich auch dort abmelden?',
   'logout.noFrom': 'Nein, nur {client} verlassen',
   'logout.doneTitle': 'Sie sind abgemeldet',
   'logout.done': 'Die Abmeldung war erfolgreich.',

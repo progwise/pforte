@@ -172,9 +172,11 @@ whatever the person answers: with either answer pforte revokes the refresh token
 session. What pforte asks the person is whether to sign out *completely*, that is to end the sign-in at pforte as well:
 
 - **Yes** ends the browser's session at pforte and revokes the refresh tokens of every application in it. The next sign-in
-  asks for the password.
-- **No** leaves only your application. The browser stays signed in at pforte, so the next sign-in to your application, or
-  to another one, passes without a password.
+  is a fresh one: the person signs in again, with password and code or with a passkey.
+- **No** leaves only your application. The browser's session at pforte stays, and pforte reuses it while it is valid: the
+  next sign-in to your application, or to another one, is single sign-on and shows no page. A request that asks for more
+  than the session has (`prompt=login`, a `max_age` that is exceeded, `acr_values`) still leads to a fresh sign-in
+  ([asking for more](#asking-for-more)).
 
 Either way pforte then sends the browser to `post_logout_redirect_uri`, without saying which answer it was. So do not wait
 for the return to end your session, and do not show "you are signed in" there.

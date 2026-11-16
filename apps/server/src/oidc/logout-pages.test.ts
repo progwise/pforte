@@ -105,6 +105,9 @@ describe.skipIf(!hasDatabase)('the pages of the OpenID library, in pforte\'s loo
       expect(page.body).toContain('<h1>Sign out completely?</h1>')
       expect(page.body).toContain(`You are leaving ${NAME}.`)
       expect(page.body).toContain('still signed in at localhost:3300')
+      // no word about a password: a fresh sign-in may be a passkey, and an application can ask for one after a no too
+      expect(page.body).toContain(`can open ${NAME} again without a new sign-in`)
+      expect(page.body).not.toContain('password')
       expect(page.body).toContain('Yes, sign me out')
       expect(page.body).toContain(`No, only leave ${NAME}`)
       // nothing promises that the application stays signed in: it does not
