@@ -141,6 +141,7 @@ export const en = {
   'account.profile.note': 'Your organisation keeps these details. If something is wrong, tell your administration; it cannot be changed here.',
   'account.profile.phoneUnconfirmed': 'Not confirmed, so your sign-in codes come by e-mail.',
   'account.phone.send': 'Confirm with a code by SMS',
+  'account.phone.introSend': 'To confirm {to}, we send a 6-digit code to it by SMS. Once you have entered it, your sign-in codes come by SMS.',
   'account.phone.intro': 'To confirm {to}, enter the 6-digit code sent to it by SMS. From then on your sign-in codes come by SMS.',
   'account.phone.unavailable': 'The code could not be sent. Please try again later.',
   'account.loginFailed.title': 'Signing in did not work',

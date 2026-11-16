@@ -12,6 +12,8 @@ const B = { email: 'ben.keller@example.com' }
 const NUMBER = '+4915112345678'
 const NOTE = 'Not confirmed, so your sign-in codes come by e-mail.'
 const BUTTON = '<form method="post" action="/account/phone/send"><button type="submit" class="secondary">Confirm with a code by SMS</button></form>'
+/** What the page for the code offers while no code is on its way. */
+const FIRST_SEND = '<form method="post" action="/account/phone/send"><button type="submit">Confirm with a code by SMS</button></form>'
 
 describe.skipIf(!hasDatabase)('the account pages: confirming the phone number', () => {
   let h: AdminHarness
@@ -29,6 +31,7 @@ describe.skipIf(!hasDatabase)('the account pages: confirming the phone number', 
     h.notifications.length = 0
     h.notifier.smsAvailable = true
     h.notifier.failSms = false
+    h.notifier.hold = undefined
     await h.database.pool.query('delete from rate_limits')
     await h.database.pool.query('delete from otp_codes')
     await h.database.pool.query(`delete from audit_events where action like 'login.%' or action = 'user.phone.confirm'`)
@@ -99,6 +102,8 @@ describe.skipIf(!hasDatabase)('the account pages: confirming the phone number', 
       expect(page.body).toContain('To confirm +49')
       expect(page.body).not.toContain(NUMBER)
       expect(page.body).toContain('<form method="post" action="/account/phone/confirm">')
+      expect(page.body).toContain('Send a new code')
+      expect(page.body).not.toContain(FIRST_SEND)
       expect((await h.audit('login.code_sent', (await userOf(A.email)).id)).at(-1)!.details).toMatchObject({ purpose: 'activation', channel: 'sms' })
       expect(await confirmed(A.email)).toBe(false)
     })
@@ -111,6 +116,28 @@ describe.skipIf(!hasDatabase)('the account pages: confirming the phone number', 
 
       expect(sent.headers.location).toBe('/account/login?again=1&next=%2Faccount%2Fphone')
       expect(phoneCodes()).toEqual([])
+    })
+
+    it('comes back from that sign-in to a page that offers to send the code, and does not ask for one that was never sent', async () => {
+      const browser = await signedIn(A.email)
+      age(browser, 301)
+      const sent = await post(browser, '/account/phone/send')
+
+      const { response: page, visited } = await driveSignIn(h, browser, sent.headers.location as string, A.email)
+
+      expect(visited.at(-1)).toBe('/account/phone')
+      expect(page.body).toContain('For this you had to sign in again. Now repeat what you wanted to do.')
+      expect(page.body).toContain('we send a 6-digit code to it by SMS')
+      expect(page.body).toContain(FIRST_SEND)
+      expect(page.body).not.toContain('/account/phone/confirm')
+      expect(page.body).not.toContain('Send a new code')
+      expect(phoneCodes()).toEqual([])
+
+      // Repeating it sends the code, and now the page asks for it.
+      const repeated = await follow(browser, await post(browser, '/account/phone/send'))
+      expect(phoneCodes()).toHaveLength(1)
+      expect(repeated.body).toContain('<form method="post" action="/account/phone/confirm">')
+      expect(repeated.body).not.toContain(FIRST_SEND)
     })
 
     it('does not send a second code right away, and says how long to wait', async () => {
@@ -131,7 +158,12 @@ describe.skipIf(!hasDatabase)('the account pages: confirming the phone number', 
       const sent = await post(browser, '/account/phone/send')
 
       expect(sent.headers.location).toBe('/account/phone')
-      expect((await follow(browser, sent)).body).toContain('<p class="flash error" role="alert">The code could not be sent. Please try again later.</p>')
+      const page = await follow(browser, sent)
+      expect(page.body).toContain('<p class="flash error" role="alert">The code could not be sent. Please try again later.</p>')
+      // The page does not ask for a code that never arrived: it offers to send one.
+      expect(page.body).toContain(FIRST_SEND)
+      expect(page.body).not.toContain('/account/phone/confirm')
+      expect(page.body).not.toContain('Send a new code')
       expect(await confirmed(A.email)).toBe(false)
     })
 
@@ -227,6 +259,30 @@ describe.skipIf(!hasDatabase)('the account pages: confirming the phone number', 
       expect((await post(new Browser(h.app), '/account/phone/confirm', { code })).headers.location).toBe('/account/login')
       expect((await browser.request('POST', '/account/phone/confirm', { form: { code }, headers: { 'sec-fetch-site': 'cross-site' } })).statusCode).toBe(403)
       expect(await confirmed(A.email)).toBe(false)
+    })
+
+    it('does not confirm a number the back office changed while the code was being sent', async () => {
+      const browser = await signedIn(A.email)
+      const { id } = await userOf(A.email)
+      let release = () => {}
+      h.notifier.hold = new Promise<void>((resolve) => (release = resolve))
+
+      // The code is made for the number as it is, and the SMS is on its way to it, when the number is changed.
+      const sending = post(browser, '/account/phone/send')
+      for (let tries = 0; tries < 100 && (await h.database.pool.query(`select 1 from otp_codes where user_id = $1 and purpose = 'activation'`, [id])).rowCount === 0; tries++) {
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      }
+      const changed = await h.api('PATCH', `/users/${id}`, { body: { phone: '+4915187654321' } })
+      expect(changed.statusCode, changed.body).toBe(200)
+      release()
+      await sending
+      expect(phoneCodes().map((n) => n.user.phone)).toEqual([NUMBER])
+
+      const refused = await post(browser, '/account/phone/confirm', { code: h.lastPhoneCode(A.email)! })
+
+      expect(refused.headers.location).toBe('/account/phone')
+      expect(await confirmed(A.email)).toBe(false)
+      expect(await h.audit('user.phone.confirm', id)).toEqual([])
     })
 
     it('does not confirm a number the back office has changed since the code was sent', async () => {

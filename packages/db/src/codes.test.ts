@@ -7,9 +7,9 @@ import {
   deleteOldCodes,
   issueCode,
   markEmailVerified,
-  markPhoneVerified,
   MAX_CODES_PER_HOUR,
   RESEND_COOLDOWN_MS,
+  withdrawCode,
 } from './codes.js'
 import { createTestDatabase, hasDatabase } from './test/test-database.js'
 
@@ -171,12 +171,55 @@ describe.skipIf(!hasDatabase)('one-time codes', () => {
     expect(await currentCode(database.db, { userId, purpose: 'login' }, new Date(start.getTime() + RESEND_COOLDOWN_MS))).toMatchObject({ channel: 'email' })
   })
 
-  it('confirms the phone number once and keeps the first time', async () => {
+  describe('a code bound to what it was sent to', () => {
+    const A = '+4915112345678'
+    const B = '+4915187654321'
+    const issueFor = async (userId: string, boundTo?: string) => (await issueCode(database.db, { userId, channel: 'sms', purpose: 'activation', boundTo }, { secrets, now: start })).code
+    const checkFor = (userId: string, code: string, boundTo?: string) => checkCode(database.db, { userId, purpose: 'activation', code, boundTo }, { secrets, now: start })
+
+    it('is right together with the same value', async () => {
+      const userId = await newUser()
+      expect(await checkFor(userId, await issueFor(userId, A), A)).toEqual({ ok: true, channel: 'sms' })
+    })
+
+    it('is a wrong code with another value or with none, and the attempt counts', async () => {
+      const userId = await newUser()
+      const code = await issueFor(userId, A)
+      expect(await checkFor(userId, code, B)).toEqual({ ok: false, reason: 'wrong' })
+      expect(await checkFor(userId, code)).toEqual({ ok: false, reason: 'wrong' })
+      const { rows } = await database.pool.query(`select attempts from otp_codes where user_id = $1`, [userId])
+      expect(rows[0].attempts).toBe(2)
+      expect(await checkFor(userId, code, A)).toEqual({ ok: true, channel: 'sms' })
+    })
+
+    it('is not what a code without a value is, whatever is typed into the field', async () => {
+      const userId = await newUser()
+      const code = await issueFor(userId)
+      expect(await checkFor(userId, code, A)).toEqual({ ok: false, reason: 'wrong' })
+      const bound = await newUser()
+      const boundCode = await issueFor(bound, A)
+      for (const typed of [`${boundCode}:${A}`, `${boundCode}","${A}`, JSON.stringify([bound, 'activation', boundCode, A])]) {
+        expect(await checkFor(bound, typed)).toEqual({ ok: false, reason: 'wrong' })
+      }
+    })
+
+    it('stores neither the code nor the value', async () => {
+      const userId = await newUser()
+      const code = await issueFor(userId, A)
+      const { rows } = await database.pool.query(`select * from otp_codes where user_id = $1`, [userId])
+      expect(JSON.stringify(rows)).not.toContain(code)
+      expect(JSON.stringify(rows)).not.toContain(A)
+    })
+  })
+
+  it('withdraws the code that is valid: it is gone at once, stays unused and still counts towards the limits', async () => {
     const userId = await newUser()
-    await markPhoneVerified(database.db, userId, start)
-    await markPhoneVerified(database.db, userId, new Date(start.getTime() + minutes(5)))
-    const { rows } = await database.pool.query(`select phone_verified_at from users where id = $1`, [userId])
-    expect(rows[0].phone_verified_at).toEqual(start)
+    const { code } = await issue(userId)
+    await withdrawCode(database.db, { userId, purpose: 'login' }, start)
+
+    expect(await currentCode(database.db, { userId, purpose: 'login' }, start)).toBeUndefined()
+    expect(await check(userId, code)).toEqual({ ok: false, reason: 'expired' })
+    await expect(issue(userId, new Date(start.getTime() + 1000))).rejects.toMatchObject({ reason: 'cooldown' })
   })
 
   it('deletes codes that are long expired', async () => {

@@ -26,9 +26,16 @@ export class CodeLimitError extends Error {
 /**
  * The code is bound to the user and the purpose, so a code for one cannot be used for the other.
  * An HMAC with a server secret, because a plain hash of six digits can be reversed in a moment.
+ *
+ * `boundTo` binds it to one thing more, such as the phone number it was sent to: the code then proves something
+ * about that number only, and is a wrong code once the user has another. It is part of what is signed, so it is
+ * stored with the code without being kept in a second place. Its form differs from the one without, so that
+ * nothing typed into a code field can pass for it.
  */
-const sign = (secret: string, userId: string, purpose: Purpose, code: string) =>
-  createHmac('sha256', secret).update(`${userId}:${purpose}:${code}`).digest('hex')
+const sign = (secret: string, userId: string, purpose: Purpose, code: string, boundTo?: string) =>
+  createHmac('sha256', secret)
+    .update(boundTo === undefined ? `${userId}:${purpose}:${code}` : JSON.stringify([userId, purpose, code, boundTo]))
+    .digest('hex')
 
 const sameHash = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b))
 
@@ -46,7 +53,7 @@ export interface CodeOptions {
  */
 export const issueCode = async (
   db: Database,
-  { userId, channel, purpose }: { userId: string; channel: Channel; purpose: Purpose },
+  { userId, channel, purpose, boundTo }: { userId: string; channel: Channel; purpose: Purpose; boundTo?: string },
   { secrets, now = new Date() }: CodeOptions,
 ) =>
   db.transaction(async (tx) => {
@@ -76,11 +83,7 @@ export const issueCode = async (
       throw new CodeLimitError('too_many', Math.ceil((oldest.createdAt.getTime() + 60 * 60 * 1000 - now.getTime()) / 1000))
     }
 
-    // The earlier code stops working, but stays unused: `consumedAt` means "was used successfully".
-    await tx
-      .update(otpCodes)
-      .set({ expiresAt: now })
-      .where(and(eq(otpCodes.userId, userId), eq(otpCodes.purpose, purpose), isNull(otpCodes.consumedAt), gt(otpCodes.expiresAt, now)))
+    await withdrawCode(tx, { userId, purpose }, now)
 
     const code = String(randomInt(0, 10 ** CODE_LENGTH)).padStart(CODE_LENGTH, '0')
     const expiresAt = new Date(now.getTime() + CODE_LIFETIME_MS)
@@ -88,12 +91,24 @@ export const issueCode = async (
       userId,
       channel,
       purpose,
-      codeHash: sign(secrets[0]!, userId, purpose, code),
+      codeHash: sign(secrets[0]!, userId, purpose, code, boundTo),
       expiresAt,
       createdAt: now,
     })
     return { code, expiresAt }
   })
+
+/**
+ * Ends the code that is valid for the user and purpose: a new one takes its place, or it could not be sent and
+ * nobody is waiting for it. It stays unused (`consumedAt` means "was used successfully") and still counts towards
+ * the limits on asking for codes.
+ */
+export const withdrawCode = async (db: DatabaseOrTransaction, { userId, purpose }: { userId: string; purpose: Purpose }, now = new Date()) => {
+  await db
+    .update(otpCodes)
+    .set({ expiresAt: now })
+    .where(and(eq(otpCodes.userId, userId), eq(otpCodes.purpose, purpose), isNull(otpCodes.consumedAt), gt(otpCodes.expiresAt, now)))
+}
 
 export type CodeCheck =
   | { ok: true; channel: Channel }
@@ -102,11 +117,12 @@ export type CodeCheck =
 /**
  * Checks a code. Every check counts as an attempt, the right one included, and is counted before
  * comparing, so parallel guesses cannot get more tries than allowed. After five attempts the code is
- * dead: the sixth is refused even when it is right. A right code works once.
+ * dead: the sixth is refused even when it is right. A right code works once. A code that was issued with
+ * `boundTo` is right only together with the same value.
  */
 export const checkCode = async (
   db: DatabaseOrTransaction,
-  { userId, purpose, code }: { userId: string; purpose: Purpose; code: string },
+  { userId, purpose, code, boundTo }: { userId: string; purpose: Purpose; code: string; boundTo?: string },
   { secrets, now = new Date() }: CodeOptions,
 ): Promise<CodeCheck> => {
   const [current] = await db
@@ -125,7 +141,7 @@ export const checkCode = async (
     .returning({ attempts: otpCodes.attempts })
   if (!attempt) return { ok: false, reason: 'exhausted' }
 
-  const matches = secrets.some((secret) => sameHash(sign(secret, userId, purpose, code.trim()), current.codeHash))
+  const matches = secrets.some((secret) => sameHash(sign(secret, userId, purpose, code.trim(), boundTo), current.codeHash))
   if (!matches) return { ok: false, reason: 'wrong' }
 
   const [used] = await db
@@ -138,7 +154,7 @@ export const checkCode = async (
 
 /** The code that is currently valid for the user and purpose, if any: through which channel it went and until when. */
 export const currentCode = async (
-  db: Database,
+  db: DatabaseOrTransaction,
   { userId, purpose }: { userId: string; purpose: Purpose },
   now = new Date(),
 ) => {
@@ -168,14 +184,6 @@ export const markEmailVerified = async (db: Database, userId: string, now = new 
   await db
     .update(users)
     .set({ emailVerifiedAt: sql`coalesce(${users.emailVerifiedAt}, ${now.toISOString()}::timestamptz)` })
-    .where(eq(users.id, userId))
-}
-
-/** Marks the phone number as confirmed. Keeps the first time if it was confirmed before. */
-export const markPhoneVerified = async (db: Database, userId: string, now = new Date()) => {
-  await db
-    .update(users)
-    .set({ phoneVerifiedAt: sql`coalesce(${users.phoneVerifiedAt}, ${now.toISOString()}::timestamptz)` })
     .where(eq(users.id, userId))
 }
 

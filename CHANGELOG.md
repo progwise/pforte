@@ -86,9 +86,10 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   sign-in codes come by e-mail" next to such a number and has the button "Confirm with a code by SMS": pforte sends a
   code to the stored number, the person enters it, and the next sign-in code comes by SMS. The button is there only
   when this pforte sends SMS. Sending the code needs a sign-in that is at most five minutes old and counts against the
-  limits on asking for codes; the confirmation is recorded as `user.phone.confirm` with `self: true`. A code that is on
-  its way when an administrator changes the number no longer confirms the new one, also at the step after an
-  activation. The new texts are `account.profile.phoneUnconfirmed`, `account.phone.send`, `account.phone.intro` and
+  limits on asking for codes. A confirmation is recorded as `user.phone.confirm` with `self: true`, now also at the
+  step after an activation. A code confirms the number it was sent to and no other: one that is on its way when an
+  administrator changes the number is a wrong code for the new one, also at that step. The new texts are
+  `account.profile.phoneUnconfirmed`, `account.phone.send`, `account.phone.intro`, `account.phone.introSend` and
   `account.phone.unavailable`; **if you added a language in your `locales` folder**, add them there, or they appear in
   English ([the account pages](docs/account.md#what-a-person-can-do), [SMS](docs/sms.md#phone-numbers)).
 

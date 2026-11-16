@@ -6,7 +6,9 @@ import { clients, oidcPayloads, users } from '../schema/index.js'
 import { assertAdminStays } from './admins.js'
 import { revokeUserDevices } from './devices.js'
 import { endPasskeySteps } from './passkeys.js'
-import { lockUserRow } from '../users.js'
+import { lockUserRow, whileUserHeld } from '../users.js'
+import { checkCode, type CodeCheck, type CodeOptions } from '../codes.js'
+import type { Database } from '../index.js'
 import type { RequestContext } from './users.js'
 
 type UserRow = typeof users.$inferSelect
@@ -242,13 +244,28 @@ export const requestPasswordReset = async (tx: DatabaseOrTransaction, context: R
 }
 
 /**
- * A person entered the code that was sent to their phone number: codes can go there by SMS from now on. Keeps the
- * first time if the number was confirmed before.
+ * A person enters the code that was sent to their phone number. If it is right, the number is confirmed and codes
+ * can go there by SMS from now on.
+ *
+ * The code proves something about the number it was sent to, and about no other. So the person's row is held from
+ * the first look at the number to the last write: the code is checked against the number that is stored at that
+ * moment (it was issued bound to its destination), the confirmation is written and recorded, all or nothing. A
+ * change of the number by the back office happens wholly before, and the code is then a wrong one, or wholly
+ * after, and takes the confirmation away again. A wrong code still counts as an attempt.
  */
-export const confirmPhone = async (tx: DatabaseOrTransaction, context: RequestContext, user: UserRow) => {
-  await tx.update(users).set({ phoneVerifiedAt: new Date() }).where(and(eq(users.id, user.id), isNull(users.phoneVerifiedAt)))
-  await recordAuditEvent(tx, audit(context, 'user.phone.confirm', user, {}))
-}
+export const confirmPhone = (db: Database, context: RequestContext, { userId, code }: { userId: string; code: string }, options: CodeOptions): Promise<CodeCheck> =>
+  whileUserHeld(db, userId, async (tx) => {
+    const [user] = await tx.select().from(users).where(eq(users.id, userId))
+    if (!user?.phone || user.phoneVerifiedAt) return { ok: false, reason: 'none' }
+    const result = await checkCode(tx, { userId, purpose: 'activation', code, boundTo: user.phone }, options)
+    if (!result.ok) return result
+    await tx
+      .update(users)
+      .set({ phoneVerifiedAt: options.now ?? new Date() })
+      .where(eq(users.id, userId))
+    await recordAuditEvent(tx, audit(context, 'user.phone.confirm', user, {}))
+    return result
+  })
 
 export const endSessions = async (tx: DatabaseOrTransaction, context: RequestContext, user: UserRow) => {
   assertAllowed(user, 'end-sessions')
