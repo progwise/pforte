@@ -1,4 +1,4 @@
-import { confirmPhone, type RequestContext } from '@progwise/pforte-db/admin'
+import { confirmPhone, LifecycleError, type RequestContext } from '@progwise/pforte-db/admin'
 import { CodeLimitError, currentCode, issueCode, withdrawCode } from '@progwise/pforte-db/codes'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { maskPhone } from '../auth/channels.js'
@@ -106,12 +106,17 @@ ${
       await audit.blocked(where(request), { scope: 'phone_code' })
       return tooManyRequests(reply, viewFor(request, user).view, wait)
     }
-    const code = typeof request.body?.code === 'string' ? request.body.code.replaceAll(' ', '') : ''
-    // The check of the code and the confirmation are one step, for the number that is stored at that moment.
-    const result = /^\d{6}$/.test(code) ? await confirmPhone(db, selfContext(request, user), { userId: user.id, code }, { secrets: codeSecrets }) : undefined
+    const code = typeof request.body?.code === 'string' ? request.body.code : ''
+    // The check of the code and the confirmation are one step, for the person as they are at that moment.
+    const result = await confirmPhone(db, selfContext(request, user), { userId: user.id, code }, { secrets: codeSecrets }).catch((error: unknown) => {
+      // Nothing to confirm any more: confirmed in another window, or the person was locked meanwhile.
+      if (error instanceof LifecycleError) return 'nothing' as const
+      throw error
+    })
+    if (result === 'nothing') return reply.redirect(ACCOUNT_PATH, 303)
     if (!result?.ok) {
       await limiter.codeFailed(request.ip)
-      await audit.codeFailed(where(request), { userId: user.id, purpose: 'activation', reason: result?.reason ?? 'malformed' })
+      await audit.codeFailed(where(request), { userId: user.id, purpose: 'activation', reason: result?.reason ?? 'none' })
       return redirectWith(reply, PHONE, { kind: 'error', key: 'code.badOrExpired' })
     }
     return redirectWith(reply, ACCOUNT_PATH, { kind: 'ok', key: 'phone.doneTitle' })

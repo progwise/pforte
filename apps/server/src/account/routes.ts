@@ -2,7 +2,7 @@ import formbody from '@fastify/formbody'
 import { hash } from '@node-rs/argon2'
 import type { Database } from '@progwise/pforte-db'
 import { checkCode, CodeLimitError, issueCode, markEmailVerified } from '@progwise/pforte-db/codes'
-import { closePasskeyOffer, confirmPhone, continuePasskeyOffer, findPasskeyOffer, getClient, requestActivationLink } from '@progwise/pforte-db/admin'
+import { closePasskeyOffer, confirmPhone, continuePasskeyOffer, findPasskeyOffer, getClient, LifecycleError, requestActivationLink } from '@progwise/pforte-db/admin'
 import { findActiveUserById } from '@progwise/pforte-db/oidc'
 import { completeActivation, completePasswordReset, findPendingActivation } from '@progwise/pforte-db/credentials'
 import { findUserByEmail } from '@progwise/pforte-db/users'
@@ -321,13 +321,17 @@ export const accountRoutes =
         return tooManyRequests(reply, view, wait)
       }
 
-      const code = text(request.body?.code).replaceAll(' ', '')
-      const result = /^\d{6}$/.test(code)
-        ? await confirmPhone(db, { actor: { type: 'user', id: user.id }, ...origin(request), self: true }, { userId: user.id, code }, { secrets: codeSecrets })
-        : undefined
+      const result = await confirmPhone(db, { actor: { type: 'user', id: user.id }, ...origin(request), self: true }, { userId: user.id, code: text(request.body?.code) }, { secrets: codeSecrets }).catch(
+        (error: unknown) => {
+          // Nothing to confirm any more: confirmed in another window, or the person was locked meanwhile.
+          if (error instanceof LifecycleError) return 'nothing' as const
+          throw error
+        },
+      )
+      if (result === 'nothing') return finishedPhoneStep(reply, await activeAccount(view))
       if (!result?.ok) {
         await limiter.codeFailed(request.ip)
-        await audit.codeFailed(origin(request), { userId: user.id, purpose: 'activation', reason: result?.reason ?? 'malformed' })
+        await audit.codeFailed(origin(request), { userId: user.id, purpose: 'activation', reason: result?.reason ?? 'none' })
         return html(reply, 401, view.phoneConfirm({ sentTo: maskPhone(user.phone), error: view.t('code.badOrExpired') }))
       }
       // On to the offer the activation opened, if this device was offered one. The phone step itself opens none.

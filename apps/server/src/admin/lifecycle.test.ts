@@ -370,6 +370,20 @@ describe.skipIf(!hasDatabase)('admin API: user lifecycle', () => {
       expect((await h.api('GET', `/users/${user.id}`)).json().phoneVerifiedAt).toBeNull()
     })
 
+    it('answers 409, not a wrong code, for a user who was locked after the code was sent, and confirms nothing', async () => {
+      const user = await unconfirmed()
+      await send(user.id)
+      const code = h.lastPhoneCode(user.email)!
+      await act(user.id, 'lock')
+
+      const refused = await confirm(user.id, code)
+
+      expect(refused.statusCode).toBe(409)
+      expect(refused.json().detail).toMatch(/user who is locked/)
+      expect((await h.api('GET', `/users/${user.id}`)).json().phoneVerifiedAt).toBeNull()
+      expect(await h.audit('user.phone.confirm', user.id)).toEqual([])
+    })
+
     it('answers 503 when the SMS cannot be sent, and leaves no code to wait for', async () => {
       const user = await unconfirmed()
       h.notifier.failSms = true

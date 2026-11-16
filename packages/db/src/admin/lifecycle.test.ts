@@ -217,12 +217,44 @@ describe.skipIf(!hasDatabase)('user lifecycle', () => {
     it('confirms the number with the code that was sent to it, and records it as the person’s own doing', async () => {
       const { id, code } = await waiting()
 
-      expect(await confirm(id, code)).toEqual({ ok: true, channel: 'sms' })
+      const confirmed = await confirm(id, `${code.slice(0, 3)} ${code.slice(3)}`)
 
-      expect(await confirmedAt(id)).toBeInstanceOf(Date)
+      // What comes back is the row as this step wrote it.
+      expect(confirmed).toMatchObject({ ok: true, user: { id, phone: A, phoneVerifiedAt: expect.any(Date) } })
+      expect(await confirmedAt(id)).toEqual(confirmed?.ok ? confirmed.user.phoneVerifiedAt : undefined)
       expect(await event('user.phone.confirm', id)).toMatchObject({ actor_type: 'user', actor_id: id, details: { self: true } })
-      // and once: the code is used up, and there is nothing left to confirm
-      expect(await confirm(id, code)).toEqual({ ok: false, reason: 'none' })
+      // and once: there is nothing left to confirm
+      await expect(confirm(id, code)).rejects.toThrow(/confirmed already/)
+    })
+
+    it('does not count what is no code at all as an attempt, and knows nobody under an unknown ID', async () => {
+      const { id, code } = await waiting()
+
+      for (const typed of ['', 'abc', '12345', '1234567']) expect(await confirm(id, typed)).toEqual({ ok: false, reason: 'malformed' })
+
+      expect((await database.pool.query(`select attempts from otp_codes where user_id = $1`, [id])).rows[0].attempts).toBe(0)
+      expect(await confirm(id, code)).toMatchObject({ ok: true })
+      expect(await confirm('0190f6a8-0000-7000-8000-000000000000', code)).toBeUndefined()
+    })
+
+    it('waits for a lock of the person that is under way, and then confirms nothing: the code is not even looked at', async () => {
+      const { id, code } = await waiting()
+      const user = (await findUserById(database.db, id))!
+
+      const { pending } = await database.db.transaction(async (tx) => {
+        // An administrator has locked the person and not finished yet.
+        await lockUser(tx, context, user)
+        const pending = confirm(id, code)
+        pending.catch(() => {})
+        await new Promise((resolve) => setTimeout(resolve, 200))
+        return { pending }
+      })
+
+      await expect(pending).rejects.toBeInstanceOf(LifecycleError)
+      await expect(pending).rejects.toThrow(/user who is locked/)
+      expect(await confirmedAt(id)).toBeNull()
+      expect((await database.pool.query(`select attempts, consumed_at from otp_codes where user_id = $1`, [id])).rows[0]).toEqual({ attempts: 0, consumed_at: null })
+      expect(await event('user.phone.confirm', id)).toBeUndefined()
     })
 
     it('refuses a wrong code, counts the attempt and records nothing', async () => {
@@ -274,7 +306,7 @@ describe.skipIf(!hasDatabase)('user lifecycle', () => {
       const user = (await findUserById(database.db, id))!
 
       // The change was decided on the number as it was, while the code was being entered.
-      expect(await confirm(id, code)).toEqual({ ok: true, channel: 'sms' })
+      expect(await confirm(id, code)).toMatchObject({ ok: true })
       await database.db.transaction((tx) => updateUser(tx, context, user, { phone: B }))
 
       const after = (await findUserById(database.db, id))!
@@ -302,16 +334,19 @@ describe.skipIf(!hasDatabase)('user lifecycle', () => {
 
       expect(reissued.code).toMatch(/^\d{6}$/)
       // The code was valid when it was typed, so it counts.
-      await expect(confirming).resolves.toEqual({ ok: true, channel: 'sms' })
+      await expect(confirming).resolves.toMatchObject({ ok: true })
       expect(await confirmedAt(user.id)).toBeInstanceOf(Date)
     })
 
     it('has nothing to confirm for a person without a number, or with a confirmed one', async () => {
       const { id, code } = await waiting()
       await database.pool.query(`update users set phone_verified_at = now() where id = $1`, [id])
-      expect(await confirm(id, code)).toEqual({ ok: false, reason: 'none' })
+      await expect(confirm(id, code)).rejects.toThrow(/confirmed already/)
       await database.pool.query(`update users set phone = null, phone_verified_at = null where id = $1`, [id])
-      expect(await confirm(id, code)).toEqual({ ok: false, reason: 'none' })
+      await expect(confirm(id, code)).rejects.toThrow(/no phone number/)
+      await database.pool.query(`update users set phone = $2, status = 'deactivated' where id = $1`, [id, A])
+      await expect(confirm(id, code)).rejects.toThrow(/user who is deactivated/)
+      expect((await database.pool.query(`select attempts from otp_codes where user_id = $1`, [id])).rows[0].attempts).toBe(0)
     })
   })
 

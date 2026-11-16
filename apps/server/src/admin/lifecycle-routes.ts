@@ -32,7 +32,6 @@ const ERROR_RESPONSES = {
   403: problemSchema,
   404: problemSchema,
   409: problemSchema,
-  422: problemSchema,
   429: problemSchema,
   503: problemSchema,
 }
@@ -315,23 +314,21 @@ export const lifecycleRoutes =
             `new one. 409 when there is nothing to confirm. ${PHONE_NOTE}`,
           params,
           body: z.object({ code: z.string().min(1).max(20) }),
-          response: { 200: userSchema, ...ERROR_RESPONSES },
+          response: { 200: userSchema, ...ERROR_RESPONSES, 422: problemSchema },
         },
       },
       async (request, reply) => {
-        const user = await findUserById(db, request.params.id)
-        if (!user) return noUser(reply)
         try {
-          phoneToConfirm(user)
+          // One step, with the person's row held: whether there is something to confirm, the check of the code,
+          // the confirmation, and the row this answer is made from.
+          const result = await confirmPhone(db, requestContext(request), { userId: request.params.id, code: request.body.code }, { secrets: codeSecrets })
+          if (!result) return noUser(reply)
+          if (!result.ok) return problem(reply, 422, 'Wrong code', 'The code is not correct, has expired or was tried too often. Send a new one.')
+          return toUserDto(result.user)
         } catch (error) {
           if (error instanceof LifecycleError) return refused(reply, error)
           throw error
         }
-        const code = request.body.code.replaceAll(' ', '')
-        // The check and the confirmation are one step, for the number that is stored at that moment.
-        const result = /^\d{6}$/.test(code) ? await confirmPhone(db, requestContext(request), { userId: user.id, code }, { secrets: codeSecrets }) : undefined
-        if (!result?.ok) return problem(reply, 422, 'Wrong code', 'The code is not correct, has expired or was tried too often. Send a new one.')
-        return toUserDto((await findUserById(db, user.id))!)
       },
     )
 
