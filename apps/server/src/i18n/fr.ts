@@ -45,8 +45,13 @@ export const fr: Catalog = {
   'logout.text': 'Voulez-vous vous déconnecter de {host} ?',
   'logout.yes': 'Oui, me déconnecter',
   'logout.no': 'Non, rester connecté',
+  'logout.titleFrom': 'Se déconnecter complètement ?',
+  'logout.textFrom': 'Vous quittez {client}. Ce navigateur est encore connecté à {host} et peut rouvrir {client} sans votre mot de passe. Voulez-vous vous déconnecter là aussi ?',
+  'logout.noFrom': 'Non, quitter seulement {client}',
   'logout.doneTitle': 'Vous êtes déconnecté',
   'logout.done': 'Votre déconnexion a réussi.',
+  'logout.keptTitle': 'Vous êtes toujours connecté',
+  'logout.kept': 'Ce navigateur reste connecté à {host}.',
 
   'error.title': "Une erreur s'est produite",
   'error.generic': "La demande n'a pas pu être traitée.",

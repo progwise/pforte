@@ -62,9 +62,11 @@ export interface PageSet {
   notice(title: string, message: string, action?: { href: string; label: string }): string
   /**
    * Asks whether to sign out (OpenID Connect RP-initiated logout). `formHtml` is the form the library made, with its
-   * protection against forgery; the buttons belong to it.
+   * protection against forgery; the buttons belong to it. `clientName` is the application that sent the person here:
+   * it has ended its own session and loses its tokens whatever the answer is, so with it the question is whether to
+   * end the sign-in at pforte as well, and a "no" must not promise that the person stays signed in there.
    */
-  logoutConfirm(options: { host: string; formHtml: string }): string
+  logoutConfirm(options: { host: string; formHtml: string; clientName?: string }): string
   /**
    * A page of one of pforte's own areas (the administration, the account pages): a bar with the sections and the
    * person, a message from the last action, and the content, which is HTML the caller has already escaped.
@@ -296,15 +298,17 @@ ${codeField}
       notice: (title, message, action) =>
         page(title, `<h1>${escapeHtml(title)}</h1>\n<p>${escapeHtml(message)}</p>${action ? `\n<p><a class="button" href="${escapeHtml(action.href)}">${escapeHtml(action.label)}</a></p>` : ''}`),
 
-      logoutConfirm: ({ host, formHtml }) =>
-        page(
-          t('logout.title'),
-          `<h1>${escapeHtml(t('logout.title'))}</h1>
-<p>${escapeHtml(t('logout.text', { host }))}</p>
+      logoutConfirm: ({ host, formHtml, clientName }) => {
+        const title = clientName ? t('logout.titleFrom') : t('logout.title')
+        return page(
+          title,
+          `<h1>${escapeHtml(title)}</h1>
+<p>${escapeHtml(clientName ? t('logout.textFrom', { client: clientName, host }) : t('logout.text', { host }))}</p>
 ${formHtml}
 <button autofocus type="submit" form="op.logoutForm" name="logout" value="yes">${escapeHtml(t('logout.yes'))}</button>
-<button type="submit" form="op.logoutForm" class="secondary">${escapeHtml(t('logout.no'))}</button>`,
-        ),
+<button type="submit" form="op.logoutForm" class="secondary">${escapeHtml(clientName ? t('logout.noFrom', { client: clientName }) : t('logout.no'))}</button>`,
+        )
+      },
 
       manage: ({ title, nav, person, flash, sectionsLabel, content }) => `<!doctype html>
 <html lang="${escapeHtml(language)}">

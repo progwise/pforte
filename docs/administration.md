@@ -33,7 +33,8 @@ and asks for a new one.) That is the one place where a code cannot be skipped.
 - The session lasts **up to an hour**, then you are taken through the sign-in again. Without a password: if your sign-in
   of pforte is still current it is a few redirects.
 - **Sign out** ends the session in the administration **and** your sign-in of pforte, so the next person on a shared
-  computer cannot walk in. pforte shows a short question to confirm it.
+  computer cannot walk in. pforte asks before it ends its sign-in: with "No, only leave Administration" you are out of the
+  administration, but the browser stays signed in at pforte.
 
 ## What the pages do
 

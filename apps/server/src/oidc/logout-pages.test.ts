@@ -76,6 +76,95 @@ describe.skipIf(!hasDatabase)('the pages of the OpenID library, in pforte\'s loo
     })
   })
 
+  // An application ends its own session before it sends the browser here, and its tokens are revoked whatever the
+  // answer is. So the question is not whether to sign out, but whether to end the sign-in at pforte as well.
+  describe('asking on behalf of an application', () => {
+    const NAME = 'Demo web app (public client)'
+    const asked = (browser: Browser, language = 'en') =>
+      browser.request('GET', `/session/end?${new URLSearchParams({ client_id: WEB.clientId, post_logout_redirect_uri: 'http://localhost:3400/' })}`, {
+        headers: { 'accept-language': language },
+      })
+    const xsrfOf = (body: string) => /name="xsrf" value="([^"]+)"/.exec(body)![1]!
+    /** Where pforte sends a browser that asks to sign in to the application: to its sign-in page, or straight back. */
+    const signInAgain = async (browser: Browser) => {
+      const query = new URLSearchParams({
+        client_id: WEB.clientId,
+        redirect_uri: WEB.redirectUri,
+        response_type: 'code',
+        scope: 'openid',
+        code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+        code_challenge_method: 'S256',
+      })
+      return (await browser.request('GET', `/auth?${query}`)).headers.location as string
+    }
+
+    it('says that the application is left either way, and asks about the sign-in at pforte', async () => {
+      const page = await asked(await signedIn())
+
+      expect(page.statusCode).toBe(200)
+      expect(page.body).toContain('<h1>Sign out completely?</h1>')
+      expect(page.body).toContain(`You are leaving ${NAME}.`)
+      expect(page.body).toContain('still signed in at localhost:3300')
+      expect(page.body).toContain('Yes, sign me out')
+      expect(page.body).toContain(`No, only leave ${NAME}`)
+      // nothing promises that the application stays signed in: it does not
+      expect(page.body).not.toContain('stay signed in')
+    })
+
+    it.each([
+      ['de', 'Vollständig abmelden?', `Nein, nur ${NAME} verlassen`],
+      ['fr', 'Se déconnecter complètement ?', `Non, quitter seulement ${NAME}`],
+      ['hu', 'Teljesen kijelentkezik?', `Nem, csak innen lépek ki: ${NAME}`],
+    ])('asks the same in %s', async (language, title, no) => {
+      const page = await asked(await signedIn(), language)
+      expect(page.body).toContain(`<h1>${title}</h1>`)
+      expect(page.body).toContain(no)
+    })
+
+    it('goes back to the application after a no, with the sign-in at pforte kept', async () => {
+      const browser = await signedIn()
+      const answered = await browser.request('POST', '/session/end/confirm', { form: { xsrf: xsrfOf((await asked(browser)).body) } })
+
+      expect(answered.statusCode).toBe(303)
+      expect(answered.headers.location).toBe('http://localhost:3400/')
+      expect(await signInAgain(browser)).toMatch(/^http:\/\/localhost:3400\/callback\?code=/)
+    })
+
+    it('goes back to the application after a yes, with the sign-in at pforte ended', async () => {
+      const browser = await signedIn()
+      const answered = await browser.request('POST', '/session/end/confirm', { form: { xsrf: xsrfOf((await asked(browser)).body), logout: 'yes' } })
+
+      expect(answered.headers.location).toBe('http://localhost:3400/')
+      expect(await signInAgain(browser)).toMatch(/\/interaction\//)
+    })
+  })
+
+  describe('after a no', () => {
+    const answeredNo = async (query = '') => {
+      const browser = await signedIn()
+      const page = await browser.request('GET', `/session/end${query}`)
+      const xsrf = /name="xsrf" value="([^"]+)"/.exec(page.body)![1]!
+      const kept = await browser.request('POST', '/session/end/confirm', { form: { xsrf } })
+      expect(kept.statusCode).toBe(303)
+      return browser.request('GET', kept.headers.location as string, { headers: { 'accept-language': 'en' } })
+    }
+
+    it('does not claim that the person is signed out', async () => {
+      const page = await answeredNo()
+      expect(page.statusCode).toBe(200)
+      expect(page.body).toContain('<h1>You are still signed in</h1>')
+      expect(page.body).toContain('This browser stays signed in at localhost:3300.')
+      expect(page.body).not.toContain('You are signed out')
+      expect(page.headers['content-security-policy']).toContain("default-src 'none'")
+    })
+
+    it('says the same when an application asked that names no address to return to', async () => {
+      const page = await answeredNo(`?client_id=${WEB.clientId}`)
+      expect(page.body).toContain('<h1>You are still signed in</h1>')
+      expect(page.body).not.toContain('You are signed out')
+    })
+  })
+
   describe('after signing out', () => {
     const signedOutPage = async (language = 'en') => {
       const browser = await signedIn()

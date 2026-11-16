@@ -95,6 +95,16 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   with the new field `staysSignedIn`. **If your client of the admin API checks answers against the OpenAPI document of
   0.2.0, it rejects this one**: that document allows no other fields in a grant. Use the document of this version. A
   client that ignores fields it does not know needs no change ([#60](https://github.com/progwise/pforte/issues/60)).
+- **The question at sign-out says what the answers do.** An application that signs a person out has ended its own
+  session before pforte asks anything, and loses its refresh tokens whatever the answer is. The page asked "Sign out?"
+  all the same and offered "No, stay signed in", after which the person was signed out of the application. Now it says
+  that the application is being left and asks whether to sign out completely: "Yes, sign me out" ends the sign-in at
+  pforte too, "No, only leave *application*" keeps it, so the next sign-in needs no password. Nothing about what the
+  answers do has changed. When there is no address to go back to, the page after a "no" says "You are still signed in"
+  instead of "You are signed out". The new texts are `logout.titleFrom`, `logout.textFrom`, `logout.noFrom`,
+  `logout.keptTitle` and `logout.kept`; **if you replaced `logout.text` or `logout.no` in your `locales` folder, or added
+  a language**, add them there, or they appear as built in, in English for a language of your own
+  ([signing out](docs/integrating-a-client.md#signing-out)).
 
 ## 0.2.0 (2026-10-23)
 
