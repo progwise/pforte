@@ -72,7 +72,8 @@ export const completeActivation = (
 /**
  * Sets a new password after the user proved who they are with a code. All sessions, tokens and
  * remembered devices end: whoever knew the old password, or had a session, must start again.
- * Returns false if the user cannot sign in (any more).
+ * Returns the logouts to send to the applications the user was signed in to, or undefined if the
+ * user cannot sign in (any more).
  */
 export const completePasswordReset = (db: Database, { userId, passwordHash, ip, userAgent }: { userId: string; passwordHash: string } & Origin) =>
   db.transaction(async (tx) => {
@@ -81,8 +82,8 @@ export const completePasswordReset = (db: Database, { userId, passwordHash, ip, 
       .set({ passwordHash })
       .where(and(eq(users.id, userId), eq(users.status, 'active')))
       .returning()
-    if (!user) return false
-    const ended = await endUserSessions(tx, user.id)
+    if (!user) return undefined
+    const { logouts, ...ended } = await endUserSessions(tx, user.id)
     await recordAuditEvent(tx, {
       actor: { type: 'user', id: user.id },
       ip,
@@ -91,5 +92,5 @@ export const completePasswordReset = (db: Database, { userId, passwordHash, ip, 
       target: { type: 'user', id: user.id },
       details: { email: user.email, ...ended },
     })
-    return true
+    return { logouts }
   })

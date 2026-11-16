@@ -80,7 +80,7 @@ describe.skipIf(!hasDatabase)('keeping somebody able to administer', () => {
     const plain = await make(false)
     await expect(actions.lock(plain)).resolves.toBeDefined()
     const another = await make(false)
-    await expect(actions.delete(another, person(only.id))).resolves.toBeUndefined()
+    await expect(actions.delete(another, person(only.id))).resolves.toEqual({ logouts: [] })
   })
 
   it('lets an administrator who is already locked be demoted or deleted, as nobody relies on them', async () => {
@@ -89,7 +89,7 @@ describe.skipIf(!hasDatabase)('keeping somebody able to administer', () => {
     await onlyAdmins(active)
     await expect(actions.demote(locked)).resolves.toBeDefined()
     const another = await make(true, 'locked')
-    await expect(actions.delete(another)).resolves.toBeUndefined()
+    await expect(actions.delete(another)).resolves.toEqual({ logouts: [] })
   })
 
   it('does not stop other changes to the last administrator', async () => {

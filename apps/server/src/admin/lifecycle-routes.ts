@@ -17,6 +17,7 @@ import { CodeLimitError } from '@progwise/pforte-db/codes'
 import type { SendPasswordResetCode } from '../auth/password-reset.js'
 import type { RateLimiter } from '../auth/rate-limiter.js'
 import { type Notifier, NotifierUnavailableError } from '../notifications/notifier.js'
+import type { ClientLogouts } from '../oidc/client-logouts.js'
 import type { AdminAuth } from './auth.js'
 import { problem, problemSchema } from './problem.js'
 import { requestContext, toUserDto, userSchema } from './users-routes.js'
@@ -41,11 +42,13 @@ export interface LifecycleDependencies {
   limiter: RateLimiter
   /** The public address of pforte, used to build the activation link. */
   issuer: string
+  /** Tells the applications of a user whose sessions were ended. */
+  clientLogouts: ClientLogouts
 }
 
 /** Lock, unlock, activate, deactivate, reset the password and end the sessions of a user. */
 export const lifecycleRoutes =
-  ({ db, auth, notifier, sendPasswordResetCode, limiter, issuer }: LifecycleDependencies) =>
+  ({ db, auth, notifier, sendPasswordResetCode, limiter, issuer, clientLogouts }: LifecycleDependencies) =>
   async (instance: FastifyInstance) => {
     const app = instance.withTypeProvider<ZodTypeProvider>()
     const onRequest = auth.require('directory', 'admin')
@@ -70,18 +73,20 @@ export const lifecycleRoutes =
         schema: {
           tags: ['Lifecycle'],
           summary: 'Lock a user',
-          description: 'For a created or active user. Ends all their sessions and refresh tokens; they cannot sign in until unlocked.',
+          description: 'For a created or active user. Ends all their sessions and refresh tokens and tells their applications (back-channel logout); they cannot sign in until unlocked.',
           params,
           response: { 200: userSchema, ...ERROR_RESPONSES },
         },
       },
       async (request, reply) => {
         try {
-          const user = await db.transaction(async (tx) => {
+          const locked = await db.transaction(async (tx) => {
             const found = await findUserById(tx, request.params.id)
             return found ? lockUser(tx, requestContext(request), found) : undefined
           })
-          return user ? toUserDto(user) : noUser(reply)
+          if (!locked) return noUser(reply)
+          clientLogouts.send(locked.user, locked.logouts)
+          return toUserDto(locked.user)
         } catch (error) {
           if (error instanceof LifecycleError) return refused(reply, error)
           throw error
@@ -127,18 +132,20 @@ export const lifecycleRoutes =
         schema: {
           tags: ['Lifecycle'],
           summary: 'Deactivate a user',
-          description: 'For someone who has left. Ends all sessions and refresh tokens and cancels a pending activation link.',
+          description: 'For someone who has left. Ends all sessions and refresh tokens, tells their applications (back-channel logout) and cancels a pending activation link.',
           params,
           response: { 200: userSchema, ...ERROR_RESPONSES },
         },
       },
       async (request, reply) => {
         try {
-          const user = await db.transaction(async (tx) => {
+          const deactivated = await db.transaction(async (tx) => {
             const found = await findUserById(tx, request.params.id)
             return found ? deactivateUser(tx, requestContext(request), found) : undefined
           })
-          return user ? toUserDto(user) : noUser(reply)
+          if (!deactivated) return noUser(reply)
+          clientLogouts.send(deactivated.user, deactivated.logouts)
+          return toUserDto(deactivated.user)
         } catch (error) {
           if (error instanceof LifecycleError) return refused(reply, error)
           throw error
@@ -202,19 +209,22 @@ export const lifecycleRoutes =
           tags: ['Lifecycle'],
           summary: 'Reset the password of a user',
           description:
-            'For an active user. Sends them a code to choose a new password and ends all their sessions and refresh ' +
-            'tokens, since the account may be compromised.',
+            'For an active user. Sends them a code to choose a new password, ends all their sessions and refresh ' +
+            'tokens and tells their applications (back-channel logout), since the account may be compromised.',
           params,
           response: { 200: userSchema, ...ERROR_RESPONSES },
         },
       },
       async (request, reply) => {
         try {
-          const user = await db.transaction(async (tx) => {
+          const reset = await db.transaction(async (tx) => {
             const found = await findUserById(tx, request.params.id)
             return found ? requestPasswordReset(tx, requestContext(request), found) : undefined
           })
-          if (!user) return noUser(reply)
+          if (!reset) return noUser(reply)
+          const { user } = reset
+          // Before the code is sent: the sessions are gone whether or not the mail can go out.
+          clientLogouts.send(user, reset.logouts)
           await sendPasswordResetCode(user)
           return toUserDto(user)
         } catch (error) {
@@ -241,7 +251,7 @@ export const lifecycleRoutes =
         schema: {
           tags: ['Lifecycle'],
           summary: 'End all sessions of a user',
-          description: 'Deletes their sessions, grants and refresh tokens and revokes their remembered devices, so they must sign in again, with a code. Their status does not change.',
+          description: 'Deletes their sessions, grants and refresh tokens, revokes their remembered devices and tells their applications (back-channel logout), so they must sign in again, with a code. Their status does not change.',
           params,
           response: { 200: z.object({ sessionsEnded: z.number().int(), devicesRevoked: z.number().int() }), ...ERROR_RESPONSES },
         },
@@ -251,7 +261,9 @@ export const lifecycleRoutes =
           const found = await findUserById(tx, request.params.id)
           return found ? endSessions(tx, requestContext(request), found) : undefined
         })
-        return result ? { sessionsEnded: result.sessionsEnded, devicesRevoked: result.devicesRevoked } : noUser(reply)
+        if (!result) return noUser(reply)
+        clientLogouts.send(result.user, result.logouts)
+        return { sessionsEnded: result.sessionsEnded, devicesRevoked: result.devicesRevoked }
       },
     )
   }

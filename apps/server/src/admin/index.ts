@@ -12,6 +12,7 @@ import { z } from 'zod'
 import type { RateLimiter } from '../auth/rate-limiter.js'
 import type { SendPasswordResetCode } from '../auth/password-reset.js'
 import type { Notifier } from '../notifications/notifier.js'
+import type { ClientLogouts } from '../oidc/client-logouts.js'
 import type { ProviderHolder } from '../oidc/provider.js'
 import { sendAdminError } from './admin-errors.js'
 import { createAdminAuth } from './auth.js'
@@ -36,11 +37,13 @@ export interface AdminDependencies {
   limiter: RateLimiter
   /** `OUTBOUND_ALLOW_PRIVATE_ADDRESSES`: lets a client's back-channel logout address be http on a private network. */
   allowPrivateAddresses?: boolean
+  /** Tells the applications of a user whose sessions an administrator ended. */
+  clientLogouts: ClientLogouts
 }
 
 /** The admin API, mounted under /admin. */
 export const adminRoutes =
-  ({ db, provider, notifier, sendPasswordResetCode, limiter, allowPrivateAddresses }: AdminDependencies) =>
+  ({ db, provider, notifier, sendPasswordResetCode, limiter, allowPrivateAddresses, clientLogouts }: AdminDependencies) =>
   async (app: FastifyInstance) => {
     app.setValidatorCompiler(validatorCompiler)
     app.setSerializerCompiler(serializerCompiler)
@@ -152,11 +155,11 @@ export const adminRoutes =
       },
     )
 
-    await app.register(usersRoutes({ db, auth }))
+    await app.register(usersRoutes({ db, auth, clientLogouts }))
     await app.register(claimsRoutes({ db, auth }))
     await app.register(devicesRoutes({ db, auth }))
     await app.register(sessionsRoutes({ db, auth }))
-    await app.register(lifecycleRoutes({ db, auth, notifier, sendPasswordResetCode, limiter, issuer: provider.issuer }))
+    await app.register(lifecycleRoutes({ db, auth, notifier, sendPasswordResetCode, limiter, issuer: provider.issuer, clientLogouts }))
     await app.register(claimTypesRoutes({ db, auth, reloadProvider }))
     await app.register(clientsRoutes({ db, auth, reloadProvider, allowPrivateAddresses }))
     await app.register(auditRoutes({ db, auth }))

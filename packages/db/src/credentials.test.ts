@@ -101,20 +101,20 @@ describe.skipIf(!hasDatabase)('activation and password reset', () => {
       [user.id],
     )
 
-    expect(await completePasswordReset(database.db, { userId: user.id, passwordHash: 'new-hash', ip: '198.51.100.9' })).toBe(true)
+    expect(await completePasswordReset(database.db, { userId: user.id, passwordHash: 'new-hash', ip: '198.51.100.9' })).toEqual({ logouts: [] })
 
     expect((await findUserById(database.db, user.id))!.passwordHash).toBe('new-hash')
     expect((await database.pool.query(`select count(*) from oidc_payloads where account_id = $1`, [user.id])).rows[0].count).toBe('0')
     expect((await database.pool.query(`select count(*) from devices where user_id = $1 and revoked_at is null`, [user.id])).rows[0].count).toBe('0')
     const { rows } = await database.pool.query(`select details from audit_events where action = 'user.password_reset.complete' and target_id = $1`, [user.id])
-    expect(rows[0].details).toMatchObject({ sessionsEnded: 1, devicesRevoked: 1 })
+    expect(rows[0].details).toEqual({ email: user.email, sessionsEnded: 1, devicesRevoked: 1, clientsToNotify: 0 })
   })
 
   it('does not reset the password of a user who cannot sign in', async () => {
     const { token, user } = await withLink()
     await completeActivation(database.db, { token, passwordHash: 'old-hash' })
     await database.pool.query(`update users set status = 'locked' where id = $1`, [user.id])
-    expect(await completePasswordReset(database.db, { userId: user.id, passwordHash: 'new-hash' })).toBe(false)
+    expect(await completePasswordReset(database.db, { userId: user.id, passwordHash: 'new-hash' })).toBeUndefined()
     expect((await findUserById(database.db, user.id))!.passwordHash).toBe('old-hash')
   })
 })

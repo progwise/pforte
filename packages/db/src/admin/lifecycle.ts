@@ -1,7 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto'
-import { eq } from 'drizzle-orm'
+import { and, eq, gt, inArray, isNotNull, isNull, or } from 'drizzle-orm'
 import { type DatabaseOrTransaction, recordAuditEvent } from '../audit.js'
-import { oidcPayloads, users } from '../schema/index.js'
+import { MODEL_TYPES } from '../oidc.js'
+import { clients, oidcPayloads, users } from '../schema/index.js'
 import { assertAdminStays } from './admins.js'
 import { revokeUserDevices } from './devices.js'
 import type { RequestContext } from './users.js'
@@ -46,12 +47,71 @@ export const assertAllowed = (user: UserRow, action: LifecycleAction) => {
 }
 
 /**
+ * One logout token to send: to this client, about this user. With `sid` it ends that one session at the client,
+ * without it all sessions the client has of the user.
+ */
+export interface ClientLogout {
+  clientId: string
+  sid?: string
+}
+
+/**
+ * The applications to tell that the sessions of a user ended (back-channel logout): every client with a logout
+ * address that the user has a session with or was granted access to, which covers an application that kept
+ * refreshing its tokens after the browser's session at pforte had expired. A client that asked for the session ID
+ * (`backchannelLogoutSessionRequired`) gets one logout per session, and none for a grant without a session, as
+ * there is no ID to name. Every other client gets one, which means all its sessions of the user.
+ * Must run before the records are deleted: they are the only place that knows.
+ */
+const logoutsFor = async (tx: DatabaseOrTransaction, userId: string, now = new Date()): Promise<ClientLogout[]> => {
+  const rows = await tx
+    .select({ type: oidcPayloads.type, payload: oidcPayloads.payload })
+    .from(oidcPayloads)
+    .where(
+      and(
+        eq(oidcPayloads.accountId, userId),
+        inArray(oidcPayloads.type, [MODEL_TYPES.Session, MODEL_TYPES.Grant]),
+        or(isNull(oidcPayloads.expiresAt), gt(oidcPayloads.expiresAt, now)),
+      ),
+    )
+  /** Per client the session IDs it knows the user by; empty for a client that only holds a grant. */
+  const sessionIds = new Map<string, Set<string>>()
+  const seen = (clientId: string) => sessionIds.get(clientId) ?? sessionIds.set(clientId, new Set()).get(clientId)!
+  for (const row of rows) {
+    const payload = row.payload as { authorizations?: Record<string, { sid?: unknown } | undefined>; clientId?: unknown }
+    if (row.type === MODEL_TYPES.Session) {
+      for (const [clientId, authorization] of Object.entries(payload.authorizations ?? {})) {
+        const known = seen(clientId)
+        if (typeof authorization?.sid === 'string') known.add(authorization.sid)
+      }
+    } else if (typeof payload.clientId === 'string') {
+      seen(payload.clientId)
+    }
+  }
+  if (sessionIds.size === 0) return []
+
+  const listening = await tx
+    .select({ clientId: clients.clientId, sessionRequired: clients.backchannelLogoutSessionRequired })
+    .from(clients)
+    .where(and(inArray(clients.clientId, [...sessionIds.keys()]), isNotNull(clients.backchannelLogoutUri)))
+    .orderBy(clients.clientId)
+  return listening.flatMap(({ clientId, sessionRequired }) =>
+    sessionRequired ? [...sessionIds.get(clientId)!].sort().map((sid) => ({ clientId, sid })) : [{ clientId }],
+  )
+}
+
+/** How many applications are told, for the audit event: several logouts for one client count once. */
+const clientsToNotify = (logouts: ClientLogout[]) => new Set(logouts.map(({ clientId }) => clientId)).size
+
+/**
  * Deletes every session, grant and token of a user and revokes their remembered devices, so they
- * must sign in again, with the second factor. Returns how many of each went.
+ * must sign in again, with the second factor. Returns how many of each went, how many applications are to be
+ * told (for the audit event of the caller) and the logouts to send them once the change is committed.
  */
 export const endUserSessions = async (tx: DatabaseOrTransaction, userId: string) => {
+  const logouts = await logoutsFor(tx, userId)
   const deleted = await tx.delete(oidcPayloads).where(eq(oidcPayloads.accountId, userId)).returning({ id: oidcPayloads.id })
-  return { sessionsEnded: deleted.length, devicesRevoked: await revokeUserDevices(tx, userId) }
+  return { sessionsEnded: deleted.length, devicesRevoked: await revokeUserDevices(tx, userId), clientsToNotify: clientsToNotify(logouts), logouts }
 }
 
 const audit = (context: RequestContext, action: string, user: UserRow, details: Record<string, unknown>) => ({
@@ -75,9 +135,9 @@ export const lockUser = async (tx: DatabaseOrTransaction, context: RequestContex
   assertAllowed(user, 'lock')
   await assertAdminStays(tx, context, user, 'lock')
   const updated = await setStatus(tx, user, { status: 'locked', lockedAt: new Date() })
-  const { sessionsEnded, devicesRevoked } = await endUserSessions(tx, user.id)
-  await recordAuditEvent(tx, audit(context, 'user.lock', user, { from: user.status, to: 'locked', sessionsEnded, devicesRevoked }))
-  return updated
+  const { logouts, ...ended } = await endUserSessions(tx, user.id)
+  await recordAuditEvent(tx, audit(context, 'user.lock', user, { from: user.status, to: 'locked', ...ended }))
+  return { user: updated, logouts }
 }
 
 export const unlockUser = async (tx: DatabaseOrTransaction, context: RequestContext, user: UserRow) => {
@@ -97,9 +157,9 @@ export const deactivateUser = async (tx: DatabaseOrTransaction, context: Request
   await assertAdminStays(tx, context, user, 'deactivate')
   // A pending activation link must not work for someone who was deactivated.
   const updated = await setStatus(tx, user, { status: 'deactivated', activationTokenHash: null, activationExpiresAt: null, activationClientId: null })
-  const { sessionsEnded, devicesRevoked } = await endUserSessions(tx, user.id)
-  await recordAuditEvent(tx, audit(context, 'user.deactivate', user, { from: user.status, to: 'deactivated', sessionsEnded, devicesRevoked }))
-  return updated
+  const { logouts, ...ended } = await endUserSessions(tx, user.id)
+  await recordAuditEvent(tx, audit(context, 'user.deactivate', user, { from: user.status, to: 'deactivated', ...ended }))
+  return { user: updated, logouts }
 }
 
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex')
@@ -162,16 +222,16 @@ export const activateUser = async (tx: DatabaseOrTransaction, context: RequestCo
 /** Asks for a password reset (the notifier sends the code) and ends all sessions, as the account may be compromised. */
 export const requestPasswordReset = async (tx: DatabaseOrTransaction, context: RequestContext, user: UserRow) => {
   assertAllowed(user, 'reset-password')
-  const { sessionsEnded, devicesRevoked } = await endUserSessions(tx, user.id)
-  await recordAuditEvent(tx, audit(context, 'user.password_reset.request', user, { sessionsEnded, devicesRevoked }))
-  return user
+  const { logouts, ...ended } = await endUserSessions(tx, user.id)
+  await recordAuditEvent(tx, audit(context, 'user.password_reset.request', user, ended))
+  return { user, logouts }
 }
 
 export const endSessions = async (tx: DatabaseOrTransaction, context: RequestContext, user: UserRow) => {
   assertAllowed(user, 'end-sessions')
-  const { sessionsEnded, devicesRevoked } = await endUserSessions(tx, user.id)
-  await recordAuditEvent(tx, audit(context, 'user.sessions.end', user, { sessionsEnded, devicesRevoked }))
-  return { user, sessionsEnded, devicesRevoked }
+  const { logouts, ...ended } = await endUserSessions(tx, user.id)
+  await recordAuditEvent(tx, audit(context, 'user.sessions.end', user, ended))
+  return { user, sessionsEnded: ended.sessionsEnded, devicesRevoked: ended.devicesRevoked, logouts }
 }
 
 export const activationTokenHash = hashToken

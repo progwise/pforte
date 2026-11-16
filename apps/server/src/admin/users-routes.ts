@@ -17,6 +17,7 @@ import { type AdminAuth, hasScope } from './auth.js'
 import { answeringAdminErrors } from './admin-errors.js'
 import { claimValues } from './claims-routes.js'
 import { isUniqueViolation } from './db-errors.js'
+import type { ClientLogouts } from '../oidc/client-logouts.js'
 import { problem, problemSchema } from './problem.js'
 
 const USER_STATUSES = ['created', 'active', 'locked', 'deactivated'] as const
@@ -81,7 +82,7 @@ class DryRunRollback extends Error {
 }
 
 export const usersRoutes =
-  ({ db, auth }: { db: Database; auth: AdminAuth }) =>
+  ({ db, auth, clientLogouts }: { db: Database; auth: AdminAuth; /** Tells the applications of a deleted user. */ clientLogouts: ClientLogouts }) =>
   async (instance: FastifyInstance) => {
     const app = instance.withTypeProvider<ZodTypeProvider>()
     const onRequest = auth.require('directory', 'admin')
@@ -219,7 +220,7 @@ export const usersRoutes =
         schema: {
           tags: ['Users'],
           summary: 'Delete a user',
-          description: 'Removes the user, their claims and devices. The audit log keeps who they were.',
+          description: 'Removes the user, their claims and devices, ends their sessions and tells their applications (back-channel logout). The audit log keeps who they were.',
           params: z.object({ id: z.uuid() }),
           response: { 204: z.null(), ...ERROR_RESPONSES },
         },
@@ -227,11 +228,11 @@ export const usersRoutes =
       async (request, reply) => {
         const deleted = await db.transaction(async (tx) => {
           const user = await findUserById(tx, request.params.id)
-          if (!user) return false
-          await deleteUser(tx, requestContext(request), user)
-          return true
+          return user ? { user, ...(await deleteUser(tx, requestContext(request), user)) } : undefined
         })
-        return deleted ? reply.code(204).send(null) : notFound(reply)
+        if (!deleted) return notFound(reply)
+        clientLogouts.send(deleted.user, deleted.logouts)
+        return reply.code(204).send(null)
       },
     )
 

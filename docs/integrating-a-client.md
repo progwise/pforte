@@ -168,15 +168,36 @@ if (payload.nonce !== expectedNonce) throw new Error('The nonce does not match')
 and `post_logout_redirect_uri` (registered for the client). pforte asks the person to confirm, ends the browser's session, revokes the
 refresh tokens of it, and sends the browser back.
 
-**Back-channel logout.** If the client has a back-channel logout address, pforte sends a `logout_token` (a signed JWT with the
-`sid` of the session) to it with a POST when the person signs out. Use it to end your own session of that person. pforte refuses
-to call addresses on private networks unless the operator allows it (`OUTBOUND_ALLOW_PRIVATE_ADDRESSES` in the
+**Back-channel logout.** If the client has a back-channel logout address, pforte sends a `logout_token` (a signed JWT) to it
+with a POST when a session of the person ends. Use it to end your own session of that person. Answer `200` or `204`. The
+token is sent in two cases:
+
+- **The person signs out at pforte.** The token goes to the applications of that browser session.
+- **Somebody ends the person's sessions for them:** an administrator locks, deactivates or deletes the person, signs them out
+  everywhere or starts a password reset, or the person completes a password reset. The token goes to every application the
+  person has a session with or still holds tokens for, so also to an application that kept refreshing after the browser
+  session at pforte had expired.
+
+What the token names depends on how the client is registered. With `backchannelLogoutSessionRequired` (in the administration:
+*Send the session ID with the logout message*), it carries the `sid` of one session, the same `sid` as in the ID token, and
+you get one token per session; an application that only holds tokens, without a
+session at pforte, is then not told. Without it, the token carries only `sub`, which means: end all sessions of this person.
+
+The second case is **best effort**. pforte calls after the change is saved and does not wait for your answer. It tries three
+times within about ten seconds, each time with a new token and a timeout of 2.5 seconds, and then gives up; an application
+that is down for longer, or a restart of pforte in those seconds, means the token is lost. The administrator's action never
+fails because of it; an application that could not be told is recorded in the [audit log](audit-log.md#telling-applications).
+So keep renewing your tokens as well: a refresh fails once the person's sessions were ended, and that is the check that
+cannot be missed.
+
+pforte refuses to call addresses on private networks unless the operator allows it (`OUTBOUND_ALLOW_PRIVATE_ADDRESSES` in the
 [configuration](configuration.md)).
 
 **Only in your application.** If you only end your own session, pforte still knows the person: the next *Sign in* signs them
 in again without a password. That is single sign-on. To let somebody else sign in, end the session at pforte, or send `prompt=login`.
 
-When an administrator locks or deactivates a person, their sessions and refresh tokens end ([the administration](administration.md)).
+When an administrator locks or deactivates a person, their sessions and refresh tokens end ([the administration](administration.md)),
+and applications with a back-channel logout address are told, as described above.
 
 ## Asking for more
 
