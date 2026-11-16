@@ -16,10 +16,12 @@ const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebK
 
 describe.skipIf(!hasDatabase)('the account pages: passkeys', () => {
   let h: AdminHarness
+  let idOfAnna: string
   const device = createAuthenticator({ origin: ISSUER })
 
   beforeAll(async () => {
     h = await createAdminHarness()
+    idOfAnna = (await h.database.pool.query(`select id from users where email = $1`, [A.email])).rows[0].id
   })
 
   afterAll(async () => {
@@ -34,6 +36,7 @@ describe.skipIf(!hasDatabase)('the account pages: passkeys', () => {
     await h.database.pool.query('delete from rate_limits')
     await h.database.pool.query('delete from otp_codes')
     await h.database.pool.query('delete from passkeys')
+    await h.database.pool.query('delete from passkey_challenges')
     await h.database.pool.query(`delete from audit_events where action like 'user.passkey.%'`)
     await h.database.pool.query(`delete from oidc_payloads where account_id in (select id::text from users where email in ($1, $2))`, [A.email, B.email])
     await h.database.pool.query(`update users set status = 'active', locked_at = null, language = 'en' where email in ($1, $2)`, [A.email, B.email])
@@ -42,6 +45,8 @@ describe.skipIf(!hasDatabase)('the account pages: passkeys', () => {
   const idOf = async (email: string) => (await h.database.pool.query(`select id from users where email = $1`, [email])).rows[0].id as string
   const passkeysOf = async (email: string) => (await h.database.pool.query(`select * from passkeys where user_id = $1 order by created_at`, [await idOf(email)])).rows
   const mails = () => h.notifications.filter((notification) => notification.kind === 'passkey-added')
+  /** The questions pforte is waiting for an answer to. */
+  const open = async () => (await h.database.pool.query('select challenge, user_id, expires_at from passkey_challenges order by created_at')).rows
 
   /** A browser in which this person is signed in to their account pages, a moment ago. */
   const signedIn = async (email: string) => {
@@ -112,9 +117,21 @@ describe.skipIf(!hasDatabase)('the account pages: passkeys', () => {
       expect(Buffer.from(asked.challenge, 'base64url').length).toBeGreaterThanOrEqual(16)
     })
 
-    it('asks a new question every time', async () => {
+    it('asks a new question every time, and keeps it at pforte for five minutes, for that person', async () => {
       const browser = await signedIn(A.email)
-      expect((await question(browser)).challenge).not.toBe((await question(browser)).challenge)
+
+      const first = await question(browser)
+      const second = await question(browser)
+
+      expect(first.challenge).not.toBe(second.challenge)
+      const waiting = await open()
+      expect(waiting.map((row) => row.challenge)).toEqual([first.challenge, second.challenge])
+      expect(waiting.every((row) => row.user_id === idOfAnna)).toBe(true)
+      const left = waiting[1].expires_at.getTime() - Date.now()
+      expect(left).toBeGreaterThan(4 * 60_000)
+      expect(left).toBeLessThanOrEqual(5 * 60_000)
+      // Nothing about it is left with the browser.
+      expect([...browser.cookies.keys()].filter((name) => /passkey/.test(name))).toEqual([])
     })
 
     it('may run the one script, and nothing else', async () => {
@@ -150,7 +167,7 @@ describe.skipIf(!hasDatabase)('the account pages: passkeys', () => {
 
       expect(page.statusCode).toBe(303)
       expect(page.headers.location).toBe('/account/login?again=1&next=%2Faccount%2Fpasskeys%2Fnew')
-      expect(browser.cookies.has('pforte_account_passkey')).toBe(false)
+      expect(await open()).toEqual([])
     })
 
     it('names the passkeys the person has, so a device that holds one makes no second', async () => {
@@ -206,7 +223,7 @@ describe.skipIf(!hasDatabase)('the account pages: passkeys', () => {
       expect(event).toMatchObject({ actor_type: 'user', actor_id: await idOf(A.email), user_agent: IPHONE })
       expect(event.details).toMatchObject({ email: A.email, self: true, passkeyId: stored[0].id, label: 'Safari, iPhone', synced: true })
       // The question is used up.
-      expect(browser.cookies.has('pforte_account_passkey')).toBe(false)
+      expect(await open()).toEqual([])
     })
 
     it('tells the person by e-mail, with the page where they remove it', async () => {
@@ -270,18 +287,20 @@ describe.skipIf(!hasDatabase)('the account pages: passkeys', () => {
         ['made on pforte\'s host but another port', { origin: 'https://localhost:3301' }],
         ['made for another host', { rpId: 'example.com' }],
         ['made without the device checking the person', { userVerified: false }],
-        ['made for another question', { challenge: Buffer.from('an older question, or none').toString('base64url') }],
       ] satisfies [string, AnswerOptions][])('when the answer was %s', async (_name, answer) => {
         const browser = await signedIn(A.email)
         const asked = await question(browser)
 
         await refused(browser, await post(browser, '/account/passkeys/new', { credential: JSON.stringify(device.create(asked, answer)) }), REJECTED)
+        // A wrong answer uses the question up as a right one does.
+        expect(await open()).toEqual([])
       })
 
       it.each([
         ['nothing', {}],
         ['not JSON', { credential: 'passkey' }],
         ['JSON that is no answer', { credential: '{"id":"x","response":{}}' }],
+        ['an answer that names no question', { credential: JSON.stringify({ response: { clientDataJSON: Buffer.from('{"type":"webauthn.create"}').toString('base64url') } }) }],
       ] satisfies [string, Record<string, string>][])('when what comes back is %s', async (_name, form) => {
         const browser = await signedIn(A.email)
         await question(browser)
@@ -289,19 +308,18 @@ describe.skipIf(!hasDatabase)('the account pages: passkeys', () => {
         await refused(browser, await post(browser, '/account/passkeys/new', form), REJECTED)
       })
 
-      it('when no question was asked', async () => {
+      it('when the answer is for a question that was never asked', async () => {
         const browser = await signedIn(A.email)
         const asked = await question(browser)
-        browser.cookies.delete('pforte_account_passkey')
+        const answer = device.create(asked, { challenge: Buffer.from('a question nobody asked').toString('base64url') })
 
-        await refused(browser, await post(browser, '/account/passkeys/new', { credential: JSON.stringify(device.create(asked)) }), EXPIRED)
+        await refused(browser, await post(browser, '/account/passkeys/new', { credential: JSON.stringify(answer) }), EXPIRED)
       })
 
       it('when the question is older than five minutes', async () => {
         const browser = await signedIn(A.email)
         const asked = await question(browser)
-        const waiting = unsign<{ expiresAt: number }>(COOKIE_KEYS, browser.cookies.get('pforte_account_passkey'))!
-        browser.cookies.set('pforte_account_passkey', sign(COOKIE_KEYS, { ...waiting, expiresAt: Date.now() - 1000 }))
+        await h.database.pool.query(`update passkey_challenges set expires_at = now() - interval '1 second'`)
 
         await refused(browser, await post(browser, '/account/passkeys/new', { credential: JSON.stringify(device.create(asked)) }), EXPIRED)
       })
@@ -310,47 +328,80 @@ describe.skipIf(!hasDatabase)('the account pages: passkeys', () => {
         const ben = await signedIn(B.email)
         const asked = await question(ben)
         const anna = await signedIn(A.email)
-        anna.cookies.set('pforte_account_passkey', ben.cookies.get('pforte_account_passkey')!)
 
         await refused(anna, await post(anna, '/account/passkeys/new', { credential: JSON.stringify(device.create(asked)) }), EXPIRED)
         expect(await passkeysOf(B.email)).toEqual([])
+        // Ben's question is still his to answer.
+        expect((await follow(ben, await post(ben, '/account/passkeys/new', { credential: JSON.stringify(device.create(asked)) }))).body).toContain('The passkey was created.')
       })
 
-      it('when another cookie of pforte is passed off as the question', async () => {
-        const browser = await signedIn(A.email)
-        const asked = await question(browser)
-        // The session of the account pages is signed with the same keys, names the person and has not run out.
-        browser.cookies.set('pforte_account_passkey', browser.cookies.get('pforte_account')!)
+      it('when the question was asked in another sign-in of the same person', async () => {
+        const one = await signedIn(A.email)
+        const asked = await question(one)
+        const other = await signedIn(A.email)
 
-        await refused(browser, await post(browser, '/account/passkeys/new', { credential: JSON.stringify(device.create(asked)) }), EXPIRED)
+        await refused(other, await post(other, '/account/passkeys/new', { credential: JSON.stringify(device.create(asked)) }), EXPIRED)
       })
 
-      it('when the question was changed', async () => {
+      it('when the sign-in the question was asked in has ended', async () => {
         const browser = await signedIn(A.email)
         const asked = await question(browser)
-        const waiting = unsign<object>(COOKIE_KEYS, browser.cookies.get('pforte_account_passkey'))!
-        browser.cookies.set('pforte_account_passkey', sign(['another key, not pforte\'s own'.padEnd(40, '.')], waiting))
+        const credential = JSON.stringify(device.create(asked))
+        await h.database.pool.query(`delete from oidc_payloads where account_id = $1`, [idOfAnna])
 
-        await refused(browser, await post(browser, '/account/passkeys/new', { credential: JSON.stringify(device.create(asked)) }), EXPIRED)
+        const response = await post(browser, '/account/passkeys/new', { credential })
+
+        expect(response.statusCode).toBe(303)
+        expect(response.headers.location).toBe('/account/login')
+        expect(await passkeysOf(A.email)).toEqual([])
       })
     })
 
-    it('takes an answer once: the same one sent again adds nothing', async () => {
+    it('takes an answer once: sent again it adds nothing, also after its passkey was removed', async () => {
       const browser = await signedIn(A.email)
       const asked = await question(browser)
-      const cookie = browser.cookies.get('pforte_account_passkey')!
       const credential = JSON.stringify(device.create(asked))
       await follow(browser, await post(browser, '/account/passkeys/new', { credential }))
 
-      // Without the cookie, which the first answer removed.
       expect((await follow(browser, await post(browser, '/account/passkeys/new', { credential }))).body).toContain('That took too long. Start again.')
-      // And with a copy of it that somebody kept.
-      browser.cookies.set('pforte_account_passkey', cookie)
-      expect((await follow(browser, await post(browser, '/account/passkeys/new', { credential }))).body).toContain('That passkey is known already.')
+      expect(await passkeysOf(A.email)).toHaveLength(1)
 
+      // Removed, the passkey must stay removed: the answer that made it is worth nothing any more.
+      const [passkey] = await passkeysOf(A.email)
+      await follow(browser, await post(browser, '/account/passkeys/remove', { passkey: passkey.id }))
+      expect((await follow(browser, await post(browser, '/account/passkeys/new', { credential }))).body).toContain('That took too long. Start again.')
+
+      expect(await passkeysOf(A.email)).toEqual([])
+      await h.settle()
+      expect(mails()).toHaveLength(1)
+      expect(await h.audit('user.passkey.add', idOfAnna)).toHaveLength(1)
+    })
+
+    it('takes one of two answers that arrive at the same moment', async () => {
+      const browser = await signedIn(A.email)
+      const asked = await question(browser)
+      const credential = JSON.stringify(device.create(asked))
+
+      const responses = await Promise.all(Array.from({ length: 5 }, () => post(browser, '/account/passkeys/new', { credential })))
+
+      expect(responses.map((response) => response.statusCode)).toEqual([303, 303, 303, 303, 303])
       expect(await passkeysOf(A.email)).toHaveLength(1)
       await h.settle()
       expect(mails()).toHaveLength(1)
+    })
+
+    it('does not store a credential that is known already, whoever has it', async () => {
+      const browser = await signedIn(A.email)
+      const asked = await question(browser)
+      const answer = device.create(asked)
+      await h.database.pool.query(`insert into passkeys (user_id, credential_id, public_key) values ($1, $2, 'key')`, [await idOf(B.email), answer.id])
+
+      const page = await follow(browser, await post(browser, '/account/passkeys/new', { credential: JSON.stringify(answer) }))
+
+      expect(page.body).toContain('That passkey is known already.')
+      expect(await passkeysOf(A.email)).toEqual([])
+      await h.settle()
+      expect(mails()).toEqual([])
     })
 
     it('stops at twenty passkeys, before the device is asked and when its answer comes', async () => {

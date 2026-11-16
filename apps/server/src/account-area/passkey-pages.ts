@@ -1,6 +1,5 @@
-import { addPasskey, listPasskeys, MAX_PASSKEYS, type RequestContext, removePasskey } from '@progwise/pforte-db/admin'
+import { addPasskey, listPasskeys, MAX_PASSKEYS, openPasskeyChallenge, type RequestContext, removePasskey, takePasskeyChallenge } from '@progwise/pforte-db/admin'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
-import { readCookie, setCookieHeader, sign, unsign } from '../interaction/signed-cookie.js'
 import { NotifierUnavailableError } from '../notifications/notifier.js'
 import { passkeyLabel } from '../passkeys/index.js'
 import { escapeHtml } from '../ui/pages.js'
@@ -14,12 +13,15 @@ const NEW = `${PASSKEYS}/new`
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-const CHALLENGE_COOKIE = 'pforte_account_passkey'
-/** The question a device was asked, and for whom, until its answer comes back. */
-interface Challenge {
-  userId: string
-  challenge: string
-  expiresAt: number
+/** The challenge an answer says it is for. It is read from the answer only to find the question; whether the answer is one is checked after. */
+const challengeNamedBy = (answer: unknown) => {
+  try {
+    const clientData = (answer as { response?: { clientDataJSON?: unknown } } | null)?.response?.clientDataJSON
+    const challenge = typeof clientData === 'string' ? (JSON.parse(Buffer.from(clientData, 'base64url').toString()) as { challenge?: unknown } | null)?.challenge : undefined
+    return typeof challenge === 'string' && challenge ? challenge : undefined
+  } catch {
+    return undefined
+  }
 }
 
 /**
@@ -30,11 +32,12 @@ interface Challenge {
  * sign-in is asked for when that question is handed out, and its answer is accepted for as long as a sign-in
  * counts as recent. Asking again at the answer could refuse a passkey the device has already made, and the
  * person would be left with a passkey on their phone that pforte does not know.
+ *
+ * The question is kept at pforte, for the person and the sign-in it was asked in, and is used up by the first
+ * answer that names it. So an answer works once: not a second time, and not again after its passkey was removed.
  */
 export const registerPasskeyPages = (app: FastifyInstance, ctx: AccountContext) => {
-  const { db, issuer, cookieKeys, gate, viewFor, page, redirectWith, requireRecentSignIn, formatTime, passkeys, notifier, background } = ctx
-  const secure = issuer.startsWith('https:')
-  const challengeCookie = (value: string, maxAgeSeconds: number) => setCookieHeader(CHALLENGE_COOKIE, value, { path: PASSKEYS, maxAgeSeconds, secure })
+  const { db, issuer, gate, viewFor, page, redirectWith, requireRecentSignIn, formatTime, passkeys, notifier, background } = ctx
 
   const selfContext = (request: FastifyRequest, user: AccountUser): RequestContext => ({
     actor: { type: 'user', id: user.id },
@@ -86,8 +89,7 @@ ${list}
     if (own.length >= MAX_PASSKEYS) return redirectWith(reply, PASSKEYS, { kind: 'error', key: 'account.passkeys.tooMany', values: { count: String(MAX_PASSKEYS) } })
 
     const options = await passkeys.ceremonies.creationOptions(user, own)
-    const waiting: Challenge = { userId: user.id, challenge: options.challenge, expiresAt: Date.now() + STEP_UP_SECONDS * 1000 }
-    reply.header('Set-Cookie', challengeCookie(sign(cookieKeys, waiting), STEP_UP_SECONDS))
+    await openPasskeyChallenge(db, { challenge: options.challenge, userId: user.id, grantId: session.grantId }, new Date(Date.now() + STEP_UP_SECONDS * 1000))
     passkeys.script.allow(reply)
 
     // Without the script, or in a browser that knows no passkeys, the page stays as it is sent: the button
@@ -113,13 +115,7 @@ ${passkeys.script.tag}`
   app.post<{ Body: Record<string, unknown> }>(NEW, async (request, reply) => {
     const signedIn = await gate.requireAccountSession(request, reply)
     if (!signedIn) return reply
-    const { user } = signedIn
-
-    // The question is good for one answer, whatever that answer turns out to be.
-    const waiting = unsign<Challenge>(cookieKeys, readCookie(request.headers.cookie, CHALLENGE_COOKIE))
-    reply.header('Set-Cookie', challengeCookie('', 0))
-    // Another cookie of pforte, signed with the same keys, is no question: it has no challenge.
-    if (!waiting || typeof waiting.challenge !== 'string' || !waiting.challenge || waiting.userId !== user.id || !(waiting.expiresAt >= Date.now())) return redirectWith(reply, PASSKEYS, { kind: 'error', key: 'account.passkeys.expired' })
+    const { user, session } = signedIn
 
     let answer: unknown
     try {
@@ -127,7 +123,15 @@ ${passkeys.script.tag}`
     } catch {
       answer = undefined
     }
-    const created = answer ? await passkeys.ceremonies.verifyCreation(answer, waiting.challenge) : undefined
+    const challenge = challengeNamedBy(answer)
+    if (!challenge) return redirectWith(reply, PASSKEYS, { kind: 'error', key: 'account.passkeys.rejected' })
+
+    // The question is good for one answer, whatever that answer turns out to be: it is used up here, before the
+    // answer is looked at. One that was never asked, was asked of somebody else or in another sign-in, has run
+    // out or was answered before is not there.
+    if (!(await takePasskeyChallenge(db, { challenge, userId: user.id, grantId: session.grantId }))) return redirectWith(reply, PASSKEYS, { kind: 'error', key: 'account.passkeys.expired' })
+
+    const created = await passkeys.ceremonies.verifyCreation(answer, challenge)
     if (!created) return redirectWith(reply, PASSKEYS, { kind: 'error', key: 'account.passkeys.rejected' })
 
     const label = passkeyLabel(request.headers['user-agent'])

@@ -41,7 +41,8 @@ older, the person signs in again, with password and code even though they are si
 were on. What they were about to do is not done for them: the page says to repeat it, however long the sign-in took.
 
 Adding a passkey takes two steps, with the device's own question in between. The sign-in is checked when the page that
-asks the device is opened, and the device's answer is accepted for five minutes from then. Checking again at the answer
+asks the device is opened, and the device's answer is accepted for five minutes from then, once, and only in the
+sign-in the question was asked in. Checking again at the answer
 could refuse a passkey the device has already made, and the person would keep a passkey on their phone that pforte does
 not know.
 

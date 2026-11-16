@@ -38,7 +38,7 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   **Signing in with a passkey is not in yet**; it follows before this is released. **pforte's pages now run one script**,
   on the page that creates a passkey only: one file served by pforte, allowed in that page's policy by its exact
   address, making no requests; every other page keeps the policy without script. **A passkey is bound to the host in
-  `ISSUER`: changing that host makes every passkey stop working.** The update adds the table `passkeys`
+  `ISSUER`: changing that host makes every passkey stop working.** The update adds the tables `passkeys` and `passkey_challenges`
   ([the account pages](docs/account.md#passkeys), [security measures](docs/security.md#the-one-script),
   [#45](https://github.com/progwise/pforte/issues/45)).
 - **Applications are told when somebody else ends a person's sessions** (back-channel logout). Until now a client with a

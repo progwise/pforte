@@ -1,5 +1,5 @@
 import { createDb, deleteExpiredOidcPayloads, getDatabaseTime } from '@progwise/pforte-db'
-import { deleteOldLoginEvents } from '@progwise/pforte-db/admin'
+import { deleteExpiredPasskeyChallenges, deleteOldLoginEvents } from '@progwise/pforte-db/admin'
 import { deleteOldCodes } from '@progwise/pforte-db/codes'
 import { deleteOldDevices } from '@progwise/pforte-db/devices'
 import { deleteOldRateLimits } from '@progwise/pforte-db/rate-limits'
@@ -150,6 +150,7 @@ const cleanup = setInterval(() => {
   }
   deleteOldRateLimits(db).catch((error) => app.log.error(error, 'cleanup of old rate limit counters failed'))
   deleteOldDevices(db).catch((error) => app.log.error(error, 'cleanup of old devices failed'))
+  deleteExpiredPasskeyChallenges(db).catch((error) => app.log.error(error, 'cleanup of unanswered passkey questions failed'))
 }, CLEANUP_INTERVAL_MS)
 cleanup.unref()
 

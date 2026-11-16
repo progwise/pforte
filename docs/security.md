@@ -50,7 +50,6 @@ affected either.
 | `pforte_device_new` | The token of a device that an activation remembered, until the next sign-in in that browser moves it into `pforte_device`. | like `pforte_device` |
 | `pforte_manage`, `pforte_manage_login`, `pforte_manage_flash` | The session of a person in the administration, the sign-in on its way there and back, and the message an action leaves for the next page. Signed. | `HttpOnly`, `Secure` (https), `SameSite=Strict`, path `/manage`; 8 hours at most, 10 minutes, 2 minutes |
 | `pforte_account`, `pforte_account_login`, `pforte_account_flash` | The same for [the account pages](account.md). The session holds who the person is, which sign-in it came from and when, no token. Signed. | `HttpOnly`, `Secure` (https), `SameSite=Lax`, path `/account`; 1 hour, 10 minutes, 2 minutes |
-| `pforte_account_passkey` | The question a device was asked when a passkey is created, and for whom, until its answer comes back. Signed. | `HttpOnly`, `Secure` (https), `SameSite=Strict`, path `/account/passkeys`, 5 minutes; removed with the first answer |
 | `_session`, `_interaction`, … | The provider's own: the single sign-on session and the open sign-in. Signed with `COOKIE_KEYS`. | `HttpOnly`, `Secure` (https). `SameSite=None` over https, because OpenID Connect requires the authorization endpoint to accept POST; `Lax` over http |
 
 A test signs in over https and checks that every cookie has `HttpOnly`, `Secure` and a `SameSite` value.
@@ -104,9 +103,13 @@ What pforte insists on:
   refused.
 - **The passkey is made for pforte's host and on pforte's own page.** The answer of the device names the origin of the
   page it was on and the host it is for; both must be the ones of `ISSUER`, to the port.
-- **A question is answered once.** The challenge is random, waits in a signed cookie for five minutes, names the person
-  it was asked for, and is removed with the first answer, right or wrong.
+- **A question is answered once.** The challenge is random and is kept at pforte, not in the browser, for five minutes,
+  for the person and the sign-in it was asked in. The first answer that names it uses it up, right or wrong, in one
+  database statement, so of two answers at the same moment one is too late. An answer cannot be sent a second time,
+  also not after its passkey was removed, and not in another session.
 - **A passkey is known once.** A credential that is stored already, for this person or another, is not stored again.
+- **Twenty per person, also under load.** The person's row is locked while their passkeys are counted and the new one
+  is stored, so passkeys that arrive at the same moment are counted one after the other.
 - **No attestation.** pforte does not ask which make of device it is, and keeps nothing that identifies the device.
 - **Nothing secret is stored.** The table holds the public key, the id of the credential and a label. A copy of the
   database signs nobody in.
