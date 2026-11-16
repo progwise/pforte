@@ -27,6 +27,9 @@ once. When an SMS cannot be sent at sign-in, pforte sends the same code by e-mai
 does not lock anybody out. The provider's answer is never shown to users or written to the log, as it can
 contain the number and the code.
 
+On a Docker Swarm the body needs care: a swarm reads `{{...}}` in the environment of a service as a template of its own
+and refuses `{{to}}`. The [example for Docker Swarm](../examples/swarm/README.md#codes-by-sms) takes care of it.
+
 ## Twilio
 
 ```sh

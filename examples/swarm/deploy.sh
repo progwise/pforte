@@ -30,6 +30,13 @@ for secret in db_password database_url cookie_keys jwks smtp_url; do
 done
 grep -q "@${STACK_NAME}_db:" secrets/database_url || fail "secrets/database_url does not name the database of the stack \"${STACK_NAME}\" (${STACK_NAME}_db). The stack name was changed after ./setup.sh."
 case "${DATA_DIR}" in /*) ;; *) fail "DATA_DIR must be an absolute path on the node that runs the services." ;; esac
+# Codes by SMS are optional (stack.sms.yml). The headers are the credentials of the provider: a file in ./secrets
+# like the other secrets, not a line of .env, which would put them into the definition of the service.
+if [ -n "${SMS_PROVIDER:-}" ]; then
+  [ -z "${SMS_HEADERS:-}" ] || fail "SMS_HEADERS is set in .env. The headers carry the credentials of the SMS provider: put the JSON object into the file secrets/sms_headers and remove the line."
+  [ -s secrets/sms_headers ] || fail "SMS_PROVIDER is set, but secrets/sms_headers is missing or empty. It holds the headers for the SMS provider as a JSON object (README.md)."
+  [ -n "${SMS_BODY:-}" ] || fail "SMS_BODY is not set in .env."
+fi
 
 # Two Dockers. The manager's takes the stack. The one of the node the services run on gets the data folder and
 # the images, and the services are pinned to that node (below): on any other the database would start next to an
@@ -47,6 +54,13 @@ export DATABASE_URL_PRINT="$(fingerprint secrets/database_url)"
 export COOKIE_KEYS_PRINT="$(fingerprint secrets/cookie_keys)"
 export JWKS_PRINT="$(fingerprint secrets/jwks)"
 export SMTP_URL_PRINT="$(fingerprint secrets/smtp_url)"
+SMS_HEADERS_PRINT=''
+if [ -n "${SMS_PROVIDER:-}" ]; then
+  export SMS_HEADERS_PRINT="$(fingerprint secrets/sms_headers)"
+  # A swarm reads {{...}} in the environment of a service as a template of its own and refuses {{to}}. Each
+  # placeholder is passed as a template that gives the placeholder itself: {{to}} becomes {{"{{to}}"}}.
+  export SMS_BODY_FOR_SWARM="$(printf '%s' "${SMS_BODY}" | sed 's/{{[^{}]*}}/{{"&"}}/g')"
+fi
 
 # `build` as an image means: this checkout, built on the node that will run it. Nothing is pushed to a registry,
 # so the swarm must not look the image up there.
@@ -60,6 +74,7 @@ if [ "${PFORTE_IMAGE}" = build ]; then
   RESOLVE=never
 fi
 FILES=(-c stack.yml)
+[ -z "${SMS_PROVIDER:-}" ] || FILES+=(-c stack.sms.yml)
 if [ -n "${APP_HOST:-}" ]; then
   FILES+=(-c stack.app.yml)
   if [ "${APP_IMAGE:-build}" = build ]; then
@@ -78,6 +93,8 @@ echo "pforte:     https://${PFORTE_HOST}  (${PFORTE_IMAGE})"
 [ -z "${APP_HOST:-}" ] || echo "Application: https://${APP_HOST}  (${APP_IMAGE}, client ${APP_CLIENT_ID:-example-app})"
 echo "Runs on:    ${NODE:-the node of the Docker of this shell}, and only there; data in ${DATA_DIR}"
 echo "Mail from:  ${MAIL_FROM}"
+# Only the host: with some providers the address itself carries an account or a key.
+[ -z "${SMS_PROVIDER:-}" ] || echo "SMS:        through $(printf '%s' "${SMS_URL:-}" | sed -E 's#^[a-z]+://([^/@]*@)?([^/:?]+).*#\2#')"
 [ -z "${BOOTSTRAP_ADMIN_EMAIL:-}" ] || echo "First administrator: ${BOOTSTRAP_ADMIN_EMAIL} (gets the activation link while the database has no administrator)"
 
 if ${CHECK}; then
@@ -117,12 +134,12 @@ on_swarm stack deploy --resolve-image "${RESOLVE}" --prune "${FILES[@]}" "${STAC
 
 # The secrets this stack had before a file changed are removed. Only what is certainly one of them: a secret that
 # this stack made (its label; a name that starts the same can belong to the stack "${STACK_NAME}_other") and that
-# is named as the five above are. Nothing else on the swarm is touched.
-replaced="^${STACK_NAME}_(db_password|database_url|cookie_keys|jwks|smtp_url)_[0-9a-f]{12}$"
+# is named as the ones above are. Nothing else on the swarm is touched.
+replaced="^${STACK_NAME}_(db_password|database_url|cookie_keys|jwks|smtp_url|sms_headers)_[0-9a-f]{12}$"
 on_swarm secret ls --filter "label=com.docker.stack.namespace=${STACK_NAME}" --format '{{.Name}}' | while read -r secret; do
   [[ "${secret}" =~ ${replaced} ]] || continue
   case "${secret}" in
-    "${STACK_NAME}_db_password_${DB_PASSWORD_PRINT}" | "${STACK_NAME}_database_url_${DATABASE_URL_PRINT}" | "${STACK_NAME}_cookie_keys_${COOKIE_KEYS_PRINT}" | "${STACK_NAME}_jwks_${JWKS_PRINT}" | "${STACK_NAME}_smtp_url_${SMTP_URL_PRINT}") ;;
+    "${STACK_NAME}_db_password_${DB_PASSWORD_PRINT}" | "${STACK_NAME}_database_url_${DATABASE_URL_PRINT}" | "${STACK_NAME}_cookie_keys_${COOKIE_KEYS_PRINT}" | "${STACK_NAME}_jwks_${JWKS_PRINT}" | "${STACK_NAME}_smtp_url_${SMTP_URL_PRINT}" | "${STACK_NAME}_sms_headers_${SMS_HEADERS_PRINT}") ;;
     *) on_swarm secret rm "${secret}" > /dev/null 2>&1 && echo "Removed the old secret ${secret}" || true ;;
   esac
 done

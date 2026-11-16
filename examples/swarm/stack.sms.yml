@@ -1,0 +1,24 @@
+# Codes by SMS (docs/sms.md): the SMS settings of .env for pforte. deploy.sh adds this file when SMS_PROVIDER is
+# set in .env. The headers carry the credentials of the provider, so they are a secret like the others: the file
+# ./secrets/sms_headers, a JSON object.
+version: '3.8'
+
+services:
+  pforte:
+    environment:
+      SMS_PROVIDER: ${SMS_PROVIDER}
+      SMS_URL: ${SMS_URL:?Set SMS_URL in .env}
+      SMS_METHOD: ${SMS_METHOD:-POST}
+      SMS_CONTENT_TYPE: ${SMS_CONTENT_TYPE:-json}
+      # Not SMS_BODY as it is in .env: a swarm reads {{...}} in the environment of a service as a template of its
+      # own, and would refuse {{to}}. deploy.sh passes the body in a form the swarm turns back into the original.
+      SMS_BODY: ${SMS_BODY_FOR_SWARM:?deploy.sh sets SMS_BODY_FOR_SWARM}
+      SMS_FROM: ${SMS_FROM:-}
+      SMS_SUCCESS_PATTERN: ${SMS_SUCCESS_PATTERN:-}
+      SMS_HEADERS_FILE: /run/secrets/sms_headers
+    secrets: [sms_headers]
+
+secrets:
+  sms_headers:
+    file: ./secrets/sms_headers
+    name: ${STACK_NAME}_sms_headers_${SMS_HEADERS_PRINT}
