@@ -291,6 +291,38 @@ describe.skipIf(!hasDatabase)('the administration UI: signing in and out', () =>
       expect(browser.cookies.has('pforte_manage')).toBe(false)
       expect((await browser.request('GET', '/manage')).statusCode).toBe(303)
     })
+
+    it('is offered a sign-in with a different account, which asks for the password although the browser is signed in', async () => {
+      const browser = new Browser(h.app)
+      const refused = await drive(browser, '/manage/users?search=ada', 'ben.keller@example.com')
+      expect(refused.response.body).toContain('<a class="button" href="/manage/login?again=1&amp;next=%2Fmanage%2Fusers%3Fsearch%3Dada">Sign in with a different account</a>')
+
+      const response = await browser.request('GET', '/manage/login?again=1&next=%2Fmanage%2Fusers%3Fsearch%3Dada')
+
+      expect(response.statusCode).toBe(303)
+      expect(new URL(response.headers.location as string, 'http://x').searchParams.get('prompt')).toBe('login')
+    })
+
+    it('lets an administrator in from there, and ends the sign-in of the first person', async () => {
+      const browser = new Browser(h.app)
+      await drive(browser, '/manage/users?search=ada', 'ben.keller@example.com')
+      const sessionsOf = async (email: string) =>
+        (await h.database.pool.query(`select 1 from oidc_payloads p join users u on u.id::text = p.account_id where p.type = 1 and u.email = $1`, [email])).rowCount ?? 0
+      const before = await sessionsOf('ben.keller@example.com')
+      expect(before).toBeGreaterThan(0)
+
+      // pforte signs the first person out before it takes the second: a page that submits its form by itself
+      const { response: handover } = await drive(browser, '/manage/login?again=1&next=%2Fmanage%2Fusers%3Fsearch%3Dada')
+      expect(handover.statusCode).toBe(200)
+      const xsrf = /name="xsrf" value="([^"]+)"/.exec(handover.body)![1]!
+      const ended = await browser.request('POST', '/session/end/confirm', { form: { xsrf, logout: 'yes' } })
+      const { response, visited } = await drive(browser, ended.headers.location as string)
+
+      expect(visited.at(-1)).toBe('/manage/users')
+      expect(response.statusCode).toBe(200)
+      expect(response.body).toContain('Signed in as Ada Admin')
+      expect(await sessionsOf('ben.keller@example.com')).toBe(before - 1)
+    })
   })
 
   describe('a callback that does not belong to a sign-in', () => {
@@ -373,6 +405,24 @@ describe.skipIf(!hasDatabase)('the administration UI: signing in and out', () =>
 
       browser.cookies.delete('pforte_manage')
       expect((await browser.request('GET', '/manage')).statusCode).toBe(303)
+    })
+
+    it('takes what the other applications in that browser hold with it, also a refresh token, which the administration itself cannot have', async () => {
+      const browser = new Browser(h.app)
+      const { code, verifier } = await signIn(browser, { ...WEB, email: 'admin@example.com' })
+      const tokens = (await browser.request('POST', '/token', { form: { client_id: WEB.clientId, grant_type: 'authorization_code', code: code!, redirect_uri: WEB.redirectUri, code_verifier: verifier } })).json()
+      const grantId = (await h.database.pool.query(`select grant_id from oidc_payloads where type = 4 and id = $1`, [tokens.refresh_token])).rows[0].grant_id as string
+      const held = async () => (await h.database.pool.query(`select type from oidc_payloads where grant_id = $1 or id = $1 order by type`, [grantId])).rows.map((row) => row.type)
+      // access token, the used authorization code, refresh token and the grant itself
+      expect(await held()).toEqual([2, 3, 4, 13])
+      await drive(browser, '/manage')
+
+      const left = await browser.request('POST', '/manage/logout', { headers: { 'sec-fetch-site': 'same-origin' } })
+      const asked = await browser.request('GET', left.headers.location as string)
+      const xsrf = /name="xsrf" value="([^"]+)"/.exec(asked.body)![1]!
+      await browser.request('POST', '/session/end/confirm', { form: { xsrf, logout: 'yes' } })
+
+      expect(await held()).toEqual([])
     })
 
     it('shows a page that says so, with a way to sign in again', async () => {

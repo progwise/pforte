@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, ne, or } from 'drizzle-orm'
 import type { Database } from './index.js'
 import { claimTypes, clientClaimTypes, clients, oidcPayloads, userClaims, users } from './schema/index.js'
 
@@ -81,13 +81,25 @@ export const createOidcPayloadStore = (db: Database) => {
         .where(and(eq(oidcPayloads.id, id), eq(oidcPayloads.type, type)))
     },
 
+    /**
+     * Removes one record. With a grant goes what was issued under it: when a session ends, the library asks for
+     * the token types of the client that started the sign-out only, for every grant of the session. The
+     * administration has no refresh tokens, so signing out there would leave those of the other applications behind:
+     * useless without their grant, but still counted as something the application holds. A sign-in under way stays.
+     */
     async destroy(id: string, type: number) {
-      await db.delete(oidcPayloads).where(and(eq(oidcPayloads.id, id), eq(oidcPayloads.type, type)))
+      const record = and(eq(oidcPayloads.id, id), eq(oidcPayloads.type, type))
+      const issuedUnder = and(eq(oidcPayloads.grantId, id), ne(oidcPayloads.type, MODEL_TYPES.Interaction))
+      await db.delete(oidcPayloads).where(type === MODEL_TYPES.Grant ? or(record, issuedUnder) : record)
     },
 
-    /** Removes every token and code issued under a grant, e.g. on refresh token reuse. */
-    async revokeByGrantId(grantId: string) {
-      await db.delete(oidcPayloads).where(eq(oidcPayloads.grantId, grantId))
+    /**
+     * Removes the tokens or codes of one type that were issued under a grant, e.g. on refresh token reuse or when
+     * a session ends. Only that type, as the library asks: a sign-in that is under way carries the grant of the
+     * session it started in too, and has to outlive it when another person signs in and the first is signed out.
+     */
+    async revokeByGrantId(grantId: string, type: number) {
+      await db.delete(oidcPayloads).where(and(eq(oidcPayloads.grantId, grantId), eq(oidcPayloads.type, type)))
     },
   }
 }

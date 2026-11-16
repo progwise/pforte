@@ -47,7 +47,7 @@ export class PayloadAdapter implements Adapter {
   }
 
   async revokeByGrantId(grantId: string) {
-    await this.store.revokeByGrantId(grantId)
+    await this.store.revokeByGrantId(grantId, this.#type)
   }
 }
 
