@@ -48,10 +48,20 @@ it changes nothing but forgets the failed attempts held against their address.
 
 ## What a person does to their own account
 
-On [the account pages](account.md) a person can sign out everywhere, forget remembered devices and ask for the code of a
-new password. These are the events an administrator's action writes, `user.sessions.end`, `user.device.revoke`,
-`user.devices.revoke` and `user.password_reset.request`, with two differences: the actor is the person themselves
-(`actorType: user`, `actorId` equal to the target), and the details carry `self: true`.
+On [the account pages](account.md) a person can sign out everywhere, forget remembered devices, remove a passkey and ask
+for the code of a new password. These are the events an administrator's action writes, `user.sessions.end`,
+`user.device.revoke`, `user.devices.revoke`, `user.passkey.remove` and `user.password_reset.request`, with two
+differences: the actor is the person themselves (`actorType: user`, `actorId` equal to the target), and the details carry
+`self: true`.
+
+### Passkeys
+
+| Action | When | Details |
+| --- | --- | --- |
+| `user.passkey.add` | A person added a passkey on the account pages. Only a person can: nobody creates a passkey for somebody else. | `passkeyId`, `label` (the browser it was created with, such as "Safari, iPhone"), `synced`, `self: true` |
+| `user.passkey.remove` | A passkey was removed, by the person or by an administrator. | `passkeyId`, `label`, and `self: true` when the person did it |
+
+Neither event holds the key or the id a device knows the passkey by.
 
 ## Telling applications
 

@@ -30,6 +30,17 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   registered a client under that ID yourself, it is not touched and the pages stay off until you have moved it to another
   ID; the log says so at every start
   ([the account pages](docs/account.md), [#18](https://github.com/progwise/pforte/issues/18)).
+- **Passkeys, first part: creating and removing them.** On the account pages a person adds a passkey (*Passkeys*, then
+  *Add a passkey*): the device asks for face, finger or its PIN and keeps the passkey; pforte stores the public half.
+  The person is told of every new passkey by e-mail and can remove one on the same page; an administrator sees and
+  removes them on the person's page and with `GET /admin/users/{id}/passkeys` and
+  `DELETE /admin/users/{id}/passkeys/{passkeyId}`. A password reset and "sign out everywhere" leave passkeys alone.
+  **Signing in with a passkey is not in yet**; it follows before this is released. **pforte's pages now run one script**,
+  on the page that creates a passkey only: one file served by pforte, allowed in that page's policy by its exact
+  address, making no requests; every other page keeps the policy without script. **A passkey is bound to the host in
+  `ISSUER`: changing that host makes every passkey stop working.** The update adds the table `passkeys`
+  ([the account pages](docs/account.md#passkeys), [security measures](docs/security.md#the-one-script),
+  [#45](https://github.com/progwise/pforte/issues/45)).
 - **Applications are told when somebody else ends a person's sessions** (back-channel logout). Until now a client with a
   back-channel logout address got a logout token only when the person signed out at pforte. Now it also gets one when an
   administrator locks, deactivates or deletes the person, signs them out everywhere or starts a password reset, and when the

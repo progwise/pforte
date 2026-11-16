@@ -30,6 +30,11 @@ export interface Notifier {
    * Always an e-mail, also when the code came by SMS: it is a notice, and it reaches the mailbox a phone thief does not hold.
    */
   sendPasswordChanged(user: NotifiableUser, notice: { url: string }): Promise<void>
+  /**
+   * Tells the user that a passkey was added to their account, with the page where they remove it if it was not
+   * them. `device` is the browser it was created with, in words. Always an e-mail, as the notice above.
+   */
+  sendPasskeyAdded(user: NotifiableUser, notice: { device: string; url: string }): Promise<void>
 }
 
 /** No way to reach the user is configured. */
@@ -78,6 +83,10 @@ export const createLogNotifier = ({
     async sendPasswordChanged(user, { url }) {
       guard()
       log(`[development notifier] Notice for ${user.email}: the password was changed. If it was not them: ${url}`)
+    },
+    async sendPasskeyAdded(user, { device, url }) {
+      guard()
+      log(`[development notifier] Notice for ${user.email}: a passkey was added (${device}). If it was not them: ${url}`)
     },
   }
 }
@@ -129,6 +138,9 @@ export const createMailNotifier = ({ mailer, sms, organisation, i18n }: MailNoti
     },
     async sendPasswordChanged(user, { url }) {
       await mailer.send({ to: user.email, subject: text(user, 'mail.passwordChanged.subject'), text: text(user, 'mail.passwordChanged.text', { url }) })
+    },
+    async sendPasskeyAdded(user, { device, url }) {
+      await mailer.send({ to: user.email, subject: text(user, 'mail.passkeyAdded.subject'), text: text(user, 'mail.passkeyAdded.text', { device, url }) })
     },
   }
 }

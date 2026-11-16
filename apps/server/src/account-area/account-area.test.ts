@@ -228,6 +228,9 @@ describe.skipIf(!hasDatabase)('the account pages', () => {
           '/account/devices/forget-all',
           '/account/sign-ins',
           '/account/password',
+          '/account/passkeys',
+          '/account/passkeys/new',
+          '/account/passkeys/remove',
         ]),
       )
       // Nothing the area serves lies outside it, and no address has a part that is filled in: `:id`, `*`, a pattern.

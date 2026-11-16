@@ -8,7 +8,8 @@
     "conformance": "REMEMBER_DEVICE_DEFAULT=true TRUST_PROXY=1 tsx --env-file=../../.env.conformance src/server.ts",
     "build": "tsc --noEmit && node build.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:browser": "vitest run --config vitest.browser.config.ts"
   },
   "dependencies": {
     "@fastify/formbody": "9.0.1",
@@ -17,6 +18,7 @@
     "@node-rs/argon2": "2.2.2",
     "@progwise/pforte-db": "workspace:*",
     "@progwise/pforte-import": "workspace:*",
+    "@simplewebauthn/server": "14.0.3",
     "csv-parse": "7.0.3",
     "drizzle-orm": "0.45.4",
     "fastify": "5.12.7",
@@ -31,6 +33,7 @@
     "@apidevtools/swagger-parser": "13.1.0",
     "@types/oidc-provider": "9.13.1",
     "esbuild": "0.28.2",
+    "playwright-core": "1.64.1",
     "tsx": "4.23.15"
   }
 }

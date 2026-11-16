@@ -108,6 +108,9 @@ export const en = {
   'mail.passwordChanged.subject': 'Your password for {organisation} was changed',
   'mail.passwordChanged.text':
     'Hello {firstName},\n\nthe password of your account at {organisation} was just changed, and you were signed out everywhere.\n\nIf that was you, there is nothing to do.\n\nIf it was not you, choose a new password now:\n\n{url}\n\nThen tell your administration.\n',
+  'mail.passkeyAdded.subject': 'A passkey was added to your account at {organisation}',
+  'mail.passkeyAdded.text':
+    'Hello {firstName},\n\na passkey was just added to your account at {organisation}. It was created with: {device}.\n\nWith a passkey, somebody signs in without password and code.\n\nIf that was you, there is nothing to do.\n\nIf it was not you, remove the passkey now:\n\n{url}\n\nThen choose a new password and tell your administration.\n',
 
   // The account pages, where a person sees how they are signed in.
   'account.title': 'Your account',
@@ -131,6 +134,7 @@ export const en = {
   'account.nav.sessions': 'Signed in',
   'account.nav.devices': 'Devices',
   'account.nav.signIns': 'Sign-ins',
+  'account.nav.passkeys': 'Passkeys',
   'account.nav.password': 'Password',
   'account.sessions.title': 'Where you are signed in',
   'account.sessions.browsers': 'Browsers',
@@ -180,6 +184,30 @@ export const en = {
   'account.password.wait': 'A code was asked for too often. Please try again in {minutes} minutes.',
   'account.password.unavailable': 'The code could not be sent. Please try again later.',
   'account.stepUp.again': 'For this you had to sign in again. Now repeat what you wanted to do.',
+  'account.passkeys.title': 'Passkeys',
+  'account.passkeys.help': 'With a passkey you sign in with the check your device has anyway: your face, your finger or its PIN. No password, no code. Password and code keep working on a device without a passkey.',
+  'account.passkeys.none': 'You have no passkey.',
+  'account.passkeys.createdWith': 'Created with',
+  'account.passkeys.created': 'Created',
+  'account.passkeys.lastUsed': 'Last used',
+  'account.passkeys.never': 'Not yet',
+  'account.passkeys.unknown': 'Unknown browser',
+  'account.passkeys.remove': 'Remove',
+  'account.passkeys.removed': 'The passkey was removed and cannot sign in any more. Your device may still list it: delete it there too.',
+  'account.passkeys.gone': 'That passkey does not exist any more.',
+  'account.passkeys.add': 'Add a passkey',
+  'account.passkeys.added': 'The passkey was created.',
+  'account.passkeys.expired': 'That took too long. Start again.',
+  'account.passkeys.rejected': 'The answer of your device could not be checked, so no passkey was added. Start again.',
+  'account.passkeys.duplicate': 'That passkey is known already.',
+  'account.passkeys.tooMany': 'An account can have {count} passkeys. Remove one first.',
+  'account.passkeys.new.title': 'Add a passkey',
+  'account.passkeys.new.text': 'Your device will ask for your face, your finger or its PIN and then keeps a passkey for this account. If it saves the passkey in your password manager, your other devices get it too.',
+  'account.passkeys.new.button': 'Create passkey',
+  'account.passkeys.new.back': 'Back',
+  'account.passkeys.new.unsupported': 'This browser cannot create a passkey.',
+  'account.passkeys.new.failed': 'No passkey was created: the request was cancelled or the device gave up. Try again.',
+  'account.passkeys.new.exists': 'This device already has a passkey for your account.',
 
   'sms.login': '{code} is your sign-in code for {organisation}. Valid for {minutes} minutes. Do not share it.',
   'sms.reset':
