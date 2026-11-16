@@ -407,6 +407,24 @@ describe.skipIf(!hasDatabase)('the administration UI: signing in and out', () =>
       expect((await browser.request('GET', '/manage')).statusCode).toBe(303)
     })
 
+    it('takes what the other applications in that browser hold with it, also a refresh token, which the administration itself cannot have', async () => {
+      const browser = new Browser(h.app)
+      const { code, verifier } = await signIn(browser, { ...WEB, email: 'admin@example.com' })
+      const tokens = (await browser.request('POST', '/token', { form: { client_id: WEB.clientId, grant_type: 'authorization_code', code: code!, redirect_uri: WEB.redirectUri, code_verifier: verifier } })).json()
+      const grantId = (await h.database.pool.query(`select grant_id from oidc_payloads where type = 4 and id = $1`, [tokens.refresh_token])).rows[0].grant_id as string
+      const held = async () => (await h.database.pool.query(`select type from oidc_payloads where grant_id = $1 or id = $1 order by type`, [grantId])).rows.map((row) => row.type)
+      // access token, the used authorization code, refresh token and the grant itself
+      expect(await held()).toEqual([2, 3, 4, 13])
+      await drive(browser, '/manage')
+
+      const left = await browser.request('POST', '/manage/logout', { headers: { 'sec-fetch-site': 'same-origin' } })
+      const asked = await browser.request('GET', left.headers.location as string)
+      const xsrf = /name="xsrf" value="([^"]+)"/.exec(asked.body)![1]!
+      await browser.request('POST', '/session/end/confirm', { form: { xsrf, logout: 'yes' } })
+
+      expect(await held()).toEqual([])
+    })
+
     it('shows a page that says so, with a way to sign in again', async () => {
       const response = await new Browser(h.app).request('GET', '/manage/signed-out')
       expect(response.statusCode).toBe(200)
