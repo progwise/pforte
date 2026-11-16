@@ -467,6 +467,32 @@ describe.skipIf(!hasDatabase)('authorization code flow', () => {
       expect(location(response).pathname).toMatch(/^\/interaction\//)
     })
 
+    it('prompt=login takes another person: the first is signed out and loses their tokens, and the sign-in under way goes on', async () => {
+      const { browser, code, verifier } = await loginAs(WEB)
+      const first = (await exchangeCode(browser, WEB, code, verifier)).json()
+      const me = (token: string) => browser.request('GET', '/me', { headers: { authorization: `Bearer ${token}` } })
+      expect((await me(first.access_token)).statusCode).toBe(200)
+
+      const pair = pkcePair()
+      const interaction = (await browser.request('GET', `/auth?${query({ prompt: 'login', code_challenge: pair.challenge })}`)).headers.location as string
+      await browser.request('GET', interaction)
+      const email = 'ben.keller@example.com'
+      await browser.request('POST', `${interaction}/login`, { form: { email, password: 'dev-password' } })
+      const entered = await browser.request('POST', `${interaction}/code`, { form: { code: recording.lastCode(email)! } })
+
+      // The library signs the first person out before it goes on: a page that posts its form by itself
+      const handover = await browser.request('GET', entered.headers.location as string)
+      expect(handover.statusCode).toBe(200)
+      const xsrf = /name="xsrf" value="([^"]+)"/.exec(handover.body)![1]!
+      const ended = await browser.request('POST', '/session/end/confirm', { form: { xsrf, logout: 'yes' } })
+      const resumed = await browser.request('GET', ended.headers.location as string)
+
+      const second = (await exchangeCode(browser, WEB, location(resumed).searchParams.get('code')!, pair.verifier)).json()
+      expect((await me(second.access_token)).json().sub).not.toBe((await verifyJwt(app, first.id_token)).claims.sub)
+      expect((await verifyJwt(app, second.id_token)).claims.sub).toBe((await me(second.access_token)).json().sub)
+      expect((await me(first.access_token)).statusCode).toBe(401)
+    })
+
     it('max_age makes an old session sign in again and puts auth_time in the ID token', async () => {
       const { browser } = await loginAs(WEB)
       await new Promise((resolve) => setTimeout(resolve, 2200))

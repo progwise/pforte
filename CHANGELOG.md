@@ -106,6 +106,17 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   `logout.keptTitle` and `logout.kept`; **if you replaced `logout.text` or `logout.no` in your `locales` folder, or added
   a language**, add them there, or they appear as built in, in English for a language of your own
   ([signing out](docs/integrating-a-client.md#signing-out)).
+- **The administration offers a way on to somebody who is not an administrator.** The page "Not an administrator" had no
+  button, and opening `/manage` again led straight back to it, because the browser was still signed in at pforte as that
+  person. An administrator who met it, on a shared computer or after signing in to an application with another account,
+  had to know the address that signs out. Now the page has the button "Sign in with a different account": it asks for
+  password and code although the browser is signed in, and when another person signs in, the first is signed out of
+  pforte. The new text is `manage.notAdmin.other` ([the administration](docs/administration.md#who-can-use-it)).
+- **`prompt=login` takes another person.** When an application asked for a new sign-in with `prompt=login` and somebody
+  else than the person signed in to pforte entered their password, the sign-in ended on the page "Something went wrong"
+  (`interaction session not found`): pforte signed the first person out, as it should, and removed the sign-in under way
+  together with their tokens. Now the first person is signed out and loses their tokens as before, and the second arrives
+  at the application.
 
 ## 0.2.0 (2026-10-23)
 

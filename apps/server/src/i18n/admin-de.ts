@@ -13,6 +13,7 @@ export const adminDe: AdminCatalog = {
 
   'manage.notAdmin.title': 'Kein Administrator',
   'manage.notAdmin.text': '{name} kann sich anmelden, ist aber kein Administrator. Die Verwaltung steht diesem Konto deshalb nicht offen.',
+  'manage.notAdmin.other': 'Mit einem anderen Konto anmelden',
   'manage.signedOut.title': 'Sie sind abgemeldet',
   'manage.signedOut.text': 'Die Verwaltung ist geschlossen. Melden Sie sich wieder an, wenn Sie sie brauchen.',
   'manage.loginFailed.title': 'Die Anmeldung hat nicht geklappt',

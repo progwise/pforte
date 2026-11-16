@@ -291,6 +291,38 @@ describe.skipIf(!hasDatabase)('the administration UI: signing in and out', () =>
       expect(browser.cookies.has('pforte_manage')).toBe(false)
       expect((await browser.request('GET', '/manage')).statusCode).toBe(303)
     })
+
+    it('is offered a sign-in with a different account, which asks for the password although the browser is signed in', async () => {
+      const browser = new Browser(h.app)
+      const refused = await drive(browser, '/manage/users?search=ada', 'ben.keller@example.com')
+      expect(refused.response.body).toContain('<a class="button" href="/manage/login?again=1&amp;next=%2Fmanage%2Fusers%3Fsearch%3Dada">Sign in with a different account</a>')
+
+      const response = await browser.request('GET', '/manage/login?again=1&next=%2Fmanage%2Fusers%3Fsearch%3Dada')
+
+      expect(response.statusCode).toBe(303)
+      expect(new URL(response.headers.location as string, 'http://x').searchParams.get('prompt')).toBe('login')
+    })
+
+    it('lets an administrator in from there, and ends the sign-in of the first person', async () => {
+      const browser = new Browser(h.app)
+      await drive(browser, '/manage/users?search=ada', 'ben.keller@example.com')
+      const sessionsOf = async (email: string) =>
+        (await h.database.pool.query(`select 1 from oidc_payloads p join users u on u.id::text = p.account_id where p.type = 1 and u.email = $1`, [email])).rowCount ?? 0
+      const before = await sessionsOf('ben.keller@example.com')
+      expect(before).toBeGreaterThan(0)
+
+      // pforte signs the first person out before it takes the second: a page that submits its form by itself
+      const { response: handover } = await drive(browser, '/manage/login?again=1&next=%2Fmanage%2Fusers%3Fsearch%3Dada')
+      expect(handover.statusCode).toBe(200)
+      const xsrf = /name="xsrf" value="([^"]+)"/.exec(handover.body)![1]!
+      const ended = await browser.request('POST', '/session/end/confirm', { form: { xsrf, logout: 'yes' } })
+      const { response, visited } = await drive(browser, ended.headers.location as string)
+
+      expect(visited.at(-1)).toBe('/manage/users')
+      expect(response.statusCode).toBe(200)
+      expect(response.body).toContain('Signed in as Ada Admin')
+      expect(await sessionsOf('ben.keller@example.com')).toBe(before - 1)
+    })
   })
 
   describe('a callback that does not belong to a sign-in', () => {

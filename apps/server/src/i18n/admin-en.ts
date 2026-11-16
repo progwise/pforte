@@ -15,6 +15,7 @@ export const adminEn = {
 
   'manage.notAdmin.title': 'Not an administrator',
   'manage.notAdmin.text': '{name} can sign in, but is not an administrator, so the administration is not open to this account.',
+  'manage.notAdmin.other': 'Sign in with a different account',
   'manage.signedOut.title': 'You are signed out',
   'manage.signedOut.text': 'The administration is closed. Sign in again when you need it.',
   'manage.loginFailed.title': 'Signing in did not work',

@@ -8,7 +8,9 @@ server-rendered pages, with no JavaScript, in the same look as the sign-in pages
 ## Who can use it
 
 An **administrator**: a user whose account has the admin right (`isAdmin`). Nobody else is let in: other people can sign in to
-pforte, but the administration tells them that it is not open to them.
+pforte, but the administration tells them that it is not open to them. That page has the button **Sign in with a different
+account**, for an administrator whose browser is signed in to pforte as somebody else: it asks for password and code again,
+and when another person signs in, the first is signed out of pforte.
 
 ### The first administrator
 

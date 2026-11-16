@@ -41,17 +41,27 @@ export const manageRoutes =
       }),
     )
 
-    /** A page for somebody who has no session: what the sign-in or the sign-out came to. */
-    const publicPage = (request: FastifyRequest, titleKey: MessageKey, textKey: MessageKey, values?: Values, withSignIn = true) => {
+    /** A page for somebody who has no session: what the sign-in or the sign-out came to, and the button that leads on. */
+    const publicPage = (
+      request: FastifyRequest,
+      titleKey: MessageKey,
+      textKey: MessageKey,
+      values?: Values,
+      action: { href: string; label: MessageKey } = { href: `${MANAGE_PATH}/login`, label: 'manage.signIn' },
+    ) => {
       const { view, t } = viewFor(request)
-      return view.notice(t(titleKey), t(textKey, values), withSignIn ? { href: `${MANAGE_PATH}/login`, label: t('manage.signIn') } : undefined)
+      return view.notice(t(titleKey), t(textKey, values), { href: action.href, label: t(action.label) })
     }
 
     // --- Signing in: pforte's own login, as any application, and always with the second factor
 
     const signIn = createOwnSignIn(app, { issuer, cookieKeys, clientId: ADMIN_UI_CLIENT_ID, basePath: MANAGE_PATH, loginCookie: LOGIN_COOKIE, scope: 'openid profile', acceptedLanguages })
 
-    app.get<{ Querystring: { next?: string } }>(`${MANAGE_PATH}/login`, async (request, reply) => signIn.begin(request, reply, safeNext(request.query.next, MANAGE_PATH)))
+    // `again` asks for a new sign-in although the browser has a session: the way on for somebody who came with an
+    // account that is not an administrator's. When another person signs in, pforte ends the sign-in of the first.
+    app.get<{ Querystring: { next?: string; again?: string } }>(`${MANAGE_PATH}/login`, async (request, reply) =>
+      signIn.begin(request, reply, safeNext(request.query.next, MANAGE_PATH), request.query.again === '1'),
+    )
 
     const failed = (request: FastifyRequest, reply: FastifyReply, status = 400) =>
       reply.code(status).type('text/html').header('Set-Cookie', signIn.clearCookie()).send(publicPage(request, 'manage.loginFailed.title', 'manage.loginFailed.text'))
@@ -64,11 +74,15 @@ export const manageRoutes =
 
       const who = await callApi(request, outcome.accessToken, { method: 'GET', url: '/whoami' })
       if (who.statusCode === 401) {
+        // The plain "Sign in" would lead straight back here: the browser is signed in at pforte, as this person.
+        const other = new URLSearchParams({ again: '1', next: outcome.next })
         return reply
           .code(403)
           .type('text/html')
           .header('Set-Cookie', signIn.clearCookie())
-          .send(publicPage(request, 'manage.notAdmin.title', 'manage.notAdmin.text', { name: claims.name ?? claims.email ?? '' }, false))
+          .send(
+            publicPage(request, 'manage.notAdmin.title', 'manage.notAdmin.text', { name: claims.name ?? claims.email ?? '' }, { href: `${MANAGE_PATH}/login?${other}`, label: 'manage.notAdmin.other' }),
+          )
       }
       if (who.statusCode !== 200) return failed(request, reply, 502)
       const person = who.json().user as { id: string; email: string; firstName: string; lastName: string; language: string }

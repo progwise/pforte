@@ -85,9 +85,13 @@ export const createOidcPayloadStore = (db: Database) => {
       await db.delete(oidcPayloads).where(and(eq(oidcPayloads.id, id), eq(oidcPayloads.type, type)))
     },
 
-    /** Removes every token and code issued under a grant, e.g. on refresh token reuse. */
-    async revokeByGrantId(grantId: string) {
-      await db.delete(oidcPayloads).where(eq(oidcPayloads.grantId, grantId))
+    /**
+     * Removes the tokens or codes of one type that were issued under a grant, e.g. on refresh token reuse or when
+     * a session ends. Only that type, as the library asks: a sign-in that is under way carries the grant of the
+     * session it started in too, and has to outlive it when another person signs in and the first is signed out.
+     */
+    async revokeByGrantId(grantId: string, type: number) {
+      await db.delete(oidcPayloads).where(and(eq(oidcPayloads.grantId, grantId), eq(oidcPayloads.type, type)))
     },
   }
 }
