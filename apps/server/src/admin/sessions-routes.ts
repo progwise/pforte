@@ -24,8 +24,10 @@ export const sessionsRoutes =
           tags: ['Lifecycle'],
           summary: 'Where a user is signed in',
           description:
-            'The browser sessions (single sign-on) that are open, and the applications that were granted access and stay signed in, ' +
-            'such as an app on a phone. Identifiers and tokens are not returned. `POST /users/{id}/end-sessions` ends them all.',
+            'The browser sessions (single sign-on) that are open, and the applications that were granted access. Every sign-in in a ' +
+            'browser makes a grant; `staysSignedIn` is true for an application that holds a refresh token under it and so stays ' +
+            'signed in without the browser, such as an app on a phone. Identifiers and tokens are not returned. ' +
+            '`POST /users/{id}/end-sessions` ends them all.',
           params: z.object({ id: z.uuid() }),
           response: {
             200: z.object({
@@ -38,7 +40,7 @@ export const sessionsRoutes =
                   applications: z.array(application),
                 }),
               ),
-              grants: z.array(application.extend({ since: z.string(), expiresAt: z.string().nullable() })),
+              grants: z.array(application.extend({ since: z.string(), expiresAt: z.string().nullable(), staysSignedIn: z.boolean() })),
             }),
             ...ERROR_RESPONSES,
           },
@@ -58,7 +60,12 @@ export const sessionsRoutes =
             acr: session.acr,
             applications: session.clientIds.map(named),
           })),
-          grants: grants.map((grant) => ({ ...named(grant.clientId), since: grant.since.toISOString(), expiresAt: grant.expiresAt?.toISOString() ?? null })),
+          grants: grants.map((grant) => ({
+            ...named(grant.clientId),
+            since: grant.since.toISOString(),
+            expiresAt: grant.expiresAt?.toISOString() ?? null,
+            staysSignedIn: grant.staysSignedIn,
+          })),
         }
       },
     )

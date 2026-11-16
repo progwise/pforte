@@ -246,6 +246,63 @@ describe.skipIf(!hasDatabase)('the administration: actions on a user', () => {
       expect(page).toContain('With a code')
     })
 
+    describe('applications that stay signed in', () => {
+      const HEADING = '<h3>Applications that stay signed in</h3>'
+      /** Stores a record of the person as the OIDC library would: 1 a browser session, 13 a grant, 4 a refresh token. */
+      const store = (id: string, type: number, payload: Record<string, unknown>, grantId: string | null = null) =>
+        h.database.pool.query(`insert into oidc_payloads (id, type, payload, account_id, grant_id, expires_at) values ($1, $2, $3, $4, $5, now() + interval '1 day')`, [
+          id,
+          type,
+          JSON.stringify({ accountId: benId, ...payload }),
+          benId,
+          grantId,
+        ])
+      const panel = async () => {
+        const page = plain((await get(`/manage/users/${benId}`)).body)
+        return page.slice(page.indexOf('<h2>Signed in</h2>'), page.indexOf('<h2>Recent sign-ins</h2>'))
+      }
+
+      beforeEach(async () => {
+        await h.database.pool.query(`delete from oidc_payloads where account_id = $1`, [benId])
+      })
+
+      it('does not list an application that is signed in only as long as its browser session lasts', async () => {
+        await store('sess-web', 1, { loginTs: Math.floor(Date.now() / 1000), authorizations: { 'demo-web': { grantId: 'grant-web' } }, acr: 'urn:pforte:acr:mfa' })
+        await store('grant-web', 13, { clientId: 'demo-web' })
+
+        const part = await panel()
+
+        // The application is in the table of browsers, and nowhere else.
+        expect(part.match(/Demo web app \(public client\)/g)).toHaveLength(1)
+        expect(part).not.toContain(HEADING)
+      })
+
+      it('lists the one that holds a refresh token, and not the one whose refresh token was used up', async () => {
+        await store('grant-web', 13, { clientId: 'demo-web' })
+        await store('refresh-web', 4, { clientId: 'demo-web' }, 'grant-web')
+        await store('grant-backend', 13, { clientId: 'demo-backend' })
+        await store('refresh-backend', 4, { clientId: 'demo-backend' }, 'grant-backend')
+        await h.database.pool.query(`update oidc_payloads set consumed_at = now() where id = 'refresh-backend'`)
+
+        const part = await panel()
+        const staying = part.slice(part.indexOf(HEADING))
+
+        expect(part).toContain(HEADING)
+        expect(staying.match(/<tr><td>/g)).toHaveLength(1)
+        expect(staying).toContain('<td>Demo web app (public client)</td>')
+        expect(part).not.toContain('Demo backend')
+      })
+
+      it('says "not signed in anywhere" for a grant that is left over: no browser session, no refresh token', async () => {
+        await store('grant-web', 13, { clientId: 'demo-web' })
+
+        const part = await panel()
+
+        expect(part).toContain('Not signed in anywhere.')
+        expect(part).not.toContain('Demo web app')
+      })
+    })
+
     it('lists recent sign-ins in words', async () => {
       const origin = { ip: '203.0.113.9', userAgent: 'vitest' }
       await h.loginAudit.passwordFailed(origin, { userId: benId, email: 'ben.keller@example.com', reason: 'wrong_password' })

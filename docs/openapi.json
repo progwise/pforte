@@ -5099,7 +5099,7 @@
         "tags": [
           "Lifecycle"
         ],
-        "description": "The browser sessions (single sign-on) that are open, and the applications that were granted access and stay signed in, such as an app on a phone. Identifiers and tokens are not returned. `POST /users/{id}/end-sessions` ends them all.",
+        "description": "The browser sessions (single sign-on) that are open, and the applications that were granted access. Every sign-in in a browser makes a grant; `staysSignedIn` is true for an application that holds a refresh token under it and so stays signed in without the browser, such as an app on a phone. Identifiers and tokens are not returned. `POST /users/{id}/end-sessions` ends them all.",
         "parameters": [
           {
             "schema": {
@@ -5192,13 +5192,17 @@
                               "string",
                               "null"
                             ]
+                          },
+                          "staysSignedIn": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
                           "clientId",
                           "name",
                           "since",
-                          "expiresAt"
+                          "expiresAt",
+                          "staysSignedIn"
                         ],
                         "additionalProperties": false
                       }

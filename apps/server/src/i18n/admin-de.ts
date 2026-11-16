@@ -128,7 +128,7 @@ export const adminDe: AdminCatalog = {
   'manage.devices.revokeAll': 'Alle widerrufen',
   'manage.devices.unknown': 'Unbekannter Browser',
   'manage.sessions.title': 'Angemeldet',
-  'manage.sessions.help': 'Die Browser, in denen diese Person angemeldet ist, und die Anwendungen, die angemeldet bleiben, etwa eine App auf dem Telefon.',
+  'manage.sessions.help': 'Die Browser, in denen diese Person angemeldet ist, und die Anwendungen, die ohne Browser angemeldet bleiben, etwa eine App auf dem Telefon.',
   'manage.sessions.none': 'Nirgends angemeldet.',
   'manage.sessions.browsers': 'Browser',
   'manage.sessions.started': 'Angemeldet',

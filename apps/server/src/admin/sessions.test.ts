@@ -43,7 +43,27 @@ describe.skipIf(!hasDatabase)('admin API: where a user is signed in', () => {
     })
     expect(new Date(body.sessions[0].startedAt).getTime()).toBeGreaterThan(Date.now() - 60_000)
     expect(new Date(body.sessions[0].expiresAt).getTime()).toBeGreaterThan(Date.now())
-    expect(body.grants).toEqual([{ clientId: 'demo-web', name: expect.any(String), since: expect.any(String), expiresAt: expect.any(String) }])
+    // The application never took its tokens: it is signed in only as long as this browser session lasts.
+    expect(body.grants).toEqual([{ clientId: 'demo-web', name: expect.any(String), since: expect.any(String), expiresAt: expect.any(String), staysSignedIn: false }])
+  })
+
+  it('says which application stays signed in without the browser: the one that holds a refresh token, once however often it refreshed', async () => {
+    const browser = new Browser(h.app)
+    const { code, verifier } = await signIn(browser, { ...WEB, email: 'ben.keller@example.com' })
+    const id = await userId('ben.keller@example.com')
+    const token = (form: Record<string, string>) => browser.request('POST', '/token', { form: { client_id: WEB.clientId, ...form } })
+
+    const exchanged = await token({ grant_type: 'authorization_code', code: code!, redirect_uri: WEB.redirectUri, code_verifier: verifier })
+    expect(exchanged.statusCode, exchanged.body).toBe(200)
+    expect((await sessions(id)).json().grants).toMatchObject([{ clientId: 'demo-web', staysSignedIn: true }])
+
+    const refreshed = await token({ grant_type: 'refresh_token', refresh_token: exchanged.json().refresh_token })
+    expect(refreshed.statusCode, refreshed.body).toBe(200)
+    expect((await sessions(id)).json().grants).toMatchObject([{ clientId: 'demo-web', staysSignedIn: true }])
+
+    // A refresh token that was used up or has run out keeps nobody signed in.
+    await h.database.pool.query(`update oidc_payloads set consumed_at = now() where account_id = $1 and type = 4`, [id])
+    expect((await sessions(id)).json().grants).toMatchObject([{ clientId: 'demo-web', staysSignedIn: false }])
   })
 
   it('says whether a code was behind the sign-in', async () => {

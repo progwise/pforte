@@ -195,6 +195,7 @@ interface SessionInfo {
 interface Grant extends Application {
   since: string
   expiresAt: string | null
+  staysSignedIn: boolean
 }
 interface AuditEvent {
   createdAt: string
@@ -260,12 +261,15 @@ ${deviceItems
     : ''
 
   const signedIn = sessions.statusCode === 200 ? (sessions.json() as { sessions: SessionInfo[]; grants: Grant[] }) : undefined
+  // Every sign-in in a browser leaves a grant, also for an application that is signed in only as long as that
+  // browser session lasts. Those are in the table of browsers. Listed apart are the ones that hold a refresh token.
+  const staying = signedIn?.grants.filter((grant) => grant.staysSignedIn) ?? []
   const sessionPanel = signedIn
     ? `<h2>${escapeHtml(t('manage.sessions.title'))}</h2>
 <div class="panel">
 <p class="muted">${escapeHtml(t('manage.sessions.help'))}</p>
 ${
-  signedIn.sessions.length || signedIn.grants.length
+  signedIn.sessions.length || staying.length
     ? `${
         signedIn.sessions.length
           ? `<div class="scroll"><table class="list">
@@ -280,12 +284,12 @@ ${signedIn.sessions
 </tbody></table></div>`
           : ''
       }${
-        signedIn.grants.length
+        staying.length
           ? `<h3>${escapeHtml(t('manage.sessions.grants'))}</h3>
 <div class="scroll"><table class="list">
 <thead><tr><th>${escapeHtml(t('manage.sessions.applications'))}</th><th>${escapeHtml(t('manage.sessions.since'))}</th><th>${escapeHtml(t('manage.sessions.until'))}</th></tr></thead>
 <tbody>
-${signedIn.grants.map((grant) => `<tr><td>${escapeHtml(grant.name)}</td><td>${time(grant.since)}</td><td>${time(grant.expiresAt)}</td></tr>`).join('\n')}
+${staying.map((grant) => `<tr><td>${escapeHtml(grant.name)}</td><td>${time(grant.since)}</td><td>${time(grant.expiresAt)}</td></tr>`).join('\n')}
 </tbody></table></div>`
           : ''
       }`
