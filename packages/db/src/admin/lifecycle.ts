@@ -124,7 +124,7 @@ const audit = (context: RequestContext, action: string, user: UserRow, details: 
   userAgent: context.userAgent,
   action,
   target: { type: 'user', id: user.id },
-  details: { email: user.email, ...details },
+  details: { email: user.email, ...details, ...(context.self ? { self: true } : {}) },
 })
 
 /** The state a user returns to when they stop being locked or deactivated: active only once they have a password. */

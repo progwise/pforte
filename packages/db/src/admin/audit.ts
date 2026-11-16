@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, like, lt } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, like, lt } from 'drizzle-orm'
 import type { DatabaseOrTransaction } from '../audit.js'
 import { auditEvents } from '../schema/index.js'
 
@@ -47,3 +47,15 @@ export const listAuditEvents = async (db: DatabaseOrTransaction, options: ListAu
   const items = rows.slice(0, options.limit)
   return { items, nextCursor: rows.length > options.limit ? items.at(-1)?.id : undefined }
 }
+
+/** What a person is shown of their own sign-ins: that they got in, or that somebody was turned away. Not every code that was sent. */
+export const SIGN_IN_ACTIONS = ['login.succeeded', 'login.password_failed', 'login.code_failed', 'login.blocked'] as const
+
+/** The newest sign-in events about one user, for that user to look at. Only events that name them as the target. */
+export const listSignInEvents = async (db: DatabaseOrTransaction, userId: string, limit: number) =>
+  db
+    .select({ id: auditEvents.id, action: auditEvents.action, details: auditEvents.details, ip: auditEvents.ip, userAgent: auditEvents.userAgent, createdAt: auditEvents.createdAt })
+    .from(auditEvents)
+    .where(and(eq(auditEvents.targetType, 'user'), eq(auditEvents.targetId, userId), inArray(auditEvents.action, [...SIGN_IN_ACTIONS])))
+    .orderBy(desc(auditEvents.id))
+    .limit(limit)

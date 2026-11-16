@@ -5,7 +5,6 @@ import { sign, unsign } from '../interaction/signed-cookie.js'
 import { type AdminHarness, createAdminHarness, ISSUER } from '../test/admin-harness.js'
 import { Browser, signIn } from '../test/browser.js'
 import { driveSignIn } from '../test/manage-session.js'
-import { createUi } from '../ui/index.js'
 import { ACCOUNT_UI_CLIENT_ID } from './constants.js'
 import { accountAreaRoutes } from './routes.js'
 import { ensureAccountUiClient } from './setup.js'
@@ -210,12 +209,27 @@ describe.skipIf(!hasDatabase)('the account pages', () => {
       app.addHook('onRoute', (route) => {
         routes.push(route.url)
       })
-      await app.register(accountAreaRoutes({ db: h.database.db, issuer: ISSUER, cookieKeys: COOKIE_KEYS, ui: createUi() }))
+      await app.register(accountAreaRoutes(h.accountArea))
       await app.ready()
       await app.close()
 
       const account = routes.filter((url) => url.startsWith('/account'))
-      expect(account).toEqual(expect.arrayContaining(['/account', '/account/login', '/account/callback', '/account/logout', '/account/signed-out']))
+      expect(account).toEqual(
+        expect.arrayContaining([
+          '/account',
+          '/account/login',
+          '/account/callback',
+          '/account/logout',
+          '/account/signed-out',
+          '/account/sessions',
+          '/account/sessions/end',
+          '/account/devices',
+          '/account/devices/forget',
+          '/account/devices/forget-all',
+          '/account/sign-ins',
+          '/account/password',
+        ]),
+      )
       // Nothing the area serves lies outside it, and no address has a part that is filled in: `:id`, `*`, a pattern.
       expect(routes).toEqual(account)
       expect(account.filter((url) => /[:*(]/.test(url))).toEqual([])

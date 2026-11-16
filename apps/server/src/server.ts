@@ -96,7 +96,9 @@ const app = buildApp({
   getDatabaseTime: () => getDatabaseTime(db),
   oidc: { provider, authenticate, db, notifier, cookieKeys: config.cookieKeys, ui, limiter, audit },
   manage: { issuer: config.issuer, cookieKeys: config.cookieKeys, ui, organisation: organisationName, timeZone: config.timeZone },
-  accountArea: accountPages.available ? { db, issuer: config.issuer, cookieKeys: config.cookieKeys, ui } : undefined,
+  accountArea: accountPages.available
+    ? { db, issuer: config.issuer, cookieKeys: config.cookieKeys, ui, timeZone: config.timeZone, clientLogouts, sendPasswordResetCode, limiter, audit }
+    : undefined,
   account: {
     db,
     sendPasswordResetCode,

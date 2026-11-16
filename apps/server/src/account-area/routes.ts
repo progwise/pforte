@@ -2,16 +2,23 @@ import formbody from '@fastify/formbody'
 import type { Database } from '@progwise/pforte-db'
 import { findGrantOfAccessToken } from '@progwise/pforte-db/admin'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import { ACR_SECOND_FACTOR } from '../auth/assurance.js'
 import { maskPhone } from '../auth/channels.js'
+import type { LoginAudit } from '../auth/login-audit.js'
+import type { SendPasswordResetCode } from '../auth/password-reset.js'
+import type { RateLimiter } from '../auth/rate-limiter.js'
 import { parseAcceptLanguage } from '../i18n/index.js'
 import type { MessageKey, Values } from '../i18n/index.js'
+import type { ClientLogouts } from '../oidc/client-logouts.js'
+import { createFlash, type Flash } from '../own-login/flash.js'
 import { safeNext } from '../own-login/oidc.js'
 import { createOwnSignIn } from '../own-login/sign-in.js'
 import { refuseForeignPosts } from '../security/origin-check.js'
 import type { Ui } from '../ui/index.js'
 import { escapeHtml } from '../ui/pages.js'
 import { ACCOUNT_PATH, ACCOUNT_UI_CLIENT_ID } from './constants.js'
-import { type AccountUser, createAccountGate } from './session.js'
+import { registerSecurityPages } from './security-pages.js'
+import { type AccountSession, type AccountUser, createAccountGate } from './session.js'
 
 export interface AccountAreaDependencies {
   db: Database
@@ -20,9 +27,20 @@ export interface AccountAreaDependencies {
   /** Sign the cookies of the area. */
   cookieKeys: string[]
   ui: Ui
+  /** Where times are shown: an IANA time zone such as `Europe/Berlin`. */
+  timeZone: string
+  /** Tells the applications of a person who signs out everywhere. */
+  clientLogouts: ClientLogouts
+  /** Sends the code with which a person chooses a new password. */
+  sendPasswordResetCode: SendPasswordResetCode
+  /** The limit on asking for a new password, the same one as on the page for a forgotten one. */
+  limiter: Pick<RateLimiter, 'resetRequest'>
+  audit: Pick<LoginAudit, 'resetRequested' | 'codeSent' | 'blocked'>
 }
 
 const LOGIN_COOKIE = 'pforte_account_login'
+/** How old a sign-in may be for a change. Looking needs a session; changing needs a person who was just there. */
+export const STEP_UP_SECONDS = 5 * 60
 
 /**
  * The account pages: server-rendered pages under `/account` where every person who has an account sees how they
@@ -30,8 +48,9 @@ const LOGIN_COOKIE = 'pforte_account_login'
  * changes only themselves: who that is comes from `requireAccountSession` and from nowhere else.
  */
 export const accountAreaRoutes =
-  ({ db, issuer, cookieKeys, ui }: AccountAreaDependencies) =>
+  (dependencies: AccountAreaDependencies) =>
   async (app: FastifyInstance) => {
+    const { db, issuer, cookieKeys, ui, timeZone } = dependencies
     await app.register(formbody)
     ui.pages.addHeaders(app)
 
@@ -39,7 +58,7 @@ export const accountAreaRoutes =
     const gate = createAccountGate({ db, cookieKeys, secure })
     const acceptedLanguages = (request: FastifyRequest) => parseAcceptLanguage(request.headers['accept-language'])
     /** The pages in the person's own language once we know who they are, in the browser's before that. */
-    const viewFor = (request: FastifyRequest, user?: AccountUser) => {
+    const viewFor = (request: FastifyRequest, user?: Pick<AccountUser, 'language'>) => {
       const view = ui.pages.for(ui.i18n.pick(user?.language, acceptedLanguages(request)))
       return { view, language: view.language, t: (key: MessageKey, values?: Values) => view.t(key, values) }
     }
@@ -52,26 +71,74 @@ export const accountAreaRoutes =
       }),
     )
 
-    /** A page for somebody who has no session: what the sign-in or the sign-out came to. */
-    const publicPage = (request: FastifyRequest, titleKey: MessageKey, textKey: MessageKey) => {
-      const { view, t } = viewFor(request)
-      return view.notice(t(titleKey), t(textKey), { href: `${ACCOUNT_PATH}/login`, label: t('account.signIn') })
+    // Messages from one page to the next. Lax like the other cookies of the area.
+    const flash = createFlash({ cookie: 'pforte_account_flash', path: ACCOUNT_PATH, sameSite: 'Lax' })
+    const flashText = (t: (key: MessageKey, values?: Values) => string, message: Flash) => message.text ?? (message.key ? t(message.key, message.values) : '')
+
+    /**
+     * A page for somebody who has no session: what the sign-in or the sign-out came to. A message the last action
+     * left ("you were signed out everywhere") takes the place of the usual text.
+     */
+    const publicPage = (request: FastifyRequest, reply: FastifyReply, titleKey: MessageKey, textKey: MessageKey) => {
+      const message = flash.take(request, reply, cookieKeys, secure)
+      // Whoever was just signed out everywhere is still read to in their own language.
+      const { view, t } = viewFor(request, message?.language ? { language: message.language } : undefined)
+      return view.notice(t(titleKey), message ? flashText(t, message) : t(textKey), { href: `${ACCOUNT_PATH}/login`, label: t('account.signIn') })
     }
 
-    /** A page of the area for the person who is signed in. `content` is HTML that is already escaped. */
-    const page = (request: FastifyRequest, user: AccountUser, current: string, title: string, content: string) => {
+    const sections: { path: string; key: string; label: MessageKey }[] = [
+      { path: ACCOUNT_PATH, key: 'start', label: 'account.nav.start' },
+      { path: `${ACCOUNT_PATH}/sessions`, key: 'sessions', label: 'account.nav.sessions' },
+      { path: `${ACCOUNT_PATH}/devices`, key: 'devices', label: 'account.nav.devices' },
+      { path: `${ACCOUNT_PATH}/sign-ins`, key: 'sign-ins', label: 'account.nav.signIns' },
+      { path: `${ACCOUNT_PATH}/password`, key: 'password', label: 'account.nav.password' },
+    ]
+
+    /** A page of the area for the person who is signed in, with the message the last action left. `content` is HTML that is already escaped. */
+    const page = (request: FastifyRequest, reply: FastifyReply, user: AccountUser, current: string, title: string, content: string) => {
       const { view, t } = viewFor(request, user)
+      const message = flash.take(request, reply, cookieKeys, secure)
       return view.manage({
         title,
         sectionsLabel: t('account.nav.label'),
-        nav: [{ href: ACCOUNT_PATH, label: t('account.nav.start'), current: current === 'start' }],
+        nav: sections.map((section) => ({ href: section.path, label: t(section.label), current: section.key === current })),
         person: {
           signedInAs: t('account.signedInAs', { name: `${user.firstName} ${user.lastName}`.trim() || user.email }),
           signOutLabel: t('account.signOut'),
           signOutAction: `${ACCOUNT_PATH}/logout`,
         },
+        flash: message && { kind: message.kind, text: flashText(t, message) },
         content,
       })
+    }
+
+    /** Leave a message for the next page and go there. */
+    const redirectWith = (reply: FastifyReply, to: string, message: Flash) => {
+      flash.set(reply, cookieKeys, secure, message)
+      return reply.redirect(to, 303)
+    }
+
+    /**
+     * The step-up. Looking is allowed with the session; a change needs a sign-in with a code that is at most five
+     * minutes old, and this is asked on every action, not once at sign-in. Otherwise the person signs in again
+     * and comes back to `back`, the page they were on. What they were about to do is not carried along: they
+     * repeat it, so nothing is changed by an answer to a question they did not see.
+     * Returns false after sending the browser away.
+     */
+    const requireRecentSignIn = (reply: FastifyReply, session: AccountSession, back: string) => {
+      if (session.acr === ACR_SECOND_FACTOR && Date.now() / 1000 - session.authTime <= STEP_UP_SECONDS) return true
+      flash.set(reply, cookieKeys, secure, { kind: 'ok', key: 'account.stepUp.again' })
+      void reply.redirect(`${ACCOUNT_PATH}/login?again=1&next=${encodeURIComponent(back)}`, 303)
+      return false
+    }
+
+    const formatTime = (time: Date | null | undefined, language: string) => {
+      if (!time) return ''
+      try {
+        return new Intl.DateTimeFormat(language, { dateStyle: 'medium', timeStyle: 'short', timeZone }).format(time)
+      } catch {
+        return time.toISOString()
+      }
     }
 
     // --- Signing in: pforte's own login, as any application, and always with the second factor
@@ -80,10 +147,13 @@ export const accountAreaRoutes =
     // its own cookie again when it comes back.
     const signIn = createOwnSignIn(app, { issuer, cookieKeys, clientId: ACCOUNT_UI_CLIENT_ID, basePath: ACCOUNT_PATH, loginCookie: LOGIN_COOKIE, scope: 'openid', sameSite: 'Lax', acceptedLanguages })
 
-    app.get<{ Querystring: { next?: string } }>(`${ACCOUNT_PATH}/login`, async (request, reply) => signIn.begin(request, reply, safeNext(request.query.next, ACCOUNT_PATH)))
+    // `again` asks for a new sign-in although the browser has a session: the step-up before a change.
+    app.get<{ Querystring: { next?: string; again?: string } }>(`${ACCOUNT_PATH}/login`, async (request, reply) =>
+      signIn.begin(request, reply, safeNext(request.query.next, ACCOUNT_PATH), request.query.again === '1'),
+    )
 
     const failed = (request: FastifyRequest, reply: FastifyReply, status = 400) =>
-      reply.code(status).type('text/html').header('Set-Cookie', signIn.clearCookie()).send(publicPage(request, 'account.loginFailed.title', 'account.loginFailed.text'))
+      reply.code(status).type('text/html').header('Set-Cookie', signIn.clearCookie()).send(publicPage(request, reply, 'account.loginFailed.title', 'account.loginFailed.text'))
 
     app.get<{ Querystring: { code?: string; state?: string; error?: string } }>(`${ACCOUNT_PATH}/callback`, async (request, reply) => {
       const outcome = await signIn.finish(request, reply)
@@ -113,7 +183,7 @@ export const accountAreaRoutes =
 
     // Only says so. The cookie was removed by the POST above, which another site cannot send; a page that removed
     // it too would let any link on any site end the session.
-    app.get(`${ACCOUNT_PATH}/signed-out`, async (request, reply) => reply.type('text/html').send(publicPage(request, 'account.signedOut.title', 'account.signedOut.text')))
+    app.get(`${ACCOUNT_PATH}/signed-out`, async (request, reply) => reply.type('text/html').send(publicPage(request, reply, 'account.signedOut.title', 'account.signedOut.text')))
 
     // --- Start page: who am I, read-only. The organisation owns these details, so nothing here changes them.
 
@@ -141,6 +211,18 @@ ${fact('account.profile.language', languageName)}
 </dl>
 <p class="muted">${escapeHtml(t('account.profile.note'))}</p>
 </div>`
-      return reply.type('text/html').send(page(request, user, 'start', t('account.title'), content))
+      return reply.type('text/html').send(page(request, reply, user, 'start', t('account.title'), content))
     })
+
+    registerSecurityPages(app, { ...dependencies, gate, viewFor, page, redirectWith, requireRecentSignIn, formatTime })
   }
+
+/** What the pages of the area share: who the person is, how a page is drawn, and the step-up before a change. */
+export interface AccountContext extends AccountAreaDependencies {
+  gate: ReturnType<typeof createAccountGate>
+  viewFor: (request: FastifyRequest, user?: Pick<AccountUser, 'language'>) => { language: string; t: (key: MessageKey, values?: Values) => string }
+  page: (request: FastifyRequest, reply: FastifyReply, user: AccountUser, current: string, title: string, content: string) => string
+  redirectWith: (reply: FastifyReply, to: string, message: Flash) => FastifyReply
+  requireRecentSignIn: (reply: FastifyReply, session: AccountSession, back: string) => boolean
+  formatTime: (time: Date | null | undefined, language: string) => string
+}
