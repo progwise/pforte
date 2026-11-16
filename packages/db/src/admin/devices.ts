@@ -11,7 +11,7 @@ const audit = (context: RequestContext, action: string, user: UserRow, details: 
   userAgent: context.userAgent,
   action,
   target: { type: 'user', id: user.id },
-  details: { email: user.email, ...details },
+  details: { email: user.email, ...details, ...(context.self ? { self: true } : {}) },
 })
 
 const active = (userId: string, now: Date) =>

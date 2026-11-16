@@ -87,6 +87,11 @@ export interface RequestContext {
   actor: Actor
   ip?: string
   userAgent?: string
+  /**
+   * The person acts on their own account, on the account pages. The audit event then says `self: true`, so an
+   * administrator can tell it from the same action done by the back office.
+   */
+  self?: boolean
 }
 
 const audit = (context: RequestContext, event: Pick<AuditEventInput, 'action' | 'target' | 'details'>) => ({

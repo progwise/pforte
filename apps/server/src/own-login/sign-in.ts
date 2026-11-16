@@ -31,6 +31,8 @@ export type SignInOutcome =
       expiresIn?: number
       /** Where the person was going. */
       next: string
+      /** What the area noted when it started this sign-in. */
+      note?: string
     }
   /** The answer was a redirect to sign in again, with a code this time. Nothing more to do. */
   | { kind: 'redirected' }
@@ -47,9 +49,12 @@ export const createOwnSignIn = (app: FastifyInstance, { issuer, cookieKeys, clie
   const redirectUri = `${issuer}${basePath}/callback`
   const cookie = (value: string, maxAgeSeconds: number) => setCookieHeader(loginCookie, value, { path: basePath, maxAgeSeconds, secure, sameSite })
 
-  /** Sends the browser to pforte's login page. `forced` asks for a new sign-in even if the browser has a session. */
-  const begin = (request: FastifyRequest, reply: FastifyReply, next: string, forced = false) => {
-    const login = newLogin(next, forced)
+  /**
+   * Sends the browser to pforte's login page. `forced` asks for a new sign-in even if the browser has a session.
+   * `note` comes back with the outcome of this sign-in.
+   */
+  const begin = (request: FastifyRequest, reply: FastifyReply, next: string, forced = false, note?: string) => {
+    const login = newLogin(next, forced, note)
     const parameters = new URLSearchParams({
       client_id: clientId,
       redirect_uri: redirectUri,
@@ -97,11 +102,11 @@ export const createOwnSignIn = (app: FastifyInstance, { issuer, cookieKeys, clie
     // returned as it is. pforte's own areas insist, so they ask again, this time for a new sign-in.
     if (claims.acr !== ACR_SECOND_FACTOR) {
       if (login.forced) return { kind: 'failed', status: 403 }
-      begin(request, reply, login.next, true)
+      begin(request, reply, login.next, true, login.note)
       return { kind: 'redirected' }
     }
 
-    return { kind: 'signed-in', claims, accessToken: tokens.access_token, idToken: tokens.id_token, expiresIn: tokens.expires_in, next: login.next }
+    return { kind: 'signed-in', claims, accessToken: tokens.access_token, idToken: tokens.id_token, expiresIn: tokens.expires_in, next: login.next, note: login.note }
   }
 
   return {

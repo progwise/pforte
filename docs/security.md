@@ -46,8 +46,8 @@ affected either.
 | `pforte_phone_step` | The step of confirming a phone after activation. Signed. | like the above, 30 minutes, path `/activate` |
 | `pforte_device` | Tokens of remembered devices. Their hashes are in the database. | `HttpOnly`, `Secure` (https), `SameSite=Strict`, 90 days, path `/interaction` |
 | `pforte_device_new` | The token of a device that an activation remembered, until the next sign-in in that browser moves it into `pforte_device`. | like `pforte_device` |
-| `pforte_manage`, `pforte_manage_login` | The session of a person in the administration, and the sign-in on its way there and back. Signed. | `HttpOnly`, `Secure` (https), `SameSite=Strict`, path `/manage`; 8 hours at most, 10 minutes |
-| `pforte_account`, `pforte_account_login` | The same for [the account pages](account.md). The session holds who the person is, which sign-in it came from and when, no token. Signed. | `HttpOnly`, `Secure` (https), `SameSite=Lax`, path `/account`; 1 hour, 10 minutes |
+| `pforte_manage`, `pforte_manage_login`, `pforte_manage_flash` | The session of a person in the administration, the sign-in on its way there and back, and the message an action leaves for the next page. Signed. | `HttpOnly`, `Secure` (https), `SameSite=Strict`, path `/manage`; 8 hours at most, 10 minutes, 2 minutes |
+| `pforte_account`, `pforte_account_login`, `pforte_account_flash` | The same for [the account pages](account.md). The session holds who the person is, which sign-in it came from and when, no token. Signed. | `HttpOnly`, `Secure` (https), `SameSite=Lax`, path `/account`; 1 hour, 10 minutes, 2 minutes |
 | `_session`, `_interaction`, … | The provider's own: the single sign-on session and the open sign-in. Signed with `COOKIE_KEYS`. | `HttpOnly`, `Secure` (https). `SameSite=None` over https, because OpenID Connect requires the authorization endpoint to accept POST; `Lax` over http |
 
 A test signs in over https and checks that every cookie has `HttpOnly`, `Secure` and a `SameSite` value.

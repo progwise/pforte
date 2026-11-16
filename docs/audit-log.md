@@ -46,6 +46,13 @@ An attack shows as many `login.password_failed` events from one `ip` (or for one
 `login.blocked`. To let the person in again at once, call `POST /admin/users/{id}/unlock`: for a user who is not locked
 it changes nothing but forgets the failed attempts held against their address.
 
+## What a person does to their own account
+
+On [the account pages](account.md) a person can sign out everywhere, forget remembered devices and ask for the code of a
+new password. These are the events an administrator's action writes, `user.sessions.end`, `user.device.revoke`,
+`user.devices.revoke` and `user.password_reset.request`, with two differences: the actor is the person themselves
+(`actorType: user`, `actorId` equal to the target), and the details carry `self: true`.
+
 ## Telling applications
 
 Six actions end every session of a person: `user.lock`, `user.deactivate`, `user.delete`, `user.sessions.end`,

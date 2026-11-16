@@ -11,15 +11,21 @@ export interface LoginState {
   next: string
   /** Set when a weaker sign-in was found and a new one, with a code, was asked for. */
   forced: boolean
+  /**
+   * Something the area wants to know again when the sign-in is done, such as why it was started. It travels
+   * here, signed and for as long as the sign-in may take, and not in a cookie of its own that could run out first.
+   */
+  note?: string
   expiresAt: number
 }
 
-export const newLogin = (next: string, forced: boolean, now = Date.now()): LoginState => ({
+export const newLogin = (next: string, forced: boolean, note?: string, now = Date.now()): LoginState => ({
   state: random(16),
   nonce: random(16),
   verifier: random(32),
   next,
   forced,
+  ...(note ? { note } : {}),
   expiresAt: now + 10 * 60 * 1000,
 })
 

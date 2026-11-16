@@ -68,7 +68,8 @@ Login
 - Password reset by SMS or e-mail code, and an e-mail that tells the person their password was changed
 - Activation link for new users, who set their first password on activation
 - Login pages in several languages, with the organisation's name, colours and logo from configuration
-- Account pages where a person sees who pforte knows them as (first part; more is being built)
+- Account pages where a person sees their sessions, remembered devices and recent sign-ins, signs out everywhere and
+  changes the password
 
 Administration
 

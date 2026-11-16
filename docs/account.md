@@ -1,23 +1,43 @@
 # The account pages
 
-Every person who has an account can open `https://id.example.com/account` (your pforte address followed by `/account`)
-and see who pforte knows them as. The pages are for the people who sign in, not for those who run pforte: that is
-[the administration](administration.md).
+Every person who has an account can open `https://id.example.com/account` (your pforte address followed by `/account`),
+see how they are signed in and protect themselves: end their sessions, forget devices, change the password. The pages
+are for the people who sign in, not for those who run pforte: that is [the administration](administration.md).
 
-This is the first part. For now there is one page, the overview; pages for where a person is signed in, their remembered
-devices, their recent sign-ins and a change of password are being built on it.
+## What a person can do
 
-## What a person sees
+| Page | What it shows | What can be done |
+| --- | --- | --- |
+| **Overview** | Name, e-mail address, mobile phone number (all but its first and last digits hidden) and language. | Nothing: see below. |
+| **Signed in** | The browsers in which the person is signed in, with the applications of each and whether a code was entered, and the applications that stay signed in without a browser because they hold a refresh token, such as an app on a phone. | *Sign out everywhere*: ends every session and application, this page included, and forgets the remembered devices. Applications with a back-channel logout address are told ([signing out](integrating-a-client.md#signing-out)). |
+| **Devices** | The devices on which no code is asked for, with the browser, when it was last used and until when it is remembered. | Forget one, or all. The next sign-in there asks for a code. |
+| **Sign-ins** | The last ten times somebody signed in to the account or tried to: a sign-in with a code or on a remembered device, a wrong password, a wrong code, a hold after too many attempts, each with the time, the network address and the browser. Only what happened at the sign-in: a wrong code at the password reset or an activation is in the audit log, not here. | Nothing. A person who sees a line that was not them changes their password. |
+| **Password** | What happens next. | *Send me a code* starts the password reset pforte already has: a code by SMS to a confirmed phone, otherwise by e-mail, and then the page where the code and the new password are entered. As after every reset, all sessions end and the person is told by mail. |
 
-The overview shows the name, the e-mail address, the mobile phone number (all but its first and last digits hidden) and
-the language. Nothing on it can be changed. Your back office or the system you [sync users](syncing-users.md) from owns
-these details and would overwrite whatever a person typed here, so the page says that changes go through the
-organisation. The links of your [branding](branding-and-languages.md), such as imprint and privacy policy, are below the
-page as on every other one.
+The lists cannot mark "this browser" or "this device": pforte stores neither a browser nor an address with a session, and
+the cookie of a remembered device is not sent to these pages.
+
+**The overview is read-only.** Your back office or the system you [sync users](syncing-users.md) from owns the name, the
+e-mail address and the phone number and would overwrite whatever a person typed here, so the page says that changes go
+through the organisation. The links of your [branding](branding-and-languages.md), such as imprint and privacy policy,
+are below the page as on every other one.
+
+**There is no password field.** The change of password is the reset, with a new code to the mailbox or the phone. So
+somebody who finds a computer unlocked cannot set a password with what is on the screen.
 
 The pages come in English, German, French and Hungarian and are shown in the language stored for the person. Their texts
 start with `account.` and can be replaced like every other
 ([changing texts](branding-and-languages.md#changing-texts-and-adding-languages)).
+
+## A change needs a recent sign-in
+
+Looking needs a session. A change (signing out everywhere, forgetting a device, asking for the code of a new password)
+needs a sign-in with a code that is **at most five minutes old**, checked on every single action. If the sign-in is
+older, the person signs in again, with password and code even though they are signed in, and comes back to the page they
+were on. What they were about to do is not done for them: the page says to repeat it, however long the sign-in took.
+
+Every change is written to the [audit log](audit-log.md) with the person as the actor and `self: true` in the details, so
+an administrator can tell it from the same action done by the back office.
 
 ## Signing in
 
@@ -55,8 +75,11 @@ log says so at every start, as an error. To get the pages, register your applica
 ## How a person is kept from seeing anybody else
 
 - **Who somebody is comes from one place**, the session of the sign-in. No address of the account pages carries an id
-  of a person, and nothing is read from a form field or a header, so there is nothing that could be changed into
+  of a person, and no person is read from a form field or a header, so there is nothing that could be changed into
   somebody else's. A test walks the addresses and fails if one of them has a part that is filled in.
+- **What a person picks is checked against them.** The one thing a form carries is the id of a device to forget. It is
+  looked for among this person's devices only, so somebody else's device is "not remembered any more", exactly as one
+  that does not exist, and nothing happens.
 - **The session cookie is not enough on its own.** `pforte_account` is signed and holds who the person is, which
   sign-in it came from, how they signed in and when; it holds no token. On every request pforte also checks that the
   person is still active and that this very sign-in still exists. Signing out, locking the person, signing them out

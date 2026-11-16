@@ -16,6 +16,12 @@ export interface UserGrant {
   clientId: string
   since: Date
   expiresAt: Date | null
+  /**
+   * Whether the application holds a refresh token under this grant, so that it stays signed in without the
+   * browser. Every sign-in in a browser makes a grant; only this tells an app on a phone from a page that is
+   * signed in as long as its browser session lasts.
+   */
+  staysSignedIn: boolean
 }
 
 /**
@@ -25,19 +31,22 @@ export interface UserGrant {
  */
 export const listUserSessions = async (db: DatabaseOrTransaction, userId: string, now = new Date()) => {
   const rows = await db
-    .select({ type: oidcPayloads.type, payload: oidcPayloads.payload, createdAt: oidcPayloads.createdAt, expiresAt: oidcPayloads.expiresAt })
+    .select({ id: oidcPayloads.id, type: oidcPayloads.type, payload: oidcPayloads.payload, grantId: oidcPayloads.grantId, consumedAt: oidcPayloads.consumedAt, createdAt: oidcPayloads.createdAt, expiresAt: oidcPayloads.expiresAt })
     .from(oidcPayloads)
     .where(
       and(
         eq(oidcPayloads.accountId, userId),
-        inArray(oidcPayloads.type, [MODEL_TYPES.Session, MODEL_TYPES.Grant]),
+        inArray(oidcPayloads.type, [MODEL_TYPES.Session, MODEL_TYPES.Grant, MODEL_TYPES.RefreshToken]),
         or(isNull(oidcPayloads.expiresAt), gt(oidcPayloads.expiresAt, now)),
       ),
     )
 
+  // A refresh token that was exchanged for a new one stays in the table, marked as used, until it expires.
+  const refreshable = new Set(rows.filter((row) => row.type === MODEL_TYPES.RefreshToken && row.consumedAt === null && row.grantId).map((row) => row.grantId))
   const sessions: UserSession[] = []
   const grants: UserGrant[] = []
   for (const row of rows) {
+    if (row.type === MODEL_TYPES.RefreshToken) continue
     const payload = row.payload as { loginTs?: number; acr?: string; authorizations?: Record<string, unknown>; clientId?: string }
     if (row.type === MODEL_TYPES.Session) {
       sessions.push({
@@ -47,7 +56,7 @@ export const listUserSessions = async (db: DatabaseOrTransaction, userId: string
         clientIds: Object.keys(payload.authorizations ?? {}).sort(),
       })
     } else if (payload.clientId) {
-      grants.push({ clientId: payload.clientId, since: row.createdAt, expiresAt: row.expiresAt })
+      grants.push({ clientId: payload.clientId, since: row.createdAt, expiresAt: row.expiresAt, staysSignedIn: refreshable.has(row.id) })
     }
   }
   sessions.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())

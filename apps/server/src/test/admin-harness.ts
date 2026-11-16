@@ -52,12 +52,13 @@ export const createAdminHarness = async ({ selfServiceActivation = true, allowPr
   /** Everything the app asked the notifier to send, and a switch to make sending fail. */
   const { notifier, notifications, lastCode, lastResetCode, lastPhoneCode } = createRecordingNotifier()
   const sendPasswordResetCode = createPasswordResetSender({ db: database.db, notifier, codeSecrets: deriveCodeSecrets(COOKIE_KEYS), issuer: ISSUER })
+  const accountArea = { db: database.db, issuer: ISSUER, cookieKeys: COOKIE_KEYS, ui, timeZone: 'Europe/Berlin', clientLogouts, sendPasswordResetCode, limiter, audit: loginAudit }
   const app = buildApp({
     issuer: ISSUER,
     getDatabaseTime: () => getDatabaseTime(database.db),
     oidc: { provider, authenticate: await createAuthenticate(database.db), db: database.db, notifier, cookieKeys: COOKIE_KEYS, ui, limiter, audit: loginAudit },
     manage: { issuer: ISSUER, cookieKeys: COOKIE_KEYS, ui, organisation: 'Example Inc.', timeZone: 'Europe/Berlin' },
-    accountArea: { db: database.db, issuer: ISSUER, cookieKeys: COOKIE_KEYS, ui },
+    accountArea,
     account: {
       db: database.db,
       sendPasswordResetCode,
@@ -158,6 +159,8 @@ export const createAdminHarness = async ({ selfServiceActivation = true, allowPr
     settle: () => background.idle(),
     backgroundErrors,
     logoutFailures,
+    /** What the account pages are built with, for a test that builds them once more to look at their routes. */
+    accountArea,
     close: async () => {
       await background.idle()
       await app.close()
