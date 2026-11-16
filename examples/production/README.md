@@ -69,6 +69,8 @@ see [branding and languages](../../docs/branding-and-languages.md).
 
 ## Another proxy than Caddy
 
+On a Docker Swarm that already has an edge proxy, see [pforte on a Docker Swarm](../swarm/README.md).
+
 Remove the `caddy` service, publish pforte's port to your proxy only (`ports: ['127.0.0.1:3300:3300']`), set `PFORTE_ISSUER` to
 the public address, and set `TRUST_PROXY` to the number of proxies in front of pforte
 ([configuration](../../docs/configuration.md)). Your proxy must pass the original host and `X-Forwarded-For`.

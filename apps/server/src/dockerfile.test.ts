@@ -30,6 +30,12 @@ describe('the Dockerfile', () => {
     expect(dockerfile).toMatch(/^HEALTHCHECK /m)
   })
 
+  it('is the base of the example application\'s image too, pinned the same way', () => {
+    const example = [...read('examples/relying-party/Dockerfile').matchAll(/^FROM (\S+)/gm)].map((match) => match[1]!)
+
+    expect(example).toEqual([bases[0], bases[0]])
+  })
+
   it('keeps secrets and the repository history out of the build', () => {
     const ignored = read('.dockerignore').split('\n')
 

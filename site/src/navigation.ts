@@ -35,6 +35,7 @@ export const navigation: NavigationGroup[] = [
     title: 'Operate',
     pages: [
       { slug: 'production', source: 'examples/production/README.md', menu: 'Production with Docker Compose' },
+      { slug: 'swarm', source: 'examples/swarm/README.md', menu: 'On a Docker Swarm' },
       { slug: 'configuration', source: 'docs/configuration.md' },
       { slug: 'administration', source: 'docs/administration.md', menu: 'The administration' },
       { slug: 'account', source: 'docs/account.md', menu: 'The account pages' },

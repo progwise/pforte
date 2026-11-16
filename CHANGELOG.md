@@ -55,6 +55,11 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
 
   ([passkeys](docs/passkeys.md), [security measures](docs/security.md#passkeys),
   [#45](https://github.com/progwise/pforte/issues/45)).
+- **An example for Docker Swarm.** `examples/swarm` runs pforte and Postgres as a stack behind caddy-docker-proxy, with
+  the secrets as swarm secrets and a deploy script that runs from your own machine. It can also build and run a
+  checkout that is not released, and deploy the example application next to pforte, for a test instance
+  ([pforte on a Docker Swarm](examples/swarm/README.md)). The example application got an image, a `BASE_URL` setting
+  for running behind a proxy, and a web manifest, so a phone can put it on its home screen.
 - **Applications are told when somebody else ends a person's sessions** (back-channel logout). Until now a client with a
   back-channel logout address got a logout token only when the person signed out at pforte. Now it also gets one when an
   administrator locks, deactivates or deletes the person, signs them out everywhere or starts a password reset, and when the

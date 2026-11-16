@@ -27,9 +27,10 @@ updates:
     cooldown:
       default-days: 14
 
-  # The base image of the Dockerfile. Node stays on the major version in .nvmrc and package.json.
+  # The base image of the two Dockerfiles, which is the same (a test checks that). Node stays on the major version
+  # in .nvmrc and package.json.
   - package-ecosystem: docker
-    directory: /
+    directories: [/, /examples/relying-party]
     schedule:
       interval: weekly
       day: monday
