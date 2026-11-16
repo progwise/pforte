@@ -130,7 +130,7 @@ export const adminEn = {
   'manage.devices.revokeAll': 'Revoke all',
   'manage.devices.unknown': 'Unknown browser',
   'manage.sessions.title': 'Signed in',
-  'manage.sessions.help': 'The browsers where this person is signed in, and the applications that stay signed in, such as an app on a phone.',
+  'manage.sessions.help': 'The browsers where this person is signed in, and the applications that stay signed in without a browser, such as an app on a phone.',
   'manage.sessions.none': 'Not signed in anywhere.',
   'manage.sessions.browsers': 'Browsers',
   'manage.sessions.started': 'Signed in',
