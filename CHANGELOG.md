@@ -56,7 +56,8 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   ([passkeys](docs/passkeys.md), [security measures](docs/security.md#passkeys),
   [#45](https://github.com/progwise/pforte/issues/45)).
 - **An example for Docker Swarm.** `examples/swarm` runs pforte and Postgres as a stack behind caddy-docker-proxy, with
-  the secrets as swarm secrets and a deploy script that runs from your own machine. It can also build and run a
+  the secrets as swarm secrets and a deploy script that runs from your own machine. Codes by SMS are an option of it,
+  with the provider's credentials as a secret too. It can also build and run a
   checkout that is not released, and deploy the example application next to pforte, for a test instance
   ([pforte on a Docker Swarm](examples/swarm/README.md)). The example application got an image, a `BASE_URL` setting
   for running behind a proxy, and a web manifest, so a phone can put it on its home screen.

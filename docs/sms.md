@@ -27,6 +27,9 @@ once. When an SMS cannot be sent at sign-in, pforte sends the same code by e-mai
 does not lock anybody out. The provider's answer is never shown to users or written to the log, as it can
 contain the number and the code.
 
+On a Docker Swarm the body needs care: a swarm reads `{{...}}` in the environment of a service as a template of its own
+and refuses `{{to}}`. The [example for Docker Swarm](../examples/swarm/README.md#codes-by-sms) takes care of it.
+
 ## Twilio
 
 ```sh
@@ -57,8 +60,8 @@ SMS_SUCCESS_PATTERN='^\s*\{\s*"success"\s*:\s*"100"'
 ```
 
 seven.io reports a refused message (wrong key, no credit) in the body of a `200` answer, with `"success"` other
-than `"100"`, which is why the pattern is needed. This recipe follows seven.io's documentation; it has not been
-tried against a live account.
+than `"100"`, which is why the pattern is needed. This recipe has been tried against a live account: the message
+was accepted and delivered.
 
 ## Any other provider
 

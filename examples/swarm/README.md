@@ -55,6 +55,31 @@ docker stack services pforte
 docker service logs -f pforte_pforte
 ```
 
+## Codes by SMS
+
+Optional. Without it every code goes by e-mail ([sending codes by SMS](../../docs/sms.md)).
+
+1. Put the settings of your provider into `.env`, as that page has them for your provider: `SMS_PROVIDER=http`, `SMS_URL`,
+   `SMS_CONTENT_TYPE`, `SMS_BODY`, `SMS_FROM` and, where the provider needs it, `SMS_SUCCESS_PATTERN`. Keep the single
+   quotes around the body and the pattern.
+2. **Not `SMS_HEADERS`.** The headers carry your credentials, so they are a secret like the others: a file with the JSON
+   object, and `deploy.sh` refuses the line in `.env`.
+
+   ```bash
+   printf '%s' '{"X-Api-Key":"your-api-key","Accept":"application/json"}' > secrets/sms_headers
+   chmod 600 secrets/sms_headers
+   ```
+
+3. `./deploy.sh --check`, then `./deploy.sh`. With `SMS_PROVIDER` set it adds `stack.sms.yml`. Both first read the
+   file as pforte will and stop when it is not a JSON object of strings: pforte would not start with it.
+
+`SMS_URL` is part of the service definition, where everybody who may use Docker on the swarm can read it. That is fine
+for an address; a provider that wants a key in the address itself does not fit this example.
+
+If you write a stack file of your own: a swarm reads `{{...}}` in the environment of a service as a template of its own
+and refuses `{{to}}` (`function "to" not defined`), so the task never starts. `deploy.sh` passes each placeholder of
+`SMS_BODY` as `{{"{{to}}"}}`, which the swarm turns back into `{{to}}`.
+
 ## What this setup does for you
 
 - **No ports.** Only the edge proxy is reachable from outside; it finds pforte by the `caddy` labels and speaks to it
@@ -62,9 +87,9 @@ docker service logs -f pforte_pforte
 - **The database is on a network of its own** that is closed in both directions: only pforte can reach it, and it
   cannot reach the internet. pforte names it in full (`<stack>_db`), because on the proxy's network another stack may
   have a service called `db`.
-- **Secrets are swarm secrets**: the database password and address, the two keys and the mail server's address are
-  mounted into the containers as files and appear neither in the stack file nor in `docker service inspect`. They are
-  not in an image either: a build leaves out `./secrets` and `.env`.
+- **Secrets are swarm secrets**: the database password and address, the two keys, the mail server's address and the
+  headers for the SMS provider are mounted into the containers as files and appear neither in the stack file nor in
+  `docker service inspect`. They are not in an image either: a build leaves out `./secrets` and `.env`.
 - **pforte's container** has a read-only filesystem and no Linux capabilities, runs as an unprivileged user, and is
   restarted when its health check fails.
 - **One instance, stopped before the new one starts**, so the migrations of a new version never run next to an old
@@ -80,7 +105,8 @@ ssh <DATA_NODE> 'docker exec $(docker ps -q -f name=pforte_db) pg_dump -U pforte
 
 A swarm secret cannot be changed, only replaced, so each carries a fingerprint of its file in its name.
 
-**The mail server's address and the keys:** change the file in `./secrets` and run `./deploy.sh`. pforte restarts with
+**The mail server's address, the headers for the SMS provider and the keys:** change the file in `./secrets` and run
+`./deploy.sh`. pforte restarts with
 the new secret, and the one it replaces is removed. For `cookie_keys` and `jwks`, add the new key in front of the old
 one instead of replacing it: new keys alone sign everybody out
 ([configuration](../../docs/configuration.md#what-a-production-start-needs)).
