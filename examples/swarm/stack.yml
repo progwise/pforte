@@ -1,0 +1,107 @@
+# pforte on a Docker Swarm, behind an edge proxy that is already there: caddy-docker-proxy, which routes by the
+# `caddy` labels below and gets the TLS certificate. No ports of our own. Read README.md first.
+#
+# Deploy with ./deploy.sh, which loads .env, prepares the data folder and names the secrets. The values of the
+# secrets are files in ./secrets (made by ./setup.sh), never values in this file or in the service definition.
+version: '3.8'
+
+services:
+  pforte:
+    image: ${PFORTE_IMAGE:?Set PFORTE_IMAGE in .env}
+    environment:
+      ISSUER: https://${PFORTE_HOST:?Set PFORTE_HOST in .env}
+      DATABASE_URL_FILE: /run/secrets/database_url
+      COOKIE_KEYS_FILE: /run/secrets/cookie_keys
+      JWKS_FILE: /run/secrets/jwks
+      SMTP_URL_FILE: /run/secrets/smtp_url
+      MAIL_FROM: ${MAIL_FROM:?Set MAIL_FROM in .env}
+      ORGANISATION_NAME: ${ORGANISATION_NAME:-pforte}
+      DEFAULT_LANGUAGE: ${DEFAULT_LANGUAGE:-en}
+      TIME_ZONE: ${TIME_ZONE:-UTC}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      # The edge proxy is the one proxy between the internet and pforte: the client address is the last one in
+      # X-Forwarded-For. With a CDN in front of the proxy this is 2 (docs/rate-limiting.md).
+      TRUST_PROXY: '${TRUST_PROXY:-1}'
+    secrets: [database_url, cookie_keys, jwks, smtp_url]
+    read_only: true
+    cap_drop: [ALL]
+    networks: [proxy, backend]
+    deploy:
+      replicas: 1
+      placement:
+        # The one node that has the data folder and the images. deploy.sh works out its ID.
+        constraints: ['node.id == ${NODE_ID:?deploy.sh sets NODE_ID}']
+      # One instance, and the new one may need the migrations the old one has not seen: stop, then start.
+      update_config:
+        order: stop-first
+      restart_policy:
+        condition: any
+        delay: 5s
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+      labels:
+        caddy: ${PFORTE_HOST}
+        caddy.reverse_proxy: '{{upstreams 3300}}'
+        caddy.encode: gzip zstd
+
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: pforte
+      POSTGRES_DB: pforte
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets: [db_password]
+    volumes:
+      # A folder on the node the services are pinned to, made by deploy.sh. Back it up (see the README).
+      - ${DATA_DIR:?Set DATA_DIR in .env}/db:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U pforte -d pforte']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks: [backend]
+    deploy:
+      replicas: 1
+      placement:
+        constraints: ['node.id == ${NODE_ID:?deploy.sh sets NODE_ID}']
+      update_config:
+        order: stop-first
+      restart_policy:
+        condition: any
+        delay: 5s
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+
+networks:
+  # The network of the edge proxy, which exists already. Only pforte is on it.
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:-caddy}
+  # The database can only be reached by pforte: no route in or out.
+  backend:
+    driver: overlay
+    internal: true
+
+# A secret of a swarm cannot be changed, only replaced. So each carries a fingerprint of its file in its name
+# (deploy.sh works it out): a changed file is a new secret, and the service is restarted with it.
+secrets:
+  db_password:
+    file: ./secrets/db_password
+    name: ${STACK_NAME}_db_password_${DB_PASSWORD_PRINT}
+  database_url:
+    file: ./secrets/database_url
+    name: ${STACK_NAME}_database_url_${DATABASE_URL_PRINT}
+  cookie_keys:
+    file: ./secrets/cookie_keys
+    name: ${STACK_NAME}_cookie_keys_${COOKIE_KEYS_PRINT}
+  jwks:
+    file: ./secrets/jwks
+    name: ${STACK_NAME}_jwks_${JWKS_PRINT}
+  smtp_url:
+    file: ./secrets/smtp_url
+    name: ${STACK_NAME}_smtp_url_${SMTP_URL_PRINT}

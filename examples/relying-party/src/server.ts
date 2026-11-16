@@ -11,8 +11,10 @@ import * as client from 'openid-client'
 const issuer = new URL(process.env.ISSUER ?? 'http://localhost:3300')
 const clientId = process.env.CLIENT_ID ?? 'demo-web'
 const port = Number(process.env.PORT ?? 3400)
-const baseUrl = `http://localhost:${port}`
+// The address people reach this application under. Behind a proxy that is not where it listens.
+const baseUrl = (process.env.BASE_URL ?? `http://localhost:${port}`).replace(/\/$/, '')
 const redirectUri = `${baseUrl}/callback`
+const secure = baseUrl.startsWith('https:')
 
 // demo-web is a public client: it has no secret and PKCE protects the authorization code.
 // Plain http is only accepted for local development; use an https issuer anywhere else.
@@ -30,25 +32,48 @@ interface Session {
 
 const sessions = new Map<string, Session>()
 
-const sessionFor = (request: IncomingMessage, response: ServerResponse) => {
-  const cookie = /(?:^|;\s*)sid=([\w-]+)/.exec(request.headers.cookie ?? '')?.[1]
-  if (cookie) {
-    const existing = sessions.get(cookie)
-    if (existing) return { id: cookie, session: existing }
-  }
+/** The session of the request's cookie, if there is one. */
+const sessionOf = (request: IncomingMessage) => {
+  const id = /(?:^|;\s*)sid=([\w-]+)/.exec(request.headers.cookie ?? '')?.[1]
+  const session = id ? sessions.get(id) : undefined
+  return id && session ? { id, session } : undefined
+}
+
+// A session begins when somebody starts to sign in, not with the first request: a health check, a crawler or a
+// visitor who only looks would each leave one behind, and they are never removed.
+const startSession = (response: ServerResponse) => {
   const id = randomBytes(24).toString('base64url')
   const session: Session = {}
   sessions.set(id, session)
-  response.setHeader('Set-Cookie', `sid=${id}; Path=/; HttpOnly; SameSite=Lax`)
-  return { id, session }
+  response.setHeader('Set-Cookie', `sid=${id}; Path=/; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`)
+  return session
 }
 
 const escapeHtml = (value: unknown) =>
   String(value).replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`)
 
+// With a manifest the application can be put on a phone's home screen and then runs in a window of its own.
+// How a sign-in at another address behaves from there differs between phones, which makes it worth trying.
+const manifest = {
+  name: 'pforte example application',
+  short_name: 'pforte example',
+  start_url: '/',
+  scope: '/',
+  display: 'standalone',
+  background_color: '#ffffff',
+  theme_color: '#0b5cad',
+  icons: [{ src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
+}
+const icon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180"><rect width="180" height="180" rx="36" fill="#0b5cad"/><path d="M62 132V48h34a28 28 0 0 1 0 56H62" fill="none" stroke="#fff" stroke-width="16" stroke-linejoin="round"/></svg>`
+
 const page = (body: string) => `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>pforte example</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0b5cad">
 <style>
   body { font: 16px/1.5 system-ui, sans-serif; max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }
   pre { padding: 1rem; overflow-x: auto; background: #f4f5f7; border-radius: 0.4rem; }
@@ -74,8 +99,8 @@ const showError = (response: ServerResponse, error: unknown) => {
   html(response, 400, `<p>Something went wrong: ${escapeHtml(message)}</p><p><a href="/">Back</a></p>`)
 }
 
-const home = (response: ServerResponse, session: Session) => {
-  if (!session.tokens || !session.claims) {
+const home = (response: ServerResponse, session: Session | undefined) => {
+  if (!session?.tokens || !session.claims) {
     return html(response, 200, `<p>You are not signed in.</p><p><a class="button" href="/login">Sign in</a></p>`)
   }
   const secondsLeft = Math.max(0, Math.round((session.tokens.expiresAt - Date.now()) / 1000))
@@ -110,18 +135,27 @@ const storeTokens = async (session: Session, tokens: client.TokenEndpointRespons
 
 const server = createServer(async (request, response) => {
   const url = new URL(request.url ?? '/', baseUrl)
-  const { id, session } = sessionFor(request, response)
+  const { id, session } = sessionOf(request) ?? {}
 
   try {
     if (request.method === 'GET' && url.pathname === '/') {
       return home(response, session)
     }
 
+    if (request.method === 'GET' && url.pathname === '/manifest.webmanifest') {
+      return void response.writeHead(200, { 'Content-Type': 'application/manifest+json' }).end(JSON.stringify(manifest))
+    }
+
+    if (request.method === 'GET' && url.pathname === '/icon.svg') {
+      return void response.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' }).end(icon)
+    }
+
     if (request.method === 'GET' && url.pathname === '/login') {
       const verifier = client.randomPKCECodeVerifier()
       const state = client.randomState()
       const nonce = client.randomNonce()
-      session.pending = { verifier, state, nonce }
+      const starting = session ?? startSession(response)
+      starting.pending = { verifier, state, nonce }
 
       const authorizationUrl = client.buildAuthorizationUrl(config, {
         redirect_uri: redirectUri,
@@ -135,7 +169,7 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === 'GET' && url.pathname === '/callback') {
-      if (!session.pending) throw new Error('No sign-in is in progress. Start again.')
+      if (!session?.pending) throw new Error('No sign-in is in progress. Start again.')
       const { verifier, state, nonce } = session.pending
       session.pending = undefined
 
@@ -151,15 +185,15 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === 'POST' && url.pathname === '/refresh') {
-      if (!session.tokens?.refreshToken) throw new Error('There is no refresh token.')
+      if (!session?.tokens?.refreshToken) throw new Error('There is no refresh token.')
       await storeTokens(session, await client.refreshTokenGrant(config, session.tokens.refreshToken))
       return redirect(response, '/')
     }
 
     if (request.method === 'POST' && url.pathname === '/logout') {
-      const idToken = session.tokens?.idToken
-      sessions.delete(id)
-      response.setHeader('Set-Cookie', 'sid=; Path=/; Max-Age=0')
+      const idToken = session?.tokens?.idToken
+      if (id) sessions.delete(id)
+      response.setHeader('Set-Cookie', `sid=; Path=/; Max-Age=0${secure ? '; Secure' : ''}`)
       // Ending the session at the provider revokes this application's refresh tokens there.
       const endSession = client.buildEndSessionUrl(config, {
         ...(idToken ? { id_token_hint: idToken } : {}),
@@ -177,3 +211,6 @@ const server = createServer(async (request, response) => {
 server.listen(port, () => {
   console.log(`Example application: ${baseUrl}  (provider: ${issuer.href}, client: ${clientId})`)
 })
+
+// In a container: stop at once when asked to, instead of waiting to be killed.
+for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => server.close(() => process.exit(0)))

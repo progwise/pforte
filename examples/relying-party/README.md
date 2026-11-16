@@ -36,7 +36,15 @@ with the redirect `http://localhost:3400/callback`.
 | --- | --- | --- |
 | `ISSUER` | `http://localhost:3300` | Where pforte runs |
 | `CLIENT_ID` | `demo-web` | The client registered in pforte |
-| `PORT` | `3400` | Port of this application; the redirect URI must match the client registration |
+| `PORT` | `3400` | Port of this application |
+| `BASE_URL` | `http://localhost:<PORT>` | The address people reach it under, if that is not where it listens (behind a proxy). The redirect URI of the client registration is `<BASE_URL>/callback` |
 
 `demo-web` is a public client (no secret). Plain `http` for the issuer is accepted only for
 local development.
+
+## On a server
+
+[`Dockerfile`](Dockerfile) builds the application as an image (from the root of the repository), and
+[examples/swarm](../swarm/README.md) deploys it next to pforte under a name of its own. The application has a web
+manifest, so a phone can put it on its home screen and start it in a window of its own: a way to try how signing
+in at pforte behaves from there.

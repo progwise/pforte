@@ -8,5 +8,6 @@ coverage/
 *.log
 .DS_Store
 
-# Secrets made by examples/production/setup.sh
+# Secrets made by the setup.sh of the examples
 examples/production/secrets/
+examples/swarm/secrets/

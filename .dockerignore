@@ -4,9 +4,11 @@
 **/node_modules
 **/dist
 **/coverage
-.env
-.env.*
-!.env.example
+# A pattern without **/ matches at the top only, and the examples keep their settings and secrets next to them.
+**/.env
+**/.env.*
+!**/.env.example
+examples/*/secrets
 *.log
 .DS_Store
 docs
