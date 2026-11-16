@@ -126,6 +126,7 @@ const app = buildApp({
     limiter,
     allowPrivateAddresses: config.allowPrivateAddresses,
     clientLogouts,
+    codeSecrets: deriveCodeSecrets(config.cookieKeys),
   },
 })
 

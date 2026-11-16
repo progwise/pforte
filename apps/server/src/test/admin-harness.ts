@@ -94,6 +94,7 @@ export const createAdminHarness = async ({
       limiter,
       allowPrivateAddresses,
       clientLogouts,
+      codeSecrets: deriveCodeSecrets(COOKIE_KEYS),
     },
   })
   await app.ready()

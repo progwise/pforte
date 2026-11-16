@@ -1,19 +1,23 @@
 import type { Database } from '@progwise/pforte-db'
 import {
   activateUser,
+  confirmPhone,
   deactivateUser,
   endSessions,
   findUserById,
   getClient,
   LifecycleError,
   lockUser,
+  phoneToConfirm,
+  recordPhoneCodeSent,
   requestPasswordReset,
   unlockUser,
 } from '@progwise/pforte-db/admin'
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import type { ZodTypeProvider } from 'fastify-type-provider-zod'
 import { z } from 'zod'
-import { CodeLimitError } from '@progwise/pforte-db/codes'
+import { CodeLimitError, issueCode, withdrawCode } from '@progwise/pforte-db/codes'
+import { maskPhone } from '../auth/channels.js'
 import type { SendPasswordResetCode } from '../auth/password-reset.js'
 import type { RateLimiter } from '../auth/rate-limiter.js'
 import { type Notifier, NotifierUnavailableError } from '../notifications/notifier.js'
@@ -28,6 +32,7 @@ const ERROR_RESPONSES = {
   403: problemSchema,
   404: problemSchema,
   409: problemSchema,
+  422: problemSchema,
   429: problemSchema,
   503: problemSchema,
 }
@@ -44,11 +49,13 @@ export interface LifecycleDependencies {
   issuer: string
   /** Tells the applications of a user whose sessions were ended. */
   clientLogouts: ClientLogouts
+  /** The secrets that sign one-time codes (see `deriveCodeSecrets`). */
+  codeSecrets: string[]
 }
 
 /** Lock, unlock, activate, deactivate, reset the password and end the sessions of a user. */
 export const lifecycleRoutes =
-  ({ db, auth, notifier, sendPasswordResetCode, limiter, issuer, clientLogouts }: LifecycleDependencies) =>
+  ({ db, auth, notifier, sendPasswordResetCode, limiter, issuer, clientLogouts, codeSecrets }: LifecycleDependencies) =>
   async (instance: FastifyInstance) => {
     const app = instance.withTypeProvider<ZodTypeProvider>()
     const onRequest = auth.require('directory', 'admin')
@@ -241,6 +248,90 @@ export const lifecycleRoutes =
           if (error instanceof NotifierUnavailableError) return cannotSend(reply, error)
           throw error
         }
+      },
+    )
+
+    // --- Confirming a phone number from an application: it shows the field for the code, pforte sends and checks it
+
+    const PHONE_NOTE =
+      'For an application that lets a person confirm their phone number in its own pages, so that their sign-in codes go by SMS. ' +
+      'Call it only for the person who is signed in to your application, and only when they asked for it: the code shows that whoever ' +
+      'typed it holds the phone, and your application vouches that this is the person the account belongs to.'
+
+    app.post(
+      '/users/:id/send-phone-code',
+      {
+        onRequest,
+        schema: {
+          tags: ['Lifecycle'],
+          summary: 'Send the code that confirms the phone number of a user',
+          description:
+            'For an active user with a phone number that is not confirmed (`phoneVerifiedAt` is null). pforte sends a 6-digit code by SMS to ' +
+            'the stored number; it is never returned. It is valid for ten minutes and for that number only, and a new one replaces it. ' +
+            'A user gets at most one code a minute and five an hour (429 with `Retry-After`). 409 when there is nothing to confirm, or when ' +
+            `this pforte sends no SMS. ${PHONE_NOTE}`,
+          params,
+          response: { 200: z.object({ sentTo: z.string(), expiresAt: z.string() }), ...ERROR_RESPONSES },
+        },
+      },
+      async (request, reply) => {
+        const user = await findUserById(db, request.params.id)
+        if (!user) return noUser(reply)
+        if (!notifier.smsAvailable) return problem(reply, 409, 'Conflict', 'This pforte sends no SMS, so there is nothing a phone number is confirmed for.')
+        try {
+          const phone = phoneToConfirm(user)
+          // Bound to the number it goes to: it confirms that number and no other.
+          const { code, expiresAt } = await issueCode(db, { userId: user.id, channel: 'sms', purpose: 'activation', boundTo: phone }, { secrets: codeSecrets })
+          try {
+            await notifier.sendPhoneCode(asUser(user), { code, expiresAt })
+          } catch (error) {
+            // Nobody is waiting for that code.
+            await withdrawCode(db, { userId: user.id, purpose: 'activation' })
+            throw error
+          }
+          await recordPhoneCodeSent(db, requestContext(request), user, expiresAt)
+          return { sentTo: maskPhone(phone), expiresAt: expiresAt.toISOString() }
+        } catch (error) {
+          if (error instanceof LifecycleError) return refused(reply, error)
+          if (error instanceof CodeLimitError) {
+            return problem(reply, 429, 'Too many requests', `${error.message} Try again in ${error.retryAfterSeconds} seconds.`, { 'Retry-After': String(error.retryAfterSeconds) })
+          }
+          if (error instanceof NotifierUnavailableError) return problem(reply, 503, 'Cannot send the message', `${error.message} No code was sent; repeat the call once messages can be sent.`)
+          throw error
+        }
+      },
+    )
+
+    app.post(
+      '/users/:id/confirm-phone',
+      {
+        onRequest,
+        schema: {
+          tags: ['Lifecycle'],
+          summary: 'Confirm the phone number of a user with the code they received',
+          description:
+            'Checks the code that `send-phone-code` sent. If it is right, the number is confirmed (`phoneVerifiedAt`) and the sign-in codes of ' +
+            'the user go by SMS from now on. 422 for a code that is wrong, has expired or was tried too often (five attempts per code): send a ' +
+            `new one. 409 when there is nothing to confirm. ${PHONE_NOTE}`,
+          params,
+          body: z.object({ code: z.string().min(1).max(20) }),
+          response: { 200: userSchema, ...ERROR_RESPONSES },
+        },
+      },
+      async (request, reply) => {
+        const user = await findUserById(db, request.params.id)
+        if (!user) return noUser(reply)
+        try {
+          phoneToConfirm(user)
+        } catch (error) {
+          if (error instanceof LifecycleError) return refused(reply, error)
+          throw error
+        }
+        const code = request.body.code.replaceAll(' ', '')
+        // The check and the confirmation are one step, for the number that is stored at that moment.
+        const result = /^\d{6}$/.test(code) ? await confirmPhone(db, requestContext(request), { userId: user.id, code }, { secrets: codeSecrets }) : undefined
+        if (!result?.ok) return problem(reply, 422, 'Wrong code', 'The code is not correct, has expired or was tried too often. Send a new one.')
+        return toUserDto((await findUserById(db, user.id))!)
       },
     )
 

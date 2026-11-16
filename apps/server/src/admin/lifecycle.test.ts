@@ -263,6 +263,153 @@ describe.skipIf(!hasDatabase)('admin API: user lifecycle', () => {
     })
   })
 
+  describe('confirming a phone number for an application', () => {
+    const NUMBER = '+4915112345678'
+    let counter = 0
+
+    beforeEach(async () => {
+      h.notifier.smsAvailable = true
+      h.notifier.failSms = false
+      await h.database.pool.query('delete from otp_codes')
+    })
+
+    /** An active person with a number nobody has confirmed, as after a change by the back office. */
+    const unconfirmed = async () => {
+      const email = `phone${++counter}@example.com`
+      const created = (await h.api('POST', '/users', { body: { email, firstName: 'Pia', lastName: 'Phone', phone: NUMBER } })).json()
+      await h.database.pool.query(`update users set status = 'active', password_hash = 'hash' where id = $1`, [created.id])
+      return { id: created.id as string, email }
+    }
+    const send = (id: string, token = h.adminToken) => h.api('POST', `/users/${id}/send-phone-code`, { token })
+    const confirm = (id: string, code: string, token = h.adminToken) => h.api('POST', `/users/${id}/confirm-phone`, { token, body: { code } })
+    const phoneCodes = () => h.notifications.filter((n) => n.kind === 'phone-code')
+
+    it('sends the code by SMS to the stored number and never returns it', async () => {
+      const user = await unconfirmed()
+
+      const sent = await send(user.id)
+
+      expect(sent.statusCode, sent.body).toBe(200)
+      expect(sent.json()).toEqual({ sentTo: expect.stringMatching(/^\+49•+78$/), expiresAt: expect.any(String) })
+      expect(new Date(sent.json().expiresAt).getTime()).toBeGreaterThan(Date.now())
+      expect(phoneCodes().map((n) => [n.user.email, n.user.phone, n.channel])).toEqual([[user.email, NUMBER, 'sms']])
+      expect(sent.body).not.toContain(h.lastPhoneCode(user.email)!)
+      expect(sent.body).not.toContain(NUMBER)
+      const [event] = await h.audit('user.phone.confirm.request', user.id)
+      expect(event).toMatchObject({ actor_type: 'client', actor_id: 'demo-admin' })
+      expect(JSON.stringify(event.details)).not.toContain(h.lastPhoneCode(user.email)!)
+    })
+
+    it('confirms the number with that code: the answer is the user, it is recorded, and the next sign-in code goes by SMS', async () => {
+      const user = await unconfirmed()
+      await send(user.id)
+      const code = h.lastPhoneCode(user.email)!
+
+      const confirmed = await confirm(user.id, `${code.slice(0, 3)} ${code.slice(3)}`)
+
+      expect(confirmed.statusCode, confirmed.body).toBe(200)
+      expect(confirmed.json()).toMatchObject({ id: user.id, phone: NUMBER, phoneVerifiedAt: expect.any(String) })
+      expect((await h.audit('user.phone.confirm', user.id)).at(-1)).toMatchObject({ actor_type: 'client', actor_id: 'demo-admin' })
+      // and once: there is nothing left to confirm
+      expect((await confirm(user.id, code)).statusCode).toBe(409)
+      expect((await send(user.id)).statusCode).toBe(409)
+    })
+
+    it.each([
+      ['a wrong code', '000000'],
+      ['something that is no code', 'abc'],
+    ])('answers 422 for %s and confirms nothing', async (_name, code) => {
+      const user = await unconfirmed()
+      await send(user.id)
+      const wrong = code === h.lastPhoneCode(user.email) ? '111111' : code
+
+      const refused = await confirm(user.id, wrong)
+
+      expect(refused.statusCode).toBe(422)
+      expect(refused.json()).toMatchObject({ title: 'Wrong code', status: 422 })
+      expect((await h.api('GET', `/users/${user.id}`)).json().phoneVerifiedAt).toBeNull()
+      expect(await h.audit('user.phone.confirm', user.id)).toEqual([])
+    })
+
+    it('answers 422 when no code was sent, and 400 without a code', async () => {
+      const user = await unconfirmed()
+      expect((await confirm(user.id, '123456')).statusCode).toBe(422)
+      expect((await h.api('POST', `/users/${user.id}/confirm-phone`, { body: {} })).statusCode).toBe(400)
+    })
+
+    it('gives a code five attempts: after that the right one is too late', async () => {
+      const user = await unconfirmed()
+      await send(user.id)
+      const code = h.lastPhoneCode(user.email)!
+      const wrong = code === '000000' ? '111111' : '000000'
+
+      for (let attempt = 0; attempt < 5; attempt++) expect((await confirm(user.id, wrong)).statusCode).toBe(422)
+
+      expect((await confirm(user.id, code)).statusCode).toBe(422)
+      expect((await h.api('GET', `/users/${user.id}`)).json().phoneVerifiedAt).toBeNull()
+    })
+
+    it('does not send a second code right away: 429 with the time to wait', async () => {
+      const user = await unconfirmed()
+      await send(user.id)
+
+      const again = await send(user.id)
+
+      expect(again.statusCode).toBe(429)
+      expect(Number(again.headers['retry-after'])).toBeGreaterThan(0)
+      expect(phoneCodes()).toHaveLength(1)
+    })
+
+    it('does not confirm a number that was changed after the code was sent', async () => {
+      const user = await unconfirmed()
+      await send(user.id)
+      const code = h.lastPhoneCode(user.email)!
+      await h.api('PATCH', `/users/${user.id}`, { body: { phone: '+4915187654321' } })
+
+      expect((await confirm(user.id, code)).statusCode).toBe(422)
+      expect((await h.api('GET', `/users/${user.id}`)).json().phoneVerifiedAt).toBeNull()
+    })
+
+    it('answers 503 when the SMS cannot be sent, and leaves no code to wait for', async () => {
+      const user = await unconfirmed()
+      h.notifier.failSms = true
+
+      const sent = await send(user.id)
+
+      expect(sent.statusCode).toBe(503)
+      expect(sent.json().detail).toContain('No code was sent')
+      expect((await h.database.pool.query(`select 1 from otp_codes where user_id = $1 and expires_at > now() + interval '5 seconds'`, [user.id])).rowCount).toBe(0)
+      expect(await h.audit('user.phone.confirm.request', user.id)).toEqual([])
+    })
+
+    it.each([
+      ['this pforte sends no SMS', async (_id: string) => void (h.notifier.smsAvailable = false), /sends no SMS/],
+      ['the user has no number', async (id: string) => void (await h.database.pool.query(`update users set phone = null where id = $1`, [id])), /no phone number/],
+      ['the number is confirmed', async (id: string) => void (await h.database.pool.query(`update users set phone_verified_at = now() where id = $1`, [id])), /confirmed already/],
+      ['the user is locked', async (id: string) => void (await h.database.pool.query(`update users set status = 'locked' where id = $1`, [id])), /user who is locked/],
+    ])('answers 409 and sends nothing when %s', async (_name, arrange, reason) => {
+      const user = await unconfirmed()
+      await arrange(user.id)
+
+      const sent = await send(user.id)
+
+      expect(sent.statusCode).toBe(409)
+      expect(sent.json().detail).toMatch(reason)
+      expect(phoneCodes()).toEqual([])
+    })
+
+    it('answers 404 for an unknown user, needs a token, and a directory client may do it', async () => {
+      const user = await unconfirmed()
+      expect((await send('0190f6a8-0000-7000-8000-000000000000')).statusCode).toBe(404)
+      expect((await confirm('0190f6a8-0000-7000-8000-000000000000', '123456')).statusCode).toBe(404)
+      expect((await h.api('POST', `/users/${user.id}/send-phone-code`, { token: null })).statusCode).toBe(401)
+      expect((await h.api('POST', `/users/${user.id}/confirm-phone`, { token: null, body: { code: '123456' } })).statusCode).toBe(401)
+
+      expect((await send(user.id, h.directoryToken)).statusCode).toBe(200)
+      expect((await confirm(user.id, h.lastPhoneCode(user.email)!, h.directoryToken)).statusCode).toBe(200)
+    })
+  })
+
   describe('requests', () => {
     it.each([
       ['lock', 'locked', /lock a user who is locked/],

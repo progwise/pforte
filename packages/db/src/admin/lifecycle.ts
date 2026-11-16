@@ -244,6 +244,21 @@ export const requestPasswordReset = async (tx: DatabaseOrTransaction, context: R
 }
 
 /**
+ * The phone number of a user that a code can be sent to, to confirm it: of an active user, stored and not confirmed
+ * yet. Anything else is refused with the reason.
+ */
+export const phoneToConfirm = (user: UserRow) => {
+  if (user.status !== 'active') throw new LifecycleError(`Cannot confirm the phone number of a user who is ${user.status}. It is possible for: active.`)
+  if (!user.phone) throw new LifecycleError('The user has no phone number.')
+  if (user.phoneVerifiedAt) throw new LifecycleError('The phone number of the user is confirmed already.')
+  return user.phone
+}
+
+/** Records that a client had the code sent that confirms the phone number of a user. Never the code. */
+export const recordPhoneCodeSent = (db: DatabaseOrTransaction, context: RequestContext, user: UserRow, expiresAt: Date) =>
+  recordAuditEvent(db, audit(context, 'user.phone.confirm.request', user, { expiresAt: expiresAt.toISOString() }))
+
+/**
  * A person enters the code that was sent to their phone number. If it is right, the number is confirmed and codes
  * can go there by SMS from now on.
  *
