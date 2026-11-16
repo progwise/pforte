@@ -337,6 +337,25 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
       expect(done.body).toContain('href="http://localhost:3400/"')
     })
 
+    it('leads on to the administration and to the account pages, whose start address is their own in this pforte', async () => {
+      for (const [clientId, button, address] of [
+        ['pforte-admin-ui', 'Continue to Administration', 'https://localhost:3300/manage'],
+        ['pforte-account-ui', 'Continue to Account', 'https://localhost:3300/account'],
+      ] as const) {
+        const invited = await invitedTo(clientId)
+        const active = await form('POST', '/activate', { token: invited.token, password: GOOD, confirm: GOOD })
+        expect(active.body).toContain(`<a class="button" href="${address}">${button}</a>`)
+
+        // a reset that began with "Forgot your password?" on the sign-in page the area sent the person to
+        const user = await activated()
+        await form('POST', '/reset', { email: user.email, client_id: clientId })
+        await h.settle()
+        const reset = await form('POST', '/reset/code', { email: user.email, code: resetCode(user.email), password: 'a brand new password', confirm: 'a brand new password', client_id: clientId })
+        expect(reset.statusCode).toBe(200)
+        expect(reset.body).toContain(`<a class="button" href="${address}">${button}</a>`)
+      }
+    })
+
     it('shows no button without a client, or when the client has no start address', async () => {
       const plain = await invitedTo()
       expect((await form('POST', '/activate', { token: plain.token, password: GOOD, confirm: GOOD })).body).not.toContain('Continue to')

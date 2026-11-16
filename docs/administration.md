@@ -15,8 +15,9 @@ and when another person signs in, the first is signed out of pforte.
 ### The first administrator
 
 Somebody has to be the first. Set **`BOOTSTRAP_ADMIN_EMAIL`** to an address and start pforte: if there is no administrator yet,
-that address becomes one and is mailed a link to choose a password (the same activation link as any new user gets). Once an
-administrator exists nothing happens, so the setting can stay. If the mail cannot be sent, nothing is changed, an error is
+that address becomes one and is mailed a link to choose a password (the same activation link as any new user gets). The mail
+says that the account is for the administration, and the page after choosing the password has the button *Continue to
+Administration*. Once an administrator exists nothing happens, so the setting can stay. If the mail cannot be sent, nothing is changed, an error is
 logged and the next start tries again.
 
 If the address already belongs to a user, that user is made an administrator, and gets the link only if they still have to
@@ -52,7 +53,9 @@ Two rules protect you from locking yourself out, for the API as much as for the 
   administrator.
 
 The built-in client `pforte-admin-ui`, which the administration signs in with, is created by pforte at every start. It is listed
-with the other clients as built in and cannot be changed, rotated or deleted. A second one, `pforte-account-ui`, belongs to
+with the other clients as built in and cannot be changed, rotated or deleted. Its start address is the administration itself
+(`/manage` of your pforte address), so a password reset that began with *Forgot your password?* on the sign-in page of the
+administration ends with the button *Continue to Administration*. A second one, `pforte-account-ui`, belongs to
 [the account pages](account.md), where every person sees their own account.
 
 ## Users

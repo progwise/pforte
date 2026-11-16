@@ -117,6 +117,16 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   (`interaction session not found`): pforte signed the first person out, as it should, and removed the sign-in under way
   together with their tokens. Now the first person is signed out and loses their tokens as before, and the second arrives
   at the application.
+- **The way back to the administration after choosing a password.** The first administrator chose their password from
+  the activation link and was left on "Your account is active. You can now sign in from the application you came from",
+  with no link to the administration; the same after a password reset that began with "Forgot your password?" on the
+  sign-in page of the administration or of the account pages. The built-in clients `pforte-admin-ui` and
+  `pforte-account-ui` now have a start address, `/manage` and `/account` of your pforte address, so those pages end with
+  the button "Continue to Administration" or "Continue to Account", as they do for an application that has one. The
+  button is a link: it carries no code or token, and the administration asks for password and code as always. The mail
+  to the first administrator (`BOOTSTRAP_ADMIN_EMAIL`) now says that the account is for the administration. The list of
+  clients and `GET /admin/clients` show the start address of the two built-in clients
+  ([the first administrator](docs/administration.md#the-first-administrator)).
 
 ## 0.2.0 (2026-10-23)
 

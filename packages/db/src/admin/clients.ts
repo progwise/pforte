@@ -171,12 +171,12 @@ export class SystemClientIdTakenError extends Error {
  */
 export const ensureSystemClient = async (
   db: DatabaseOrTransaction,
-  client: { clientId: string; name: string; redirectUris: string[]; postLogoutRedirectUris: string[]; scopes: string[] },
+  client: { clientId: string; name: string; clientUri: string; redirectUris: string[]; postLogoutRedirectUris: string[]; scopes: string[] },
 ) => {
   const values = {
     name: client.name,
     type: 'public' as const,
-    clientUri: null,
+    clientUri: client.clientUri,
     secretHash: null,
     pkceRequired: true,
     redirectUris: client.redirectUris,

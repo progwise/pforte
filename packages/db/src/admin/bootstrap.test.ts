@@ -30,6 +30,16 @@ describe.skipIf(!hasDatabase)('the first administrator', () => {
     expect(delivered).toEqual([{ email: 'boss@example.com', token: expect.stringMatching(/^[\w-]{43}$/) }])
   })
 
+  it('notes the client the activation leads on to, when it is given one', async () => {
+    await database.pool.query(
+      `insert into clients (client_id, name, type, redirect_uris, allowed_grants, scopes) values ('pforte-admin-ui', 'Administration', 'public', '{https://id.example.com/manage/callback}', '{authorization_code}', '{openid}') on conflict do nothing`,
+    )
+    await ensureAdministrator(database.db, 'boss@example.com', deliver, { clientId: 'pforte-admin-ui' })
+
+    const { rows } = await database.pool.query(`select activation_client_id from users`)
+    expect(rows).toEqual([{ activation_client_id: 'pforte-admin-ui' }])
+  })
+
   it('records that pforte did it, and keeps the token out of the audit log', async () => {
     await ensureAdministrator(database.db, 'boss@example.com', deliver)
     const { rows } = await database.pool.query(`select actor_type, action, details from audit_events order by created_at, id`)

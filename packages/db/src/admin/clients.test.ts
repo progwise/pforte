@@ -225,6 +225,7 @@ describe.skipIf(!hasDatabase)('built-in clients', () => {
   const ui = {
     clientId: 'pforte-admin-ui',
     name: 'Administration',
+    clientUri: 'https://id.example.com/manage',
     redirectUris: ['https://id.example.com/manage/callback'],
     postLogoutRedirectUris: ['https://id.example.com/manage/signed-out'],
     scopes: ['openid', 'profile'],
@@ -244,6 +245,7 @@ describe.skipIf(!hasDatabase)('built-in clients', () => {
     expect(client).toMatchObject({
       type: 'public',
       system: true,
+      clientUri: 'https://id.example.com/manage',
       pkceRequired: true,
       secretHash: null,
       allowedGrants: ['authorization_code'],
