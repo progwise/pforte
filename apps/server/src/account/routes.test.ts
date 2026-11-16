@@ -606,6 +606,73 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
       expect(JSON.stringify(events[0])).not.toContain('brand new')
     })
 
+    describe('the notice that the password was changed', () => {
+      const notices = () => h.notifications.filter((n) => n.kind === 'password-changed')
+
+      it('goes to the person by e-mail after a reset, with the page to choose another password', async () => {
+        const user = await activated()
+        await requestReset(user.email)
+
+        expect((await submitReset(user.email, resetCode(user.email))).statusCode).toBe(200)
+        await h.settle()
+
+        expect(notices()).toEqual([
+          expect.objectContaining({ channel: 'email', user: expect.objectContaining({ email: user.email }), url: `https://localhost:3300/reset?email=${encodeURIComponent(user.email)}&lang=en` }),
+        ])
+        // The address in the notice opens the page where a reset starts, with the e-mail address filled in.
+        const page = await form('GET', new URL(notices()[0]!.url!).pathname + new URL(notices()[0]!.url!).search)
+        expect(page.statusCode).toBe(200)
+        expect(page.body).toContain(`value="${user.email}"`)
+      })
+
+      it('is not sent when the reset was refused', async () => {
+        const user = await activated()
+        await requestReset(user.email)
+        const right = resetCode(user.email)
+        const wrong = right === '000000' ? '000001' : '000000'
+
+        expect((await submitReset(user.email, wrong)).statusCode).toBe(401)
+        expect((await submitReset(user.email, right, 'short')).statusCode).toBe(422)
+        expect((await submitReset('nobody@example.com', '123456')).statusCode).toBe(401)
+        await h.settle()
+
+        expect(notices()).toEqual([])
+      })
+
+      it('is sent once, not again when the used code is tried a second time', async () => {
+        const user = await activated()
+        await requestReset(user.email)
+        const code = resetCode(user.email)
+        await submitReset(user.email, code)
+        expect((await submitReset(user.email, code, 'yet another password')).statusCode).toBe(401)
+        await h.settle()
+
+        expect(notices()).toHaveLength(1)
+      })
+
+      it('does not undo the reset or change the page when it cannot be sent', async () => {
+        const user = await activated()
+        await requestReset(user.email)
+        h.notifier.failWith = new NotifierUnavailableError('SMTP is down')
+
+        const done = await submitReset(user.email, resetCode(user.email), 'a brand new password')
+        await h.settle()
+        h.notifier.failWith = undefined
+
+        expect(done.statusCode).toBe(200)
+        expect(done.body).toContain('Password changed')
+        expect(notices()).toEqual([])
+        const fresh = await signIn(browser(), { ...WEB, email: user.email, password: 'a brand new password' })
+        expect(fresh.code).toBeTruthy()
+      })
+
+      it('is not sent after an activation: there was no password to change', async () => {
+        await activated()
+        await h.settle()
+        expect(notices()).toEqual([])
+      })
+    })
+
     it('ends the sessions and forgets the remembered devices', async () => {
       const user = await activated()
       const b = browser()
@@ -838,6 +905,9 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
       await requestReset(confirmed.email)
       expect(h.notifications.findLast((n) => n.kind === 'reset-code')).toMatchObject({ channel: 'sms' })
       expect((await submitReset(confirmed.email, resetCode(confirmed.email))).statusCode).toBe(200)
+      // The notice is an e-mail even then: it reaches the mailbox, which somebody with only the phone does not hold.
+      await h.settle()
+      expect(h.notifications.findLast((n) => n.kind === 'password-changed')).toMatchObject({ channel: 'email', user: expect.objectContaining({ email: confirmed.email }) })
 
       const unconfirmed = await activated()
       await h.database.pool.query(`update users set phone = $2 where id = $1`, [unconfirmed.id, NUMBER])

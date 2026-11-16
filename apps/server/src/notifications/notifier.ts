@@ -25,6 +25,11 @@ export interface Notifier {
   sendPhoneCode(user: NotifiableUser, phone: { code: string; expiresAt: Date }): Promise<void>
   /** The link a new user opens to set their first password. */
   sendActivationLink(user: NotifiableUser, link: { url: string; expiresAt: Date; applicationName?: string }): Promise<void>
+  /**
+   * Tells the user that their password was changed, with the page where they choose another one if it was not them.
+   * Always an e-mail, also when the code came by SMS: it is a notice, and it reaches the mailbox a phone thief does not hold.
+   */
+  sendPasswordChanged(user: NotifiableUser, notice: { url: string }): Promise<void>
 }
 
 /** No way to reach the user is configured. */
@@ -69,6 +74,10 @@ export const createLogNotifier = ({
     async sendPhoneCode(user, { code, expiresAt }) {
       guard()
       log(`[development notifier] Code to confirm the phone ${user.phone} of ${user.email} (${until(expiresAt)}): ${code}`)
+    },
+    async sendPasswordChanged(user, { url }) {
+      guard()
+      log(`[development notifier] Notice for ${user.email}: the password was changed. If it was not them: ${url}`)
     },
   }
 }
@@ -117,6 +126,9 @@ export const createMailNotifier = ({ mailer, sms, organisation, i18n }: MailNoti
     },
     async sendPhoneCode(user, { code, expiresAt }) {
       await sendSms(user, text(user, 'sms.phone', { code, minutes: minutesUntil(expiresAt) }))
+    },
+    async sendPasswordChanged(user, { url }) {
+      await mailer.send({ to: user.email, subject: text(user, 'mail.passwordChanged.subject'), text: text(user, 'mail.passwordChanged.text', { url }) })
     },
   }
 }

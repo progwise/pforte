@@ -27,8 +27,8 @@ export interface AccountDependencies {
   sendPasswordResetCode: SendPasswordResetCode
   /** The secrets that sign one-time codes (see `deriveCodeSecrets`). */
   codeSecrets: string[]
-  /** Sends the code that confirms a phone number. */
-  notifier: Pick<Notifier, 'smsAvailable' | 'sendPhoneCode' | 'sendActivationLink'>
+  /** Sends the code that confirms a phone number, activation links and the notice that a password was changed. */
+  notifier: Pick<Notifier, 'smsAvailable' | 'sendPhoneCode' | 'sendActivationLink' | 'sendPasswordChanged'>
   /** Whether a person without a password may ask for their activation link on the reset page (`SELF_SERVICE_ACTIVATION`). */
   selfServiceActivation: boolean
   /** Sign the cookie that carries the phone confirmation step. */
@@ -346,6 +346,16 @@ export const accountRoutes =
       const changed = await completePasswordReset(db, { userId: user.id, passwordHash: await hash(text(request.body?.password)), ...origin(request) })
       if (!changed) return refused('not_allowed')
       if (result.channel === 'email') await markEmailVerified(db, user.id)
+      // The rightful person learns of a reset that somebody else did. Not tied to the response: the notice must
+      // go out even if the browser has gone, and a mail server that is down must not turn a reset into an error.
+      background.run(async () => {
+        try {
+          await notifier.sendPasswordChanged(user, { url: `${issuer}/reset?email=${encodeURIComponent(user.email)}&lang=${encodeURIComponent(user.language)}` })
+        } catch (error) {
+          if (error instanceof NotifierUnavailableError) request.log.error(error, 'the notice that the password was changed could not be sent')
+          else throw error
+        }
+      })
       return html(reply, 200, view.notice(view.t('reset.doneTitle'), view.t('reset.done'), await continueTo(view, clientId)))
     })
   }

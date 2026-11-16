@@ -104,6 +104,9 @@ export const fr: Catalog = {
   'mail.resetCode.subject': 'Nouveau mot de passe pour {organisation}',
   'mail.resetCode.text':
     "Bonjour {firstName},\n\nvotre code pour choisir un nouveau mot de passe est {code}. Il est valable {minutes} minutes. Saisissez-le ici :\n\n{url}\n\nSi vous n'avez pas demandé de nouveau mot de passe, ignorez ce message ; votre mot de passe reste inchangé.\n",
+  'mail.passwordChanged.subject': 'Votre mot de passe pour {organisation} a été modifié',
+  'mail.passwordChanged.text':
+    "Bonjour {firstName},\n\nle mot de passe de votre compte chez {organisation} vient d'être modifié, et vous avez été déconnecté partout.\n\nSi c'était vous, vous n'avez rien à faire.\n\nSi ce n'était pas vous, choisissez maintenant un nouveau mot de passe :\n\n{url}\n\nInformez ensuite votre administration.\n",
 
   'sms.login': '{code} est votre code de connexion pour {organisation}. Valable {minutes} minutes. Ne le communiquez à personne.',
   'sms.reset':

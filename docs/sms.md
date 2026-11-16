@@ -2,7 +2,8 @@
 
 pforte sends the second factor and password reset codes by e-mail. If you configure an SMS provider, users
 who have **confirmed their phone number** get the codes by SMS instead, and can still ask for the e-mail
-(`Send the code by e-mail instead`). Without SMS settings everything goes by e-mail.
+(`Send the code by e-mail instead`). Without SMS settings everything goes by e-mail. Links and notices are never an
+SMS: the activation link and the notice that a password was changed always go by e-mail.
 
 pforte has no built-in provider. It sends one HTTP request per message, built from settings, so any provider
 with an HTTP API works, and changing the provider is a configuration change. You choose the provider; check
