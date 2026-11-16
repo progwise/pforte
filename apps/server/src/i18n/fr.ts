@@ -141,7 +141,7 @@ export const fr: Catalog = {
   'account.profile.phoneUnconfirmed': 'Non confirmé, vos codes de connexion arrivent donc par e-mail.',
   'account.phone.send': 'Confirmer avec un code par SMS',
   'account.phone.introSend': 'Pour confirmer le {to}, nous y envoyons un code à 6 chiffres par SMS. Une fois ce code saisi, vos codes de connexion arriveront par SMS.',
-  'account.phone.intro': 'Pour confirmer le {to}, saisissez le code à 6 chiffres qui lui a été envoyé par SMS. Vos codes de connexion arriveront ensuite par SMS.',
+  'account.phone.intro': 'Saisissez le code à 6 chiffres reçu par SMS. Une fois le numéro confirmé, vos codes de connexion arriveront par SMS.',
   'account.phone.unavailable': "Le code n'a pas pu être envoyé. Veuillez réessayer plus tard.",
   'account.loginFailed.title': "La connexion n'a pas abouti",
   'account.loginFailed.text': "La connexion n'a pas pu être terminée. Veuillez réessayer.",

@@ -43,22 +43,24 @@ export const registerPhonePages = (app: FastifyInstance, ctx: AccountContext) =>
     if (!canConfirmPhone(ctx, user)) return reply.redirect(ACCOUNT_PATH, 303)
     const { t } = viewFor(request, user)
 
-    // The page says what is true: a field for the code only while one is on its way. Somebody who had to sign in
-    // again before the first code, or whose code could not be sent, is offered to send one.
-    const waiting = (await currentCode(db, { userId: user.id, purpose: 'activation' })) !== undefined
-    const to = maskPhone(user.phone)
+    // The page says what is true: a field for the code only while there is one that can still be entered.
+    // Somebody who had to sign in again before the first code, whose code could not be sent or has no attempts
+    // left, is offered to send one. With the field the page names no number: the code went to the number of the
+    // moment it was sent, and the back office may have changed it since. Such a code is refused, and the next
+    // one goes to the number that is stored.
+    const waiting = (await currentCode(db, { userId: user.id, purpose: 'activation' }))?.usable === true
     const content = `<h1>${escapeHtml(t('phone.title'))}</h1>
 <div class="panel">
 ${
   waiting
-    ? `<p>${escapeHtml(t('account.phone.intro', { to }))}</p>
+    ? `<p>${escapeHtml(t('account.phone.intro'))}</p>
 <form method="post" action="${PHONE}/confirm">
 <label for="code">${escapeHtml(t('common.code'))}</label>
 <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]*" maxlength="7" required autofocus>
 <button type="submit">${escapeHtml(t('phone.confirm'))}</button>
 </form>
 <form method="post" action="${PHONE}/send"><button type="submit" class="secondary">${escapeHtml(t('common.sendNewCode'))}</button></form>`
-    : `<p>${escapeHtml(t('account.phone.introSend', { to }))}</p>
+    : `<p>${escapeHtml(t('account.phone.introSend', { to: maskPhone(user.phone) }))}</p>
 <form method="post" action="${PHONE}/send"><button type="submit">${escapeHtml(t('account.phone.send'))}</button></form>`
 }
 </div>`

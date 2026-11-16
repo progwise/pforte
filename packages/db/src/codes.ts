@@ -152,14 +152,17 @@ export const checkCode = async (
   return used ? { ok: true, channel: current.channel } : { ok: false, reason: 'none' }
 }
 
-/** The code that is currently valid for the user and purpose, if any: through which channel it went and until when. */
+/**
+ * The code that is currently valid for the user and purpose, if any: through which channel it went, until when,
+ * and whether it can still be entered (`usable` is false once its attempts are used up).
+ */
 export const currentCode = async (
   db: DatabaseOrTransaction,
   { userId, purpose }: { userId: string; purpose: Purpose },
   now = new Date(),
 ) => {
   const [code] = await db
-    .select({ channel: otpCodes.channel, expiresAt: otpCodes.expiresAt })
+    .select({ channel: otpCodes.channel, expiresAt: otpCodes.expiresAt, usable: sql<boolean>`${otpCodes.attempts} < ${MAX_ATTEMPTS}` })
     .from(otpCodes)
     .where(and(eq(otpCodes.userId, userId), eq(otpCodes.purpose, purpose), isNull(otpCodes.consumedAt), gt(otpCodes.expiresAt, now)))
     .orderBy(sql`${otpCodes.createdAt} desc`)

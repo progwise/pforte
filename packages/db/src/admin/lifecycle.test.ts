@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto'
+import { sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import type { Database } from '../index.js'
 import { createTestDatabase, hasDatabase } from '../test/test-database.js'
 import { issueCode } from '../codes.js'
 import {
@@ -278,6 +280,30 @@ describe.skipIf(!hasDatabase)('user lifecycle', () => {
       const after = (await findUserById(database.db, id))!
       expect(after.phone).toBe(B)
       expect(after.phoneVerifiedAt).toBeNull()
+    })
+
+    it('does not stand in the way of a new code that is issued while it waits for the old one: neither request fails', async () => {
+      const user = await userIn('active')
+      await database.pool.query(`update users set phone = $1, phone_verified_at = null where id = $2`, [A, user.id])
+      const start = new Date()
+      const { code } = await issueCode(database.db, { userId: user.id, channel: 'sms', purpose: 'activation', boundTo: A }, { secrets, now: start })
+      let confirming: Promise<unknown> = Promise.resolve()
+
+      const reissued = await database.db.transaction(async (tx) => {
+        // "Send a new code" has reached the old code and holds it ...
+        await tx.execute(sql`select 1 from otp_codes where user_id = ${user.id} for update`)
+        // ... when the code the person typed comes in: that holds the person's row and waits for the old code.
+        confirming = confirmPhone(database.db, self(user.id), { userId: user.id, code }, { secrets, now: start })
+        confirming.catch(() => {})
+        await new Promise((resolve) => setTimeout(resolve, 300))
+        // The new code is stored. It refers to the person's row, which must not make it wait for the confirmation.
+        return issueCode(tx as unknown as Database, { userId: user.id, channel: 'sms', purpose: 'activation', boundTo: A }, { secrets, now: new Date(start.getTime() + 2 * 60 * 1000) })
+      })
+
+      expect(reissued.code).toMatch(/^\d{6}$/)
+      // The code was valid when it was typed, so it counts.
+      await expect(confirming).resolves.toEqual({ ok: true, channel: 'sms' })
+      expect(await confirmedAt(user.id)).toBeInstanceOf(Date)
     })
 
     it('has nothing to confirm for a person without a number, or with a confirmed one', async () => {

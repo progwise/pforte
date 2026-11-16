@@ -140,7 +140,7 @@ export const de: Catalog = {
   'account.profile.phoneUnconfirmed': 'Nicht bestätigt, deshalb kommen Ihre Anmeldecodes per E-Mail.',
   'account.phone.send': 'Mit einem Code per SMS bestätigen',
   'account.phone.introSend': 'Um {to} zu bestätigen, senden wir einen 6-stelligen Code per SMS dorthin. Sobald Sie ihn eingegeben haben, kommen Ihre Anmeldecodes per SMS.',
-  'account.phone.intro': 'Um {to} zu bestätigen, geben Sie den 6-stelligen Code ein, der per SMS dorthin gesendet wurde. Danach kommen Ihre Anmeldecodes per SMS.',
+  'account.phone.intro': 'Geben Sie den 6-stelligen Code aus der SMS ein. Sobald die Nummer bestätigt ist, kommen Ihre Anmeldecodes per SMS.',
   'account.phone.unavailable': 'Der Code konnte nicht gesendet werden. Bitte versuchen Sie es später erneut.',
   'account.loginFailed.title': 'Die Anmeldung hat nicht geklappt',
   'account.loginFailed.text': 'Die Anmeldung konnte nicht abgeschlossen werden. Bitte versuchen Sie es erneut.',
