@@ -382,6 +382,14 @@ describe.skipIf(!hasDatabase)('the administration UI: signing in and out', () =>
       expect(response.body).toContain('href="/manage/login"')
     })
 
+    it('does not happen by opening that page: a link on another site must not end the session', async () => {
+      const browser = new Browser(h.app)
+      await drive(browser, '/manage')
+      const page = await browser.request('GET', '/manage/signed-out')
+      expect(setCookies(page)).toEqual([])
+      expect((await browser.request('GET', '/manage')).statusCode).toBe(200)
+    })
+
     it('is refused from another site', async () => {
       const browser = new Browser(h.app)
       await drive(browser, '/manage')

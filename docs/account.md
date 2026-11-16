@@ -45,17 +45,25 @@ anything.
 There is no setting that turns the pages off. They show a person nothing but their own account, and only after a
 sign-in with a code.
 
+## If you already have a client called `pforte-account-ui`
+
+A pforte from before the account pages let you register an application under this ID. pforte does not overwrite it:
+your client keeps its addresses and its secret, the account pages stay off (`/account` answers "not found"), and the
+log says so at every start, as an error. To get the pages, register your application under another ID, delete
+`pforte-account-ui` in the administration (or with `DELETE /admin/clients/pforte-account-ui`) and restart pforte.
+
 ## How a person is kept from seeing anybody else
 
 - **Who somebody is comes from one place**, the session of the sign-in. No address of the account pages carries an id
   of a person, and nothing is read from a form field or a header, so there is nothing that could be changed into
   somebody else's. A test walks the addresses and fails if one of them has a part that is filled in.
-- **The session cookie is not enough on its own.** `pforte_account` is signed and holds who the person is, how they
-  signed in and when; it holds no token. On every request pforte also checks that the person is still active and still
-  signed in to the account pages. Locking a person, signing them out everywhere or a new password ends that, and with it
-  every copy of the cookie, also one that was stolen.
-- **The token of the sign-in is thrown away.** The pages call no API. The admin API refuses a token that was issued
-  to `pforte-account-ui`, also from an administrator.
+- **The session cookie is not enough on its own.** `pforte_account` is signed and holds who the person is, which
+  sign-in it came from, how they signed in and when; it holds no token. On every request pforte also checks that the
+  person is still active and that this very sign-in still exists. Signing out, locking the person, signing them out
+  everywhere or a new password ends it, and with it every copy of the cookie, also one that was stolen. A copy from a
+  sign-in that has ended stays dead when the person signs in again: that is another sign-in.
+- **The token of the sign-in is thrown away.** It is looked at once, to learn which sign-in this is; the pages call
+  no API. The admin API refuses a token that was issued to `pforte-account-ui`, also from an administrator.
 - **Other websites** cannot post a form to the pages (the check described under
   [forms only from pforte's own pages](security.md#forms-only-from-pfortes-own-pages)), cannot read them (no answer
   carries a CORS header) and cannot put them in a frame. No script runs on them.

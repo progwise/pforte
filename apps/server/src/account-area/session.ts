@@ -1,5 +1,5 @@
 import type { Database } from '@progwise/pforte-db'
-import { isSignedInTo } from '@progwise/pforte-db/admin'
+import { isGrantLive } from '@progwise/pforte-db/admin'
 import { findActiveUserById } from '@progwise/pforte-db/oidc'
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import { readCookie, setCookieHeader, sign, unsign } from '../interaction/signed-cookie.js'
@@ -11,6 +11,11 @@ import { ACCOUNT_PATH, ACCOUNT_UI_CLIENT_ID } from './constants.js'
  */
 export interface AccountSession {
   userId: string
+  /**
+   * The grant of the sign-in this session came from: one sign-in of this person to the account pages in one
+   * browser. The session is worth something only while that grant exists.
+   */
+  grantId: string
   /** The assurance of the sign-in; always the one with a code, or there would be no session. */
   acr: string
   /** When the person last signed in at pforte, in seconds: a change asks for a recent one. */
@@ -40,14 +45,15 @@ export const createAccountGate = ({ db, cookieKeys, secure }: { db: Database; co
    * This is the only place the account pages learn who somebody is. No handler reads a user from the address, a
    * form or a header, and no address of the area carries one, so there is nothing to change into somebody else's.
    *
-   * The cookie alone is not enough. The person must still be active, and still be signed in to the account pages
-   * at pforte: locking them, signing them out everywhere or a new password ends that, and with it every copy of
-   * this cookie, also one that was stolen.
+   * The cookie alone is not enough. The person must still be active, and the sign-in the cookie came from must
+   * still exist at pforte: signing out, locking the person, signing them out everywhere or a new password ends
+   * it, and with it every copy of this cookie, also one that was stolen. It is that one sign-in that counts, not
+   * whether the person is signed in at all: a copy from an ended sign-in stays dead when they sign in again.
    */
   const requireAccountSession = async (request: FastifyRequest, reply: FastifyReply): Promise<{ session: AccountSession; user: AccountUser } | undefined> => {
     const session = sessionOf(request)
     const user = session ? await findActiveUserById(db, session.userId) : undefined
-    if (session && user && (await isSignedInTo(db, user.id, ACCOUNT_UI_CLIENT_ID))) return { session, user }
+    if (session && user && typeof session.grantId === 'string' && (await isGrantLive(db, { grantId: session.grantId, userId: user.id, clientId: ACCOUNT_UI_CLIENT_ID }))) return { session, user }
 
     reply.header('Set-Cookie', cookie('', 0))
     // Only a page can be come back to; what a form was about to do is not repeated behind the person's back.

@@ -1,5 +1,6 @@
 import formbody from '@fastify/formbody'
 import type { Database } from '@progwise/pforte-db'
+import { findGrantOfAccessToken } from '@progwise/pforte-db/admin'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { maskPhone } from '../auth/channels.js'
 import { parseAcceptLanguage } from '../i18n/index.js'
@@ -89,11 +90,14 @@ export const accountAreaRoutes =
       if (outcome.kind === 'redirected') return reply
       if (outcome.kind === 'failed') return failed(request, reply, outcome.status)
 
-      // The token is read and then dropped: nothing here is done with a token, so none is kept.
       const { sub, acr, auth_time: authTime } = outcome.claims
       if (typeof sub !== 'string' || typeof acr !== 'string' || typeof authTime !== 'number') return failed(request, reply)
+      // The access token is used once, to learn which sign-in this is, and then dropped: nothing here is done with
+      // a token, so none is kept. The session is tied to that sign-in and ends with it.
+      const grant = await findGrantOfAccessToken(db, outcome.accessToken)
+      if (!grant || grant.userId !== sub || grant.clientId !== ACCOUNT_UI_CLIENT_ID) return failed(request, reply)
 
-      reply.header('Set-Cookie', [gate.start({ userId: sub, acr, authTime }), signIn.clearCookie()])
+      reply.header('Set-Cookie', [gate.start({ userId: sub, grantId: grant.grantId, acr, authTime }), signIn.clearCookie()])
       return reply.redirect(outcome.next, 303)
     })
 
@@ -107,9 +111,9 @@ export const accountAreaRoutes =
       return reply.redirect(`${issuer}/session/end?${parameters}`, 303)
     })
 
-    app.get(`${ACCOUNT_PATH}/signed-out`, async (request, reply) =>
-      reply.type('text/html').header('Set-Cookie', gate.end()).send(publicPage(request, 'account.signedOut.title', 'account.signedOut.text')),
-    )
+    // Only says so. The cookie was removed by the POST above, which another site cannot send; a page that removed
+    // it too would let any link on any site end the session.
+    app.get(`${ACCOUNT_PATH}/signed-out`, async (request, reply) => reply.type('text/html').send(publicPage(request, 'account.signedOut.title', 'account.signedOut.text')))
 
     // --- Start page: who am I, read-only. The organisation owns these details, so nothing here changes them.
 

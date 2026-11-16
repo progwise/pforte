@@ -151,9 +151,23 @@ const assertEditable = (client: ClientRow) => {
 }
 
 /**
+ * A built-in client could not be registered because an administrator has registered a client under its ID.
+ * An older pforte, which did not know this built-in client, let them.
+ */
+export class SystemClientIdTakenError extends Error {
+  constructor(readonly clientId: string) {
+    super(`A client with the ID "${clientId}" exists and was registered by an administrator. pforte needs this ID for a client of its own and does not overwrite yours.`)
+  }
+}
+
+/**
  * Makes sure a built-in public client exists with these settings, and keeps it that way: it is written at every
  * start, so a changed address in the configuration takes effect and nothing done to the row survives. Writes no
  * audit event: it is pforte's own setup, not somebody's decision.
+ *
+ * Only a row that pforte made itself is overwritten. A client that an administrator registered under the same ID
+ * is somebody's application, with its redirect addresses and its secret: it stays as it is, and
+ * `SystemClientIdTakenError` says so.
  */
 export const ensureSystemClient = async (
   db: DatabaseOrTransaction,
@@ -175,7 +189,13 @@ export const ensureSystemClient = async (
   }
   const problems = validateClientConfig(values)
   if (problems.length > 0) throw new AdminError('The built-in client is not valid.', 'invalid', problems)
-  await db.insert(clients).values({ clientId: client.clientId, ...values }).onConflictDoUpdate({ target: clients.clientId, set: values })
+  // The condition is part of the statement, so a row that is not ours is never written, whatever happens in between.
+  const written = await db
+    .insert(clients)
+    .values({ clientId: client.clientId, ...values })
+    .onConflictDoUpdate({ target: clients.clientId, set: values, setWhere: eq(clients.system, true) })
+    .returning({ clientId: clients.clientId })
+  if (written.length === 0) throw new SystemClientIdTakenError(client.clientId)
 }
 
 const configOf = (client: ClientRow): ClientConfig => ({

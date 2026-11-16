@@ -1,4 +1,4 @@
-import { hasDatabase } from '@progwise/pforte-db/testing'
+import { createTestDatabase, hasDatabase } from '@progwise/pforte-db/testing'
 import Fastify from 'fastify'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { sign, unsign } from '../interaction/signed-cookie.js'
@@ -8,6 +8,7 @@ import { driveSignIn } from '../test/manage-session.js'
 import { createUi } from '../ui/index.js'
 import { ACCOUNT_UI_CLIENT_ID } from './constants.js'
 import { accountAreaRoutes } from './routes.js'
+import { ensureAccountUiClient } from './setup.js'
 
 const COOKIE_KEYS = ['k'.repeat(40)]
 const WEB = { clientId: 'demo-web', redirectUri: 'http://localhost:3400/callback' }
@@ -133,7 +134,7 @@ describe.skipIf(!hasDatabase)('the account pages', () => {
       const attributes = cookie!.split('; ').slice(1)
       expect(attributes).toEqual(expect.arrayContaining(['Path=/account', 'Max-Age=3600', 'HttpOnly', 'SameSite=Lax', 'Secure']))
       const session = unsign<Record<string, unknown>>(COOKIE_KEYS, cookie!.split(';')[0]!.split('=')[1])!
-      expect(Object.keys(session).sort()).toEqual(['acr', 'authTime', 'expiresAt', 'userId'])
+      expect(Object.keys(session).sort()).toEqual(['acr', 'authTime', 'expiresAt', 'grantId', 'userId'])
       expect(session).toMatchObject({ userId: await idOf(A.email), acr: 'urn:pforte:acr:mfa' })
       expect(Math.abs((session.authTime as number) - Date.now() / 1000)).toBeLessThan(60)
     })
@@ -253,7 +254,15 @@ describe.skipIf(!hasDatabase)('the account pages', () => {
 
   describe('the session cookie', () => {
     const cookieFor = async (email: string, overrides: object = {}, keys = COOKIE_KEYS) =>
-      sign(keys, { userId: await idOf(email), acr: 'urn:pforte:acr:mfa', authTime: Math.floor(Date.now() / 1000), expiresAt: Date.now() + 60_000, ...overrides })
+      sign(keys, { userId: await idOf(email), grantId: 'no-such-grant', acr: 'urn:pforte:acr:mfa', authTime: Math.floor(Date.now() / 1000), expiresAt: Date.now() + 60_000, ...overrides })
+    /** What the session cookie of a browser says. */
+    const sessionIn = (browser: Browser) => unsign<{ userId: string; grantId: string }>(COOKIE_KEYS, browser.cookies.get('pforte_account'))!
+    /** Another browser that holds a copy of this one's session cookie, as a thief would. */
+    const copyOf = (browser: Browser) => {
+      const copy = new Browser(h.app)
+      copy.cookies.set('pforte_account', browser.cookies.get('pforte_account')!)
+      return copy
+    }
     const refused = async (browser: Browser) => {
       const response = await browser.request('GET', '/account')
       expect(response.statusCode).toBe(303)
@@ -263,20 +272,75 @@ describe.skipIf(!hasDatabase)('the account pages', () => {
     }
 
     it('is not accepted when it was signed with another key, has run out, or is not signed at all', async () => {
-      await signedIn(A.email)
-      for (const value of [await cookieFor(A.email, {}, ['a-different-key-of-the-same-kind-0000']), await cookieFor(A.email, { expiresAt: Date.now() - 1000 }), 'e30.nonsense', 'plain']) {
+      // With the grant of a real sign-in, so that only the thing named can be what refuses it.
+      const { grantId } = sessionIn(await signedIn(A.email))
+      for (const value of [await cookieFor(A.email, { grantId }, ['a-different-key-of-the-same-kind-0000']), await cookieFor(A.email, { grantId, expiresAt: Date.now() - 1000 }), 'e30.nonsense', 'plain']) {
         const browser = new Browser(h.app)
         browser.cookies.set('pforte_account', value)
         await refused(browser)
       }
     })
 
-    it('is not accepted for a person who is not signed in to the account pages at pforte, however genuine it is', async () => {
-      // B has an account and the cookie is signed with the right key, but B never signed in here.
-      await h.api('POST', `/users/${await idOf(B.email)}/end-sessions`)
+    it('is accepted when it is genuine, current and names the sign-in it came from', async () => {
+      const { grantId } = sessionIn(await signedIn(A.email))
       const browser = new Browser(h.app)
-      browser.cookies.set('pforte_account', await cookieFor(B.email))
+      browser.cookies.set('pforte_account', await cookieFor(A.email, { grantId }))
+      expect((await browser.request('GET', '/account')).body).toContain(A.email)
+    })
+
+    it('is not accepted without a sign-in behind it, however genuine it is', async () => {
+      for (const overrides of [{}, { grantId: undefined }, { grantId: 42 }]) {
+        const browser = new Browser(h.app)
+        browser.cookies.set('pforte_account', await cookieFor(B.email, overrides))
+        await refused(browser)
+      }
+    })
+
+    it('is not accepted when it names the sign-in of somebody else', async () => {
+      const { grantId: grantOfB } = sessionIn(await signedIn(B.email))
+      const browser = new Browser(h.app)
+      browser.cookies.set('pforte_account', await cookieFor(A.email, { grantId: grantOfB }))
       await refused(browser)
+    })
+
+    it('is not accepted when it names a sign-in of the same person to another application', async () => {
+      const web = new Browser(h.app)
+      const { code, verifier } = await signIn(web, { ...WEB, email: A.email })
+      const tokens = (await web.request('POST', '/token', { form: { grant_type: 'authorization_code', code: code!, redirect_uri: WEB.redirectUri, client_id: WEB.clientId, code_verifier: verifier } })).json()
+      const grantOfWeb = (await h.database.pool.query(`select grant_id from oidc_payloads where id = $1 and type = 2`, [tokens.access_token])).rows[0].grant_id as string
+      expect(grantOfWeb).toBeTruthy()
+
+      const browser = new Browser(h.app)
+      browser.cookies.set('pforte_account', await cookieFor(A.email, { grantId: grantOfWeb }))
+      await refused(browser)
+    })
+
+    it('stays dead after its sign-in was ended, also when the person signs in again', async () => {
+      const first = await signedIn(A.email)
+      const stolen = copyOf(first)
+      expect((await stolen.request('GET', '/account')).statusCode).toBe(200)
+
+      expect((await h.api('POST', `/users/${await idOf(A.email)}/end-sessions`)).statusCode).toBe(200)
+      await refused(copyOf(first))
+
+      // The person signs in anew. That is another sign-in: the old copy is not revived by it.
+      const second = await signedIn(A.email)
+      expect(sessionIn(second).grantId).not.toBe(sessionIn(first).grantId)
+      expect((await second.request('GET', '/account')).statusCode).toBe(200)
+      await refused(copyOf(first))
+    })
+
+    it('ends with the sign-out of its own browser, while the same person stays signed in elsewhere', async () => {
+      const [home, office] = [await signedIn(A.email), await signedIn(A.email)]
+      const stolen = copyOf(home)
+
+      const out = await home.request('POST', '/account/logout', { headers: { 'sec-fetch-site': 'same-origin' } })
+      const confirm = await home.request('GET', out.headers.location as string)
+      const xsrf = /name="xsrf" value="([^"]+)"/.exec(confirm.body)?.[1]
+      await home.request('POST', '/session/end/confirm', { form: { xsrf: xsrf!, logout: 'yes' } })
+
+      await refused(stolen)
+      expect((await office.request('GET', '/account')).body).toContain(A.email)
     })
 
     it('ends in every browser when an administrator signs the person out everywhere', async () => {
@@ -338,6 +402,15 @@ describe.skipIf(!hasDatabase)('the account pages', () => {
       expect(response.body).toContain('href="/account/login"')
     })
 
+    it('does not happen by opening that page: a link on another site must not end the session', async () => {
+      const browser = await signedIn(A.email)
+      const page = await browser.request('GET', '/account/signed-out', { headers: { 'sec-fetch-site': 'cross-site' } })
+      expect(page.statusCode).toBe(200)
+      expect(setCookies(page)).toEqual([])
+      expect(browser.cookies.has('pforte_account')).toBe(true)
+      expect((await browser.request('GET', '/account')).statusCode).toBe(200)
+    })
+
     it('works without a session too, by going to the page that says you are signed out', async () => {
       const response = await new Browser(h.app).request('POST', '/account/logout')
       expect(response.statusCode).toBe(303)
@@ -388,5 +461,38 @@ describe.skipIf(!hasDatabase)('the account pages', () => {
         expect((await h.api('GET', url, { token })).statusCode).toBe(401)
       }
     })
+  })
+})
+
+describe.skipIf(!hasDatabase)('the client of the account pages, where an administrator already used its ID', () => {
+  let database: Awaited<ReturnType<typeof createTestDatabase>>
+
+  beforeAll(async () => {
+    database = await createTestDatabase()
+  })
+
+  afterAll(async () => {
+    await database?.drop()
+  })
+
+  it('leaves their client alone, keeps the pages off and says what to do; afterwards the pages come on', async () => {
+    await database.pool.query(
+      `insert into clients (client_id, name, type, secret_hash, redirect_uris, allowed_grants, scopes) values ($1, 'Customer account portal', 'confidential', 'their-secret-hash', '{https://portal.example.com/cb}', '{authorization_code}', '{openid}')`,
+      [ACCOUNT_UI_CLIENT_ID],
+    )
+    const theirs = async () => (await database.pool.query(`select name, type, secret_hash, redirect_uris, system from clients where client_id = $1`, [ACCOUNT_UI_CLIENT_ID])).rows[0]
+    const before = await theirs()
+
+    const blocked = await ensureAccountUiClient(database.db, ISSUER)
+
+    expect(blocked.available).toBe(false)
+    expect(blocked).toMatchObject({ reason: expect.stringContaining('pforte-account-ui') })
+    expect(blocked).toMatchObject({ reason: expect.stringContaining('DELETE /admin/clients/pforte-account-ui') })
+    expect(await theirs()).toEqual(before)
+    expect(before).toMatchObject({ name: 'Customer account portal', system: false, redirect_uris: ['https://portal.example.com/cb'] })
+
+    await database.pool.query(`delete from clients where client_id = $1`, [ACCOUNT_UI_CLIENT_ID])
+    expect(await ensureAccountUiClient(database.db, ISSUER)).toEqual({ available: true })
+    expect(await theirs()).toMatchObject({ name: 'Account', system: true, redirect_uris: [`${ISSUER}/account/callback`] })
   })
 })

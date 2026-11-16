@@ -97,9 +97,9 @@ export const manageRoutes =
       return reply.redirect(`${issuer}/session/end?${parameters}`, 303)
     })
 
-    app.get(`${MANAGE_PATH}/signed-out`, async (request, reply) =>
-      reply.type('text/html').header('Set-Cookie', cookie(SESSION_COOKIE, '', 0)).send(publicPage(request, 'manage.signedOut.title', 'manage.signedOut.text')),
-    )
+    // Only says so. The cookie was removed by the POST above, which another site cannot send; a page that removed
+    // it too would let any link on any site end the session.
+    app.get(`${MANAGE_PATH}/signed-out`, async (request, reply) => reply.type('text/html').send(publicPage(request, 'manage.signedOut.title', 'manage.signedOut.text')))
 
     // --- Start page
 
