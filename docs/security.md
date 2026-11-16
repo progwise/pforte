@@ -59,6 +59,12 @@ first sign-in in that browser. Everything else is the same for both: 90 days, th
 forget it, and an application that asks for `urn:pforte:acr:mfa` gets the code whatever the browser remembers. What this
 means for a link that gets into the wrong hands is in the [threat model](threat-model.md).
 
+A password reset is not a third place. The page that takes the reset code and the new password has no such box, and the
+reset forgets every device that was remembered, so the next sign-in always asks for a code. The reset code shows the same
+thing as that sign-in code, but a reset is also what a person does after a takeover, and what an administrator starts when
+an account may be compromised: it is the moment to take trust away, not to hand it out. The price is one more mail after a
+forgotten password ([#46](https://github.com/progwise/pforte/issues/46)).
+
 ## Weak secrets stop a production start
 
 With `NODE_ENV=production` pforte checks its configuration and refuses to start, listing **every** problem at once so they
