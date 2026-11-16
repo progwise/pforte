@@ -9,6 +9,7 @@ import { deriveCodeSecrets } from './auth/code-secrets.js'
 import { checkConfig, checkDevelopmentLeftovers, startupFailure } from './security/startup-checks.js'
 import { bootstrapAdministrator } from './manage/bootstrap.js'
 import { ensureAdminUiClient } from './manage/setup.js'
+import { ensureAccountUiClient } from './account-area/setup.js'
 import { createBackground } from './security/background.js'
 import { createClientLogouts } from './oidc/client-logouts.js'
 import { createLoginAudit } from './auth/login-audit.js'
@@ -48,6 +49,7 @@ if (startupProblems.length > 0 && config.production) {
 }
 
 await ensureAdminUiClient(db, config.issuer)
+const accountPages = await ensureAccountUiClient(db, config.issuer)
 
 const provider = await createProviderHolder({
   config,
@@ -94,6 +96,7 @@ const app = buildApp({
   getDatabaseTime: () => getDatabaseTime(db),
   oidc: { provider, authenticate, db, notifier, cookieKeys: config.cookieKeys, ui, limiter, audit },
   manage: { issuer: config.issuer, cookieKeys: config.cookieKeys, ui, organisation: organisationName, timeZone: config.timeZone },
+  accountArea: accountPages.available ? { db, issuer: config.issuer, cookieKeys: config.cookieKeys, ui } : undefined,
   account: {
     db,
     sendPasswordResetCode,
@@ -121,6 +124,7 @@ const app = buildApp({
 })
 
 for (const warning of warnings) app.log.warn(warning)
+if (!accountPages.available) app.log.error(accountPages.reason)
 
 if (config.bootstrapAdminEmail) {
   // A failure here, such as a mail server that is down, must not keep the identity service from starting: nothing was

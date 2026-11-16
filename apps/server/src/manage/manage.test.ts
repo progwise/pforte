@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { sign } from '../interaction/signed-cookie.js'
 import { type AdminHarness, createAdminHarness } from '../test/admin-harness.js'
 import { Browser, signIn } from '../test/browser.js'
-import { isForThisSignIn, readIdToken, safeNext } from './oidc.js'
+import { isForThisSignIn, readIdToken, safeNext } from '../own-login/oidc.js'
 
 const COOKIE_KEYS = ['k'.repeat(40)]
 const WEB = { clientId: 'demo-web', redirectUri: 'http://localhost:3400/callback' }
@@ -23,6 +23,20 @@ describe('where to go after signing in', () => {
       expect(safeNext(next, '/manage')).toBe('/manage')
     },
   )
+})
+
+describe('where to go after signing in, for another area', () => {
+  it.each(['/account', '/account/devices', '/account?x=1'])('keeps %s inside the account pages', (next) => {
+    expect(safeNext(next, '/account')).toBe(next)
+  })
+
+  it.each(['/manage', '/manage/users', '/accountant', '/account-other/x', '//account', 'https://evil.example/account'])('does not let %s pass as part of the account pages', (next) => {
+    expect(safeNext(next, '/account')).toBe('/account')
+  })
+
+  it('does not let an address of the account pages pass as part of the administration', () => {
+    expect(safeNext('/account', '/manage')).toBe('/manage')
+  })
 })
 
 describe('the ID token of a sign-in', () => {
@@ -366,6 +380,14 @@ describe.skipIf(!hasDatabase)('the administration UI: signing in and out', () =>
       expect(response.statusCode).toBe(200)
       expect(response.body).toContain('You are signed out')
       expect(response.body).toContain('href="/manage/login"')
+    })
+
+    it('does not happen by opening that page: a link on another site must not end the session', async () => {
+      const browser = new Browser(h.app)
+      await drive(browser, '/manage')
+      const page = await browser.request('GET', '/manage/signed-out')
+      expect(setCookies(page)).toEqual([])
+      expect((await browser.request('GET', '/manage')).statusCode).toBe(200)
     })
 
     it('is refused from another site', async () => {

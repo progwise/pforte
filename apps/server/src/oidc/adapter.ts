@@ -78,6 +78,8 @@ export class ClientAdapter implements Adapter {
       token_endpoint_auth_method: confidential ? 'client_secret_basic' : 'none',
       // The stored value is an argon2 hash; compareClientSecret is overridden to verify against it.
       ...(confidential && client.secretHash ? { client_secret: client.secretHash } : {}),
+      // pforte's own areas ask how long ago the person signed in, so their ID token always says when.
+      ...(client.system ? { require_auth_time: true } : {}),
       ...(client.backchannelLogoutUri
         ? {
             backchannel_logout_uri: client.backchannelLogoutUri,

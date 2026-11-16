@@ -63,3 +63,33 @@ export const isSignedInTo = async (db: DatabaseOrTransaction, userId: string, cl
   const { sessions, grants } = await listUserSessions(db, userId, now)
   return sessions.some((session) => session.clientIds.includes(clientId)) || grants.some((grant) => grant.clientId === clientId)
 }
+
+/**
+ * The grant an access token was issued under: the record of one sign-in of a user to one application in one
+ * browser. It is deleted when that sign-in ends (signing out at pforte, ending the user's sessions), and a later
+ * sign-in gets a new one, so it tells this sign-in from every other of the same person.
+ */
+export const findGrantOfAccessToken = async (db: DatabaseOrTransaction, token: string, now = new Date()) => {
+  const [row] = await db
+    .select({ grantId: oidcPayloads.grantId, userId: oidcPayloads.accountId, payload: oidcPayloads.payload })
+    .from(oidcPayloads)
+    .where(and(eq(oidcPayloads.id, token), eq(oidcPayloads.type, MODEL_TYPES.AccessToken), or(isNull(oidcPayloads.expiresAt), gt(oidcPayloads.expiresAt, now))))
+  const clientId = (row?.payload as { clientId?: unknown } | undefined)?.clientId
+  return row?.grantId && row.userId && typeof clientId === 'string' ? { grantId: row.grantId, userId: row.userId, clientId } : undefined
+}
+
+/** Whether this grant still exists, for this user and this application. */
+export const isGrantLive = async (db: DatabaseOrTransaction, grant: { grantId: string; userId: string; clientId: string }, now = new Date()) => {
+  const [row] = await db
+    .select({ payload: oidcPayloads.payload })
+    .from(oidcPayloads)
+    .where(
+      and(
+        eq(oidcPayloads.id, grant.grantId),
+        eq(oidcPayloads.type, MODEL_TYPES.Grant),
+        eq(oidcPayloads.accountId, grant.userId),
+        or(isNull(oidcPayloads.expiresAt), gt(oidcPayloads.expiresAt, now)),
+      ),
+    )
+  return (row?.payload as { clientId?: unknown } | undefined)?.clientId === grant.clientId
+}

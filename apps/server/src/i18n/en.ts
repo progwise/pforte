@@ -109,6 +109,25 @@ export const en = {
   'mail.passwordChanged.text':
     'Hello {firstName},\n\nthe password of your account at {organisation} was just changed, and you were signed out everywhere.\n\nIf that was you, there is nothing to do.\n\nIf it was not you, choose a new password now:\n\n{url}\n\nThen tell your administration.\n',
 
+  // The account pages, where a person sees how they are signed in.
+  'account.title': 'Your account',
+  'account.nav.label': 'Sections',
+  'account.nav.start': 'Overview',
+  'account.signedInAs': 'Signed in as {name}',
+  'account.signOut': 'Sign out',
+  'account.signIn': 'Sign in',
+  'account.profile.title': 'Your details',
+  'account.profile.name': 'Name',
+  'account.profile.email': 'E-mail address',
+  'account.profile.phone': 'Mobile phone',
+  'account.profile.noPhone': 'None stored',
+  'account.profile.language': 'Language',
+  'account.profile.note': 'Your organisation keeps these details. If something is wrong, tell your administration; it cannot be changed here.',
+  'account.loginFailed.title': 'Signing in did not work',
+  'account.loginFailed.text': 'The sign-in could not be completed. Please try again.',
+  'account.signedOut.title': 'You are signed out',
+  'account.signedOut.text': 'Your account page is closed. Sign in again when you need it.',
+
   'sms.login': '{code} is your sign-in code for {organisation}. Valid for {minutes} minutes. Do not share it.',
   'sms.reset':
     '{code} is your code to choose a new password for {organisation}. Valid for {minutes} minutes. Do not share it.',

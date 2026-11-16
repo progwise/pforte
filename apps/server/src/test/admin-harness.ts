@@ -8,6 +8,7 @@ import { createAuthenticate } from '../auth/authenticate.js'
 import { deriveCodeSecrets } from '../auth/code-secrets.js'
 import { createBackground } from '../security/background.js'
 import { ensureAdminUiClient } from '../manage/setup.js'
+import { ensureAccountUiClient } from '../account-area/setup.js'
 import { createLoginAudit } from '../auth/login-audit.js'
 import { createRateLimiter } from '../auth/rate-limiter.js'
 import { createPasswordResetSender } from '../auth/password-reset.js'
@@ -27,6 +28,7 @@ export const createAdminHarness = async ({ selfServiceActivation = true, allowPr
   await seed(database.db)
 
   await ensureAdminUiClient(database.db, ISSUER)
+  await ensureAccountUiClient(database.db, ISSUER)
 
   const jwk = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ format: 'jwk' })
   const ui = createUi()
@@ -55,6 +57,7 @@ export const createAdminHarness = async ({ selfServiceActivation = true, allowPr
     getDatabaseTime: () => getDatabaseTime(database.db),
     oidc: { provider, authenticate: await createAuthenticate(database.db), db: database.db, notifier, cookieKeys: COOKIE_KEYS, ui, limiter, audit: loginAudit },
     manage: { issuer: ISSUER, cookieKeys: COOKIE_KEYS, ui, organisation: 'Example Inc.', timeZone: 'Europe/Berlin' },
+    accountArea: { db: database.db, issuer: ISSUER, cookieKeys: COOKIE_KEYS, ui },
     account: {
       db: database.db,
       sendPasswordResetCode,

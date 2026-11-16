@@ -49,7 +49,8 @@ Two rules protect you from locking yourself out, for the API as much as for the 
   administrator.
 
 The built-in client `pforte-admin-ui`, which the administration signs in with, is created by pforte at every start. It is listed
-with the other clients as built in and cannot be changed, rotated or deleted.
+with the other clients as built in and cannot be changed, rotated or deleted. A second one, `pforte-account-ui`, belongs to
+[the account pages](account.md), where every person sees their own account.
 
 ## Users
 

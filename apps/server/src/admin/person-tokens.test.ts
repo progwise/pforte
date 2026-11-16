@@ -120,15 +120,17 @@ describe.skipIf(!hasDatabase)('admin API: a person signed in to the administrati
   })
 
   describe('the built-in client', () => {
-    it('is listed as such and cannot be changed, rotated or deleted', async () => {
+    it('is listed as such, together with the one of the account pages', async () => {
       const list = (await call('GET', '/clients')).json().items as { clientId: string; system: boolean }[]
       expect(list.find((client) => client.clientId === 'pforte-admin-ui')).toMatchObject({ system: true })
-      expect(list.filter((client) => client.system).map((client) => client.clientId)).toEqual(['pforte-admin-ui'])
+      expect(list.filter((client) => client.system).map((client) => client.clientId)).toEqual(['pforte-account-ui', 'pforte-admin-ui'])
+    })
 
+    it.each(['pforte-admin-ui', 'pforte-account-ui'])('%s cannot be changed, rotated or deleted', async (clientId) => {
       for (const [method, path, body] of [
-        ['PATCH', '/clients/pforte-admin-ui', { name: 'Mine' }],
-        ['POST', '/clients/pforte-admin-ui/rotate-secret', undefined],
-        ['DELETE', '/clients/pforte-admin-ui', undefined],
+        ['PATCH', `/clients/${clientId}`, { name: 'Mine' }],
+        ['POST', `/clients/${clientId}/rotate-secret`, undefined],
+        ['DELETE', `/clients/${clientId}`, undefined],
       ] as const) {
         const response = await call(method, path, token, body)
         expect(response.statusCode, `${method} ${path}`).toBe(409)

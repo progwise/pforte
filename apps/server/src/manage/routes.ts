@@ -1,8 +1,9 @@
 import formbody from '@fastify/formbody'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import { ACR_SECOND_FACTOR } from '../auth/assurance.js'
 import type { MessageKey, Values } from '../i18n/index.js'
-import { readCookie, sign, unsign } from '../interaction/signed-cookie.js'
+import { sign } from '../interaction/signed-cookie.js'
+import { safeNext } from '../own-login/oidc.js'
+import { createOwnSignIn } from '../own-login/sign-in.js'
 import { refuseForeignPosts } from '../security/origin-check.js'
 import { escapeHtml } from '../ui/pages.js'
 import { ADMIN_UI_CLIENT_ID, MANAGE_PATH } from './constants.js'
@@ -12,7 +13,6 @@ import { registerClaimTypes } from './claim-types.js'
 import { registerClients } from './clients.js'
 import { registerImport } from './import.js'
 import { registerUsers } from './users.js'
-import { challengeOf, isForThisSignIn, type LoginState, newLogin, readIdToken, safeNext } from './oidc.js'
 
 const LOGIN_COOKIE = 'pforte_manage_login'
 const MAX_SESSION_SECONDS = 8 * 60 * 60
@@ -31,7 +31,6 @@ export const manageRoutes =
 
     const ctx = createManageContext(app, dependencies)
     const { acceptedLanguages, viewFor, cookie, sessionOf, requireSession, page } = ctx
-    const redirectUri = `${issuer}${MANAGE_PATH}/callback`
     const callApi = ctx.callApi
 
     app.addHook(
@@ -50,87 +49,39 @@ export const manageRoutes =
 
     // --- Signing in: pforte's own login, as any application, and always with the second factor
 
-    const beginLogin = (request: FastifyRequest, reply: FastifyReply, next: string, forced: boolean) => {
-      const login = newLogin(next, forced)
-      const parameters = new URLSearchParams({
-        client_id: ADMIN_UI_CLIENT_ID,
-        redirect_uri: redirectUri,
-        response_type: 'code',
-        scope: 'openid profile',
-        state: login.state,
-        nonce: login.nonce,
-        code_challenge: challengeOf(login.verifier),
-        code_challenge_method: 'S256',
-        acr_values: ACR_SECOND_FACTOR,
-        ...(forced ? { prompt: 'login' } : {}),
-      })
-      const languages = acceptedLanguages(request).slice(0, 3).join(' ')
-      if (languages) parameters.set('ui_locales', languages)
-      reply.header('Set-Cookie', cookie(LOGIN_COOKIE, sign(cookieKeys, login), 600))
-      return reply.redirect(`${issuer}/auth?${parameters}`, 303)
-    }
+    const signIn = createOwnSignIn(app, { issuer, cookieKeys, clientId: ADMIN_UI_CLIENT_ID, basePath: MANAGE_PATH, loginCookie: LOGIN_COOKIE, scope: 'openid profile', acceptedLanguages })
 
-    app.get<{ Querystring: { next?: string } }>(`${MANAGE_PATH}/login`, async (request, reply) =>
-      beginLogin(request, reply, safeNext(request.query.next, MANAGE_PATH), false),
-    )
+    app.get<{ Querystring: { next?: string } }>(`${MANAGE_PATH}/login`, async (request, reply) => signIn.begin(request, reply, safeNext(request.query.next, MANAGE_PATH)))
 
     const failed = (request: FastifyRequest, reply: FastifyReply, status = 400) =>
-      reply.code(status).type('text/html').header('Set-Cookie', cookie(LOGIN_COOKIE, '', 0)).send(publicPage(request, 'manage.loginFailed.title', 'manage.loginFailed.text'))
+      reply.code(status).type('text/html').header('Set-Cookie', signIn.clearCookie()).send(publicPage(request, 'manage.loginFailed.title', 'manage.loginFailed.text'))
 
     app.get<{ Querystring: { code?: string; state?: string; error?: string } }>(`${MANAGE_PATH}/callback`, async (request, reply) => {
-      const login = unsign<LoginState>(cookieKeys, readCookie(request.headers.cookie, LOGIN_COOKIE))
-      const { code, state, error } = request.query
-      if (!login || login.expiresAt < Date.now() || typeof state !== 'string' || state !== login.state) return failed(request, reply)
-      if (error || typeof code !== 'string') return failed(request, reply)
+      const outcome = await signIn.finish(request, reply)
+      if (outcome.kind === 'redirected') return reply
+      if (outcome.kind === 'failed') return failed(request, reply, outcome.status)
+      const { claims } = outcome
 
-      const exchange = await app.inject({
-        method: 'POST',
-        url: '/token',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        payload: new URLSearchParams({
-          grant_type: 'authorization_code',
-          code,
-          redirect_uri: redirectUri,
-          client_id: ADMIN_UI_CLIENT_ID,
-          code_verifier: login.verifier,
-        }).toString(),
-        remoteAddress: request.ip,
-      })
-      if (exchange.statusCode !== 200) return failed(request, reply)
-      const tokens = exchange.json() as { access_token?: string; id_token?: string; expires_in?: number }
-
-      const claims = readIdToken(tokens.id_token)
-      if (!tokens.access_token || !tokens.id_token || !claims || !isForThisSignIn(claims, { issuer, clientId: ADMIN_UI_CLIENT_ID, nonce: login.nonce })) {
-        return failed(request, reply)
-      }
-
-      // The library treats `acr_values` as a wish: a single sign-on session that was started without a code is
-      // returned as it is. The administration insists, so it asks again, this time for a new sign-in.
-      if (claims.acr !== ACR_SECOND_FACTOR) {
-        if (login.forced) return failed(request, reply, 403)
-        return beginLogin(request, reply, login.next, true)
-      }
-
-      const who = await callApi(request, tokens.access_token, { method: 'GET', url: '/whoami' })
+      const who = await callApi(request, outcome.accessToken, { method: 'GET', url: '/whoami' })
       if (who.statusCode === 401) {
         return reply
           .code(403)
           .type('text/html')
-          .header('Set-Cookie', cookie(LOGIN_COOKIE, '', 0))
+          .header('Set-Cookie', signIn.clearCookie())
           .send(publicPage(request, 'manage.notAdmin.title', 'manage.notAdmin.text', { name: claims.name ?? claims.email ?? '' }, false))
       }
       if (who.statusCode !== 200) return failed(request, reply, 502)
       const person = who.json().user as { id: string; email: string; firstName: string; lastName: string; language: string }
 
-      const lifetime = Math.min(tokens.expires_in ?? 3600, MAX_SESSION_SECONDS)
+      const lifetime = Math.min(outcome.expiresIn ?? 3600, MAX_SESSION_SECONDS)
       const session: ManageSession = {
-        token: tokens.access_token,
-        idToken: tokens.id_token,
+        token: outcome.accessToken,
+        idToken: outcome.idToken,
         user: { id: person.id, name: `${person.firstName} ${person.lastName}`.trim() || person.email, language: person.language },
         expiresAt: Date.now() + lifetime * 1000,
       }
-      reply.header('Set-Cookie', [cookie(SESSION_COOKIE, sign(cookieKeys, session), lifetime), cookie(LOGIN_COOKIE, '', 0)])
-      return reply.redirect(login.next, 303)
+      reply.header('Set-Cookie', [cookie(SESSION_COOKIE, sign(cookieKeys, session), lifetime), signIn.clearCookie()])
+      return reply.redirect(outcome.next, 303)
     })
 
     // --- Signing out ends pforte's own session too: on a shared computer the next person must not walk in
@@ -146,9 +97,9 @@ export const manageRoutes =
       return reply.redirect(`${issuer}/session/end?${parameters}`, 303)
     })
 
-    app.get(`${MANAGE_PATH}/signed-out`, async (request, reply) =>
-      reply.type('text/html').header('Set-Cookie', cookie(SESSION_COOKIE, '', 0)).send(publicPage(request, 'manage.signedOut.title', 'manage.signedOut.text')),
-    )
+    // Only says so. The cookie was removed by the POST above, which another site cannot send; a page that removed
+    // it too would let any link on any site end the session.
+    app.get(`${MANAGE_PATH}/signed-out`, async (request, reply) => reply.type('text/html').send(publicPage(request, 'manage.signedOut.title', 'manage.signedOut.text')))
 
     // --- Start page
 

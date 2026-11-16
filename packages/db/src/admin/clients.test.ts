@@ -5,6 +5,7 @@ import {
   createClient,
   deleteClient,
   ensureSystemClient,
+  SystemClientIdTakenError,
   getClient,
   listClients,
   rotateClientSecret,
@@ -249,6 +250,32 @@ describe.skipIf(!hasDatabase)('built-in clients', () => {
       scopes: ['openid', 'profile'],
       redirectUris: ui.redirectUris,
     })
+  })
+
+  it('does not overwrite a client that an administrator registered under its ID, and says so', async () => {
+    const taken = { ...ui, clientId: 'pforte-later-ui' }
+    await database.pool.query(
+      `insert into clients (client_id, name, type, secret_hash, redirect_uris, allowed_grants, scopes) values ($1, 'Somebody''s application', 'confidential', 'their-secret-hash', '{https://app.example.com/cb}', '{authorization_code,refresh_token}', '{openid,profile}')`,
+      [taken.clientId],
+    )
+
+    await expect(ensureSystemClient(database.db, taken)).rejects.toBeInstanceOf(SystemClientIdTakenError)
+    await expect(ensureSystemClient(database.db, taken)).rejects.toThrow(/pforte-later-ui/)
+
+    expect(await getClient(database.db, taken.clientId)).toMatchObject({
+      name: "Somebody's application",
+      type: 'confidential',
+      secretHash: 'their-secret-hash',
+      redirectUris: ['https://app.example.com/cb'],
+      allowedGrants: ['authorization_code', 'refresh_token'],
+      scopes: ['openid', 'profile'],
+      system: false,
+    })
+
+    // Once the administrator has moved their application away, the ID is free for pforte.
+    await database.pool.query(`delete from clients where client_id = $1`, [taken.clientId])
+    await ensureSystemClient(database.db, taken)
+    expect(await getClient(database.db, taken.clientId)).toMatchObject({ system: true, type: 'public', redirectUris: ui.redirectUris })
   })
 
   it('is written again at every start, so changed settings apply and tampering does not survive', async () => {

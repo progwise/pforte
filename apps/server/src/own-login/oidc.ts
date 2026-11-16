@@ -2,12 +2,12 @@ import { createHash, randomBytes } from 'node:crypto'
 
 const random = (bytes: number) => randomBytes(bytes).toString('base64url')
 
-/** What a sign-in of the UI has to remember between leaving for pforte's login page and coming back. */
+/** What a sign-in of one of pforte's own areas has to remember between leaving for the login page and coming back. */
 export interface LoginState {
   state: string
   nonce: string
   verifier: string
-  /** Where to go afterwards: an address inside the administration. */
+  /** Where to go afterwards: an address inside the area. */
   next: string
   /** Set when a weaker sign-in was found and a new one, with a code, was asked for. */
   forced: boolean
@@ -27,12 +27,12 @@ export const newLogin = (next: string, forced: boolean, now = Date.now()): Login
 export const challengeOf = (verifier: string) => createHash('sha256').update(verifier).digest('base64url')
 
 /**
- * Where to go after signing in: an address inside the administration, nothing else, so the sign-in cannot be
- * used to send somebody to another site.
+ * Where to go after signing in: an address inside the area (`base`, such as `/manage`), nothing else, so the
+ * sign-in cannot be used to send somebody to another site or to another area.
  */
 export const safeNext = (next: unknown, base: string) => {
   if (typeof next !== 'string' || !next.startsWith(`${base}`) || next.startsWith('//') || /[\\\s]/.test(next)) return base
-  if (next !== base && !/^\/manage[/?]/.test(next)) return base
+  if (next !== base && !next.startsWith(`${base}/`) && !next.startsWith(`${base}?`)) return base
   return next
 }
 
@@ -42,6 +42,8 @@ export interface IdTokenClaims {
   nonce?: string
   exp?: number
   acr?: string
+  /** When the person last signed in at pforte, in seconds. Only in the token of a client that asks for it. */
+  auth_time?: number
   sub?: string
   name?: string
   email?: string

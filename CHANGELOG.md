@@ -17,6 +17,16 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   the administration and can be forgotten there, and an application that asks for `urn:pforte:acr:mfa` still gets the code.
   The token waits in a new cookie, `pforte_device_new`, until the next sign-in in that browser moves it to the others
   ([#44](https://github.com/progwise/pforte/issues/44)).
+- **Account pages, first part.** Every person who has an account can open `/account` and see who pforte knows them as:
+  name, e-mail address, mobile phone (mostly hidden) and language, read-only, because the back office owns these details.
+  The pages sign in at pforte like any application, always with a code, and come in English, German, French and Hungarian.
+  A person only ever sees themselves: no address of the pages carries an id, and a session ends with the sign-in it came
+  from, so in every browser when the person is locked, signed out everywhere or gets a new password. Nothing in pforte
+  links to the pages; link to them from your application. Pages for sessions, remembered devices, recent sign-ins and a
+  change of password follow. **After the update the list of clients shows a second built-in client,
+  `pforte-account-ui`.** If you registered a client under that ID yourself, it is not touched and the pages stay off until
+  you have moved it to another ID; the log says so at every start
+  ([the account pages](docs/account.md), [#18](https://github.com/progwise/pforte/issues/18)).
 - **Applications are told when somebody else ends a person's sessions** (back-channel logout). Until now a client with a
   back-channel logout address got a logout token only when the person signed out at pforte. Now it also gets one when an
   administrator locks, deactivates or deletes the person, signs them out everywhere or starts a password reset, and when the

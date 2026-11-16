@@ -44,13 +44,14 @@ export interface PageSet {
    */
   logoutConfirm(options: { host: string; formHtml: string }): string
   /**
-   * A page of the administration: a bar with the sections and the person, a message from the last action, and the
-   * content, which is HTML the caller has already escaped.
+   * A page of one of pforte's own areas (the administration, the account pages): a bar with the sections and the
+   * person, a message from the last action, and the content, which is HTML the caller has already escaped.
    */
   manage(options: {
     title: string
     nav: { href: string; label: string; current?: boolean }[]
-    person?: { signedInAs: string; signOutLabel: string }
+    /** `signOutAction` is where the button posts to; the administration's, unless the area says otherwise. */
+    person?: { signedInAs: string; signOutLabel: string; signOutAction?: string }
     flash?: { kind: 'ok' | 'error'; text: string }
     sectionsLabel: string
     content: string
@@ -269,7 +270,7 @@ ${nav.map((item) => `<a href="${escapeHtml(item.href)}"${item.current ? ' aria-c
 ${
   person
     ? `<div class="who"><span>${escapeHtml(person.signedInAs)}</span>
-<form method="post" action="/manage/logout"><button type="submit" class="secondary">${escapeHtml(person.signOutLabel)}</button></form></div>`
+<form method="post" action="${escapeHtml(person.signOutAction ?? '/manage/logout')}"><button type="submit" class="secondary">${escapeHtml(person.signOutLabel)}</button></form></div>`
     : ''
 }
 </header>

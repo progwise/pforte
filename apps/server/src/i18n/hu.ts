@@ -106,6 +106,25 @@ export const hu: Catalog = {
   'mail.passwordChanged.text':
     'Tisztelt {firstName}!\n\nA(z) {organisation} fiókjának jelszavát az imént megváltoztatták, és mindenhol kijelentkeztettük.\n\nHa Ön volt az, nincs teendője.\n\nHa nem Ön volt az, most válasszon új jelszót:\n\n{url}\n\nEzután értesítse az adminisztrációt.\n',
 
+  // The account pages, where a person sees how they are signed in.
+  'account.title': 'Az Ön fiókja',
+  'account.nav.label': 'Részek',
+  'account.nav.start': 'Áttekintés',
+  'account.signedInAs': 'Bejelentkezve: {name}',
+  'account.signOut': 'Kijelentkezés',
+  'account.signIn': 'Bejelentkezés',
+  'account.profile.title': 'Az Ön adatai',
+  'account.profile.name': 'Név',
+  'account.profile.email': 'E-mail-cím',
+  'account.profile.phone': 'Mobiltelefon',
+  'account.profile.noPhone': 'Nincs megadva',
+  'account.profile.language': 'Nyelv',
+  'account.profile.note': 'Ezeket az adatokat a szervezete kezeli. Ha valami nem stimmel, forduljon az adminisztrációhoz; itt nem módosítható.',
+  'account.loginFailed.title': 'A bejelentkezés nem sikerült',
+  'account.loginFailed.text': 'A bejelentkezést nem sikerült befejezni. Kérjük, próbálja újra.',
+  'account.signedOut.title': 'Ki van jelentkezve',
+  'account.signedOut.text': 'A fiókoldal bezárult. Jelentkezzen be újra, amikor szüksége van rá.',
+
   'sms.login': 'A(z) {organisation} bejelentkezési kódja: {code}. {minutes} percig érvényes. Ne adja át senkinek.',
   'sms.reset': 'A(z) {organisation} új jelszavához szükséges kód: {code}. {minutes} percig érvényes. Ne adja át senkinek.',
   'sms.phone': 'A(z) {organisation} telefonszám-megerősítő kódja: {code}. {minutes} percig érvényes.',

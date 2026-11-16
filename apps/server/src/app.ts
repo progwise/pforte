@@ -1,5 +1,6 @@
 import Fastify, { type FastifyServerOptions } from 'fastify'
 import { accountRoutes, type AccountDependencies } from './account/routes.js'
+import { type AccountAreaDependencies, accountAreaRoutes } from './account-area/routes.js'
 import { type AdminDependencies, adminRoutes } from './admin/index.js'
 import type { InteractionDependencies } from './interaction/routes.js'
 import { interactionRoutes } from './interaction/routes.js'
@@ -21,6 +22,8 @@ export interface AppDependencies {
   ui?: Pick<Ui, 'theme'>
   /** The pages for choosing the first password and for a forgotten one. */
   account?: AccountDependencies
+  /** The account pages under /account, where a person sees how they are signed in. */
+  accountArea?: AccountAreaDependencies
   /** How many proxies stand in front of pforte; see `Config.trustProxy`. */
   trustProxy?: number
   /** The public address of pforte. Over https, responses carry HSTS. */
@@ -35,7 +38,7 @@ export interface AppDependencies {
   }
 }
 
-export const buildApp = ({ getDatabaseTime, oidc, admin, account, manage, ui, trustProxy = 0, issuer, logStream }: AppDependencies) => {
+export const buildApp = ({ getDatabaseTime, oidc, admin, account, accountArea, manage, ui, trustProxy = 0, issuer, logStream }: AppDependencies) => {
   // "The first N proxies are trusted": the client is what the Nth proxy from the end says it is.
   const options: FastifyServerOptions = {
     logger: logStream ? { stream: logStream, serializers: logSerializers } : process.env.NODE_ENV !== 'test' ? { serializers: logSerializers } : false,
@@ -75,6 +78,9 @@ export const buildApp = ({ getDatabaseTime, oidc, admin, account, manage, ui, tr
   }
   if (account) {
     void app.register(accountRoutes(account))
+  }
+  if (accountArea) {
+    void app.register(accountAreaRoutes(accountArea))
   }
   if (manage) {
     void app.register(manageRoutes(manage))

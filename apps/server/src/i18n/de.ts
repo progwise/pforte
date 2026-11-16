@@ -107,6 +107,25 @@ export const de: Catalog = {
   'mail.passwordChanged.text':
     'Guten Tag {firstName},\n\ndas Passwort Ihres Kontos bei {organisation} wurde soeben geändert, und Sie wurden überall abgemeldet.\n\nWenn Sie das waren, müssen Sie nichts tun.\n\nWenn Sie das nicht waren, wählen Sie jetzt ein neues Passwort:\n\n{url}\n\nInformieren Sie danach Ihre Administration.\n',
 
+  // The account pages, where a person sees how they are signed in.
+  'account.title': 'Ihr Konto',
+  'account.nav.label': 'Bereiche',
+  'account.nav.start': 'Übersicht',
+  'account.signedInAs': 'Angemeldet als {name}',
+  'account.signOut': 'Abmelden',
+  'account.signIn': 'Anmelden',
+  'account.profile.title': 'Ihre Angaben',
+  'account.profile.name': 'Name',
+  'account.profile.email': 'E-Mail-Adresse',
+  'account.profile.phone': 'Mobiltelefon',
+  'account.profile.noPhone': 'Keines hinterlegt',
+  'account.profile.language': 'Sprache',
+  'account.profile.note': 'Diese Angaben pflegt Ihre Organisation. Wenn etwas nicht stimmt, wenden Sie sich an Ihre Administration; hier lässt es sich nicht ändern.',
+  'account.loginFailed.title': 'Die Anmeldung hat nicht geklappt',
+  'account.loginFailed.text': 'Die Anmeldung konnte nicht abgeschlossen werden. Bitte versuchen Sie es erneut.',
+  'account.signedOut.title': 'Sie sind abgemeldet',
+  'account.signedOut.text': 'Ihre Kontoseite ist geschlossen. Melden Sie sich wieder an, wenn Sie sie brauchen.',
+
   'sms.login': '{code} ist Ihr Anmeldecode für {organisation}. Gültig {minutes} Minuten. Nicht weitergeben.',
   'sms.reset': '{code} ist Ihr Code für ein neues Passwort bei {organisation}. Gültig {minutes} Minuten. Nicht weitergeben.',
   'sms.phone': '{code} ist Ihr Code, um diese Telefonnummer bei {organisation} zu bestätigen. Gültig {minutes} Minuten.',
