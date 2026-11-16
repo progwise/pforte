@@ -23,7 +23,7 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   person completes a password reset, so "locking a person ends their session in the application" holds without waiting for
   the next token refresh. The token goes to every application the person has a session with or still holds tokens for. It
   is sent after the change is saved, three attempts within about ten seconds, and never holds up or fails the action. The
-  audit event of the action says how many applications are to be told (`clientsToNotify`); one that could not be told gets
+  audit event of the action says how many applications are to be told (`clientsToNotify`); one that pforte gave up on gets
   the new event `user.sessions.notify_failed`. **If your application has a back-channel logout address, it now receives
   tokens on these occasions**; a client registered without `backchannelLogoutSessionRequired` gets a token without `sid`, which
   means all sessions of the person ([#27](https://github.com/progwise/pforte/issues/27)).

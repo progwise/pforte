@@ -88,6 +88,16 @@ describe.skipIf(!hasDatabase)('back-channel logout when sessions are ended for a
   }
 
   const act = (id: string, action: string) => h.api('POST', `/users/${id}/${action}`)
+  /** A seeded person who is signed in nowhere, whatever an earlier test left behind, and a receiver that has seen nothing. */
+  const signedOut = async (name: string) => {
+    const user = await seeded(name)
+    await act(user.id, 'end-sessions')
+    await h.settle()
+    receiver.requests.length = 0
+    receiver.state.answers = []
+    h.logoutFailures.length = 0
+    return user
+  }
   const claimsOf = async (logoutToken: string) => {
     const { valid, claims } = await verifyJwt(h.app, logoutToken)
     expect(valid, 'the logout token is signed with a published key').toBe(true)
@@ -187,20 +197,35 @@ describe.skipIf(!hasDatabase)('back-channel logout when sessions are ended for a
   it('tells an application that kept its tokens after the browser session at pforte was gone', async () => {
     const user = await seeded('jonas.fuchs')
     await signInTo(user.email, WEB)
-    await signInTo(user.email, BACKEND)
+    const atBackend = await signInTo(user.email, BACKEND)
     await h.database.pool.query(`delete from oidc_payloads where account_id = $1 and type = 1`, [user.id])
 
     expect((await act(user.id, 'end-sessions')).statusCode).toBe(200)
     await h.settle()
 
-    // The backend asked for the session ID, and without a session there is none to name.
-    expect(receiver.requests.map((request) => request.path)).toEqual(['/web'])
-    expect((await h.audit('user.sessions.end', user.id)).at(-1).details).toMatchObject({ clientsToNotify: 1 })
+    expect(receiver.requests.map((request) => request.path).sort()).toEqual(['/backend', '/web'])
+    // The backend asked for the session ID. The session is gone, but its tokens still name it.
+    expect(atBackend.sid).toBeTruthy()
+    expect((await claimsOf(receiver.to('/backend')[0]!.logoutToken)).sid).toBe(atBackend.sid)
+    expect((await h.audit('user.sessions.end', user.id)).at(-1).details).toMatchObject({ clientsToNotify: 2 })
+  })
+
+  it('does not tell an application that asked for the session ID when only a grant is left: there is no ID to name', async () => {
+    const user = await seeded('jonas.fuchs')
+    await signInTo(user.email, BACKEND)
+    // Neither the session nor a token: types 1 (session), 2 (access token), 3 (code) and 4 (refresh token).
+    await h.database.pool.query(`delete from oidc_payloads where account_id = $1 and type in (1, 2, 3, 4)`, [user.id])
+
+    expect((await act(user.id, 'end-sessions')).statusCode).toBe(200)
+    await h.settle()
+
+    expect(receiver.requests).toEqual([])
+    expect((await h.audit('user.sessions.end', user.id)).at(-1).details).toMatchObject({ sessionsEnded: 1, clientsToNotify: 0 })
   })
 
   describe('an application that does not answer as it should', () => {
     it('does not hold the action up: the answer is there before the application has answered', async () => {
-      const user = await seeded('hans.weber')
+      const user = await signedOut('hans.weber')
       await signInTo(user.email, WEB)
       let release!: () => void
       receiver.state.hold = new Promise<void>((resolve) => (release = resolve))
@@ -215,7 +240,7 @@ describe.skipIf(!hasDatabase)('back-channel logout when sessions are ended for a
     })
 
     it('is asked three times and then given up on, with an audit event that names it', async () => {
-      const user = await seeded('hans.weber')
+      const user = await signedOut('hans.weber')
       await signInTo(user.email, WEB)
       receiver.state.answers = [500, 500, 500, 500, 500]
 
@@ -232,7 +257,7 @@ describe.skipIf(!hasDatabase)('back-channel logout when sessions are ended for a
     })
 
     it('is asked again and told at the second attempt, without an audit event', async () => {
-      const user = await seeded('ida.sommer')
+      const user = await signedOut('ida.sommer')
       await signInTo(user.email, WEB)
       receiver.state.answers = [503]
 
@@ -244,8 +269,65 @@ describe.skipIf(!hasDatabase)('back-channel logout when sessions are ended for a
       expect(await failures(user.id)).toEqual([])
     })
 
+    it('is not asked again once the person has signed in anew: a late "all sessions" would end the new one', async () => {
+      const user = await signedOut('ida.sommer')
+      await signInTo(user.email, WEB)
+      let release!: () => void
+      receiver.state.hold = new Promise<void>((resolve) => (release = resolve))
+      receiver.state.answers = [500]
+
+      expect((await act(user.id, 'end-sessions')).statusCode).toBe(200)
+      // The first call is on its way and will fail. Meanwhile the person signs in to the application again.
+      await expect.poll(() => receiver.requests.length).toBe(1)
+      await signInTo(user.email, WEB)
+      release()
+      await h.settle()
+
+      // No second call: its token would be dated after the new sign-in and name no session.
+      expect(receiver.requests).toHaveLength(1)
+      expect(await failures(user.id)).toContainEqual({ actorType: 'system', email: user.email, clientId: WEB.clientId, reason: 'signed_in_again', attempts: 1 })
+      // The new sign-in is untouched at pforte too.
+      expect((await h.api('GET', `/users/${user.id}/sessions`)).json().grants).toEqual([expect.objectContaining({ clientId: WEB.clientId })])
+    })
+
+    it('is asked again after a new sign-in when the logout names the old session: that cannot end the new one', async () => {
+      const user = await signedOut('ida.sommer')
+      const before = await signInTo(user.email, BACKEND)
+      let release!: () => void
+      receiver.state.hold = new Promise<void>((resolve) => (release = resolve))
+      receiver.state.answers = [500]
+
+      expect((await act(user.id, 'end-sessions')).statusCode).toBe(200)
+      await expect.poll(() => receiver.requests.length).toBe(1)
+      const after = await signInTo(user.email, BACKEND)
+      release()
+      await h.settle()
+
+      expect(receiver.requests).toHaveLength(2)
+      const retried = await claimsOf(receiver.requests[1]!.logoutToken)
+      expect(retried.sid).toBe(before.sid)
+      expect(retried.sid).not.toBe(after.sid)
+    })
+
+    it('whose address is removed while pforte is still trying is recorded, not passed over', async () => {
+      const user = await signedOut('ida.sommer')
+      await signInTo(user.email, WEB)
+      let release!: () => void
+      receiver.state.hold = new Promise<void>((resolve) => (release = resolve))
+      receiver.state.answers = [500]
+
+      expect((await act(user.id, 'end-sessions')).statusCode).toBe(200)
+      await expect.poll(() => receiver.requests.length).toBe(1)
+      await setAddress(WEB.clientId, null)
+      release()
+      await h.settle()
+
+      expect(receiver.requests).toHaveLength(1)
+      expect(await failures(user.id)).toContainEqual({ actorType: 'system', email: user.email, clientId: WEB.clientId, reason: 'address_removed', attempts: 1 })
+    })
+
     it('that cannot be reached at all is recorded as unreachable, and the other application is still told', async () => {
-      const user = await seeded('ida.sommer')
+      const user = await signedOut('ida.sommer')
       await signInTo(user.email, WEB)
       await signInTo(user.email, BACKEND)
       // Nothing listens there: the port of a receiver that was closed again.
@@ -257,7 +339,7 @@ describe.skipIf(!hasDatabase)('back-channel logout when sessions are ended for a
       await h.settle()
 
       expect(receiver.requests.map((request) => request.path)).toEqual(['/backend'])
-      expect(await failures(user.id)).toEqual([{ actorType: 'system', email: user.email, clientId: WEB.clientId, reason: 'unreachable', attempts: 3 }])
+      expect(await failures(user.id)).toContainEqual({ actorType: 'system', email: user.email, clientId: WEB.clientId, reason: 'unreachable', attempts: 3 })
     })
   })
 })

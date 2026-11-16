@@ -54,3 +54,12 @@ export const listUserSessions = async (db: DatabaseOrTransaction, userId: string
   grants.sort((a, b) => a.clientId.localeCompare(b.clientId))
   return { sessions, grants }
 }
+
+/**
+ * Whether the user is signed in to this application right now: a browser session that includes it, or a grant
+ * for it. After the sessions of a user were ended, this is true again only if they signed in anew.
+ */
+export const isSignedInTo = async (db: DatabaseOrTransaction, userId: string, clientId: string, now = new Date()) => {
+  const { sessions, grants } = await listUserSessions(db, userId, now)
+  return sessions.some((session) => session.clientIds.includes(clientId)) || grants.some((grant) => grant.clientId === clientId)
+}

@@ -57,10 +57,13 @@ how many were.
 
 | Action | When | Details |
 | --- | --- | --- |
-| `user.sessions.notify_failed` | An application could not be told, after the last attempt. No such event means every application answered. | `clientId`, `attempts`, `email`, and `reason`: `http_500` (the status the application answered with), `timeout` (no answer within 2.5 seconds), `unreachable`, or `private_address` (pforte refuses to call it, see `OUTBOUND_ALLOW_PRIVATE_ADDRESSES`). |
+| `user.sessions.notify_failed` | pforte gave up telling an application. | `clientId`, `attempts` (how many calls were made), `email`, and `reason`: `http_500` (the status the application answered with), `timeout` (no answer within 2.5 seconds), `unreachable`, `private_address` (pforte refuses to call it, see `OUTBOUND_ALLOW_PRIVATE_ADDRESSES`), `signed_in_again` (after a failed call the person signed in to the application anew, and a logout for all their sessions would have ended that too) or `address_removed` (after a failed call the client lost its logout address). |
 
 The actor of this event is pforte itself (`actorType: system`), the target is the person. The application is still signed
 in until it next renews its tokens; if that is too long, end its session of the person there.
+
+This event records a failure that pforte saw. **Its absence does not confirm that an application was told:** the calls are
+made after the action, from memory, so a restart of pforte in those seconds loses both the call and the event.
 
 ## How long events are kept
 

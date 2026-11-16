@@ -180,13 +180,16 @@ token is sent in two cases:
 
 What the token names depends on how the client is registered. With `backchannelLogoutSessionRequired` (in the administration:
 *Send the session ID with the logout message*), it carries the `sid` of one session, the same `sid` as in the ID token, and
-you get one token per session; an application that only holds tokens, without a
-session at pforte, is then not told. Without it, the token carries only `sub`, which means: end all sessions of this person.
+you get one token per session. pforte also finds the `sid` in the tokens it issued in that session, so a session that has
+expired at pforte while your application kept refreshing is still named. Without the setting, the token carries only `sub`,
+which means: end all sessions of this person.
 
 The second case is **best effort**. pforte calls after the change is saved and does not wait for your answer. It tries three
 times within about ten seconds, each time with a new token and a timeout of 2.5 seconds, and then gives up; an application
-that is down for longer, or a restart of pforte in those seconds, means the token is lost. The administrator's action never
-fails because of it; an application that could not be told is recorded in the [audit log](audit-log.md#telling-applications).
+that is down for longer, or a restart of pforte in those seconds, means the token is lost. A token without `sid` is not sent
+a second or third time once the person has signed in to your application again: it would be dated after that sign-in and end
+the new session too. The administrator's action never fails because of any of this; an application that pforte gave up on is
+recorded in the [audit log](audit-log.md#telling-applications).
 So keep renewing your tokens as well: a refresh fails once the person's sessions were ended, and that is the check that
 cannot be missed.
 

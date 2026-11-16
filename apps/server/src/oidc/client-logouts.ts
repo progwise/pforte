@@ -1,5 +1,5 @@
 import type { Database } from '@progwise/pforte-db'
-import { type ClientLogout, recordAuditEvent } from '@progwise/pforte-db/admin'
+import { type ClientLogout, isSignedInTo, recordAuditEvent } from '@progwise/pforte-db/admin'
 import type { Background } from '../security/background.js'
 import type { ProviderHolder } from './provider.js'
 
@@ -25,7 +25,7 @@ export interface ClientLogoutsOptions {
   background: Background
   /** How long to wait before the second, third, … attempt. One attempt more than there are pauses. */
   pausesMs?: number[]
-  /** Hears of an application that could not be told, after the last attempt. */
+  /** Hears of an application that could not be told, when pforte stops trying. */
   onFailure?: (failure: { clientId: string; reason: string; attempts: number }) => void
 }
 
@@ -41,6 +41,8 @@ interface LogoutCapableClient {
 /**
  * Why a call failed, in a word for the audit log: the status the application answered with, that it did not
  * answer in time, that its address is a private one pforte refuses to call, or that it could not be reached.
+ * Two more reasons, `signed_in_again` and `address_removed`, are not failed calls but calls that were not made
+ * any more after a failed one; see `deliver`.
  */
 export const failureReason = (error: unknown) => {
   const status = (error as { response?: { status?: unknown } } | undefined)?.response?.status
@@ -63,7 +65,12 @@ export const createClientLogouts = ({ db, provider, background, pausesMs = PAUSE
     for (let attempt = 1; attempt <= attempts; attempt++) {
       // Looked up for every attempt: the address may have been corrected, or the client deleted, in the meantime.
       const client = (await provider.current().Client.find(clientId)) as LogoutCapableClient | undefined
-      if (!client?.backchannelLogoutUri) return undefined
+      // Gone before the first attempt: nothing was owed any more. Gone after a failed one: the application was not told.
+      if (!client?.backchannelLogoutUri) return attempt > 1 ? { reason: 'address_removed', attempts: attempt - 1 } : undefined
+      // A logout without a session ID means "all sessions of this person", and every attempt sends a new token,
+      // dated now. Somebody who was signed out everywhere, or reset their password, may have signed in again
+      // while this waited: the late token would end that new session too. So it is not sent any more.
+      if (attempt > 1 && !sid && (await isSignedInTo(db, userId, clientId))) return { reason: 'signed_in_again', attempts: attempt - 1 }
       try {
         await client.backchannelLogout(userId, sid)
         return undefined
@@ -85,6 +92,8 @@ export const createClientLogouts = ({ db, provider, background, pausesMs = PAUSE
           if (!failure) return
           onFailure?.({ clientId: logout.clientId, ...failure })
           // The event of the action said how many applications were to be told; this says which one was not.
+          // It is written when pforte stops trying. A restart before that loses the attempt and the event alike,
+          // so a missing event does not prove that the application answered.
           await recordAuditEvent(db, {
             actor: { type: 'system' },
             action: 'user.sessions.notify_failed',

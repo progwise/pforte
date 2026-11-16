@@ -59,8 +59,10 @@ export interface ClientLogout {
  * The applications to tell that the sessions of a user ended (back-channel logout): every client with a logout
  * address that the user has a session with or was granted access to, which covers an application that kept
  * refreshing its tokens after the browser's session at pforte had expired. A client that asked for the session ID
- * (`backchannelLogoutSessionRequired`) gets one logout per session, and none for a grant without a session, as
- * there is no ID to name. Every other client gets one, which means all its sessions of the user.
+ * (`backchannelLogoutSessionRequired`) gets one logout per session ID. Those IDs are in the browser sessions and
+ * also in the tokens, which keep the ID of the session they came from through every refresh, so a session that is
+ * gone at pforte but alive at the application is still named. Only a grant with neither leaves no ID to name, and
+ * such a client is then not told. Every other client gets one logout, which means all its sessions of the user.
  * Must run before the records are deleted: they are the only place that knows.
  */
 const logoutsFor = async (tx: DatabaseOrTransaction, userId: string, now = new Date()): Promise<ClientLogout[]> => {
@@ -70,7 +72,7 @@ const logoutsFor = async (tx: DatabaseOrTransaction, userId: string, now = new D
     .where(
       and(
         eq(oidcPayloads.accountId, userId),
-        inArray(oidcPayloads.type, [MODEL_TYPES.Session, MODEL_TYPES.Grant]),
+        inArray(oidcPayloads.type, [MODEL_TYPES.Session, MODEL_TYPES.Grant, MODEL_TYPES.RefreshToken, MODEL_TYPES.AccessToken]),
         or(isNull(oidcPayloads.expiresAt), gt(oidcPayloads.expiresAt, now)),
       ),
     )
@@ -78,14 +80,16 @@ const logoutsFor = async (tx: DatabaseOrTransaction, userId: string, now = new D
   const sessionIds = new Map<string, Set<string>>()
   const seen = (clientId: string) => sessionIds.get(clientId) ?? sessionIds.set(clientId, new Set()).get(clientId)!
   for (const row of rows) {
-    const payload = row.payload as { authorizations?: Record<string, { sid?: unknown } | undefined>; clientId?: unknown }
+    const payload = row.payload as { authorizations?: Record<string, { sid?: unknown } | undefined>; clientId?: unknown; sid?: unknown }
     if (row.type === MODEL_TYPES.Session) {
       for (const [clientId, authorization] of Object.entries(payload.authorizations ?? {})) {
         const known = seen(clientId)
         if (typeof authorization?.sid === 'string') known.add(authorization.sid)
       }
     } else if (typeof payload.clientId === 'string') {
-      seen(payload.clientId)
+      // A grant names the client; a refresh or access token also the session it was issued in.
+      const known = seen(payload.clientId)
+      if (typeof payload.sid === 'string') known.add(payload.sid)
     }
   }
   if (sessionIds.size === 0) return []

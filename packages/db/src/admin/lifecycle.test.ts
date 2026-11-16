@@ -230,7 +230,7 @@ describe.skipIf(!hasDatabase)('user lifecycle', () => {
       )
       return clientId
     }
-    const record = (accountId: string, type: 1 | 13, payload: object, expires = `interval '1 hour'`) =>
+    const record = (accountId: string, type: 1 | 2 | 4 | 13, payload: object, expires = `interval '1 hour'`) =>
       database.pool.query(`insert into oidc_payloads (id, type, payload, account_id, expires_at) values (gen_random_uuid()::text, $1, $2, $3, now() + ${expires})`, [
         type,
         JSON.stringify(payload),
@@ -241,6 +241,9 @@ describe.skipIf(!hasDatabase)('user lifecycle', () => {
       record(accountId, 1, { accountId, authorizations: Object.fromEntries(Object.entries(sids).map(([clientId, sid]) => [clientId, { sid, grantId: `grant-of-${sid}` }])) }, expires)
     /** What stays when an application keeps refreshing its tokens: the grant, without a browser session. */
     const grant = (accountId: string, clientId: string, expires?: string) => record(accountId, 13, { accountId, clientId }, expires)
+    /** A refresh (4) or access (2) token: it keeps the ID of the session it was issued in, through every refresh. */
+    const token = (accountId: string, type: 2 | 4, clientId: string, sid: string | undefined, expires?: string) =>
+      record(accountId, type, { accountId, clientId, grantId: `grant-of-${sid}`, ...(sid ? { sid } : {}) }, expires)
     const end = async (user: Awaited<ReturnType<typeof userIn>>) => (await run('end-sessions', user)) as Awaited<ReturnType<typeof endSessions>>
 
     it('tells a client with a logout address once, however many sessions the user has with it', async () => {
@@ -283,6 +286,43 @@ describe.skipIf(!hasDatabase)('user lifecycle', () => {
       const { logouts } = await end(user)
 
       expect(logouts).toEqual([{ clientId: refreshing }])
+    })
+
+    it('names a session that is gone at pforte but still known from the tokens of a client that asked for the session ID', async () => {
+      const user = await userIn('active')
+      const strict = await client({ sessionRequired: true })
+      // The browser session expired or was cleaned up; the application kept refreshing.
+      await grant(user.id, strict)
+      await token(user.id, 4, strict, 'sid-refreshed')
+      await token(user.id, 2, strict, 'sid-refreshed')
+      // A second device, whose access token is all that is left.
+      await token(user.id, 2, strict, 'sid-other-device')
+      // And one session that is still there, with its token: named once.
+      await session(user.id, { [strict]: 'sid-live' })
+      await token(user.id, 4, strict, 'sid-live')
+
+      const { logouts } = await end(user)
+
+      expect(logouts).toEqual([
+        { clientId: strict, sid: 'sid-live' },
+        { clientId: strict, sid: 'sid-other-device' },
+        { clientId: strict, sid: 'sid-refreshed' },
+      ])
+      expect((await event('user.sessions.end', user.id)).details).toMatchObject({ clientsToNotify: 1 })
+    })
+
+    it('takes no session ID from an expired token, and tells a client without the setting once whatever its tokens name', async () => {
+      const user = await userIn('active')
+      const strict = await client({ sessionRequired: true })
+      const relaxed = await client()
+      await token(user.id, 4, strict, 'sid-expired', `interval '-1 minute'`)
+      await token(user.id, 4, relaxed, 'sid-a')
+      await token(user.id, 4, relaxed, 'sid-b')
+      await token(user.id, 2, relaxed, undefined)
+
+      const { logouts } = await end(user)
+
+      expect(logouts).toEqual([{ clientId: relaxed }])
     })
 
     it('tells nobody about sessions and grants that have expired, or of another user', async () => {
