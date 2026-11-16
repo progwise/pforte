@@ -1,8 +1,8 @@
 import formbody from '@fastify/formbody'
 import { hash } from '@node-rs/argon2'
 import type { Database } from '@progwise/pforte-db'
-import { checkCode, CodeLimitError, issueCode, markEmailVerified, markPhoneVerified } from '@progwise/pforte-db/codes'
-import { closePasskeyOffer, continuePasskeyOffer, findPasskeyOffer, getClient, requestActivationLink } from '@progwise/pforte-db/admin'
+import { checkCode, CodeLimitError, issueCode, markEmailVerified } from '@progwise/pforte-db/codes'
+import { closePasskeyOffer, confirmPhone, continuePasskeyOffer, findPasskeyOffer, getClient, requestActivationLink } from '@progwise/pforte-db/admin'
 import { findActiveUserById } from '@progwise/pforte-db/oidc'
 import { completeActivation, completePasswordReset, findPendingActivation } from '@progwise/pforte-db/credentials'
 import { findUserByEmail } from '@progwise/pforte-db/users'
@@ -266,7 +266,7 @@ export const accountRoutes =
       // With SMS available, the number the back office entered is confirmed now, so that codes can go to it.
       if (notifier.smsAvailable && user.phone && !user.phoneVerifiedAt) {
         try {
-          await sendPhoneCode(user)
+          await sendPhoneCode({ ...user, phone: user.phone })
           // The offer, if there is one, waits behind the phone step.
           reply.header('Set-Cookie', [...cookies, phoneCookie(user.id, clientId)])
           return html(reply, 200, view.phoneConfirm({ sentTo: maskPhone(user.phone) }))
@@ -290,8 +290,9 @@ export const accountRoutes =
         secure,
       })
 
-    const sendPhoneCode = async (user: { id: string; email: string; firstName: string; lastName: string; language: string; phone: string | null }) => {
-      const { code, expiresAt } = await issueCode(db, { userId: user.id, channel: 'sms', purpose: 'activation' }, { secrets: codeSecrets })
+    /** The code is bound to the number it goes to: it confirms that number and no other (see `confirmPhone`). */
+    const sendPhoneCode = async (user: { id: string; email: string; firstName: string; lastName: string; language: string; phone: string }) => {
+      const { code, expiresAt } = await issueCode(db, { userId: user.id, channel: 'sms', purpose: 'activation', boundTo: user.phone }, { secrets: codeSecrets })
       await notifier.sendPhoneCode(user, { code, expiresAt })
     }
 
@@ -300,7 +301,7 @@ export const accountRoutes =
       const step = unsign<PhoneStep>(cookieKeys, readCookie(request.headers.cookie, PHONE_COOKIE))
       if (!step || step.expiresAt < Date.now()) return undefined
       const user = await findActiveUserById(db, step.userId)
-      return user?.phone && !user.phoneVerifiedAt ? { ...user, clientId: step.clientId } : undefined
+      return user?.phone && !user.phoneVerifiedAt ? { ...user, phone: user.phone, clientId: step.clientId } : undefined
     }
 
     const endOfPhoneStep = setCookieHeader(PHONE_COOKIE, '', { path: '/activate', maxAgeSeconds: 0, secure })
@@ -321,13 +322,14 @@ export const accountRoutes =
       }
 
       const code = text(request.body?.code).replaceAll(' ', '')
-      const result = /^\d{6}$/.test(code) ? await checkCode(db, { userId: user.id, purpose: 'activation', code }, { secrets: codeSecrets }) : undefined
+      const result = /^\d{6}$/.test(code)
+        ? await confirmPhone(db, { actor: { type: 'user', id: user.id }, ...origin(request), self: true }, { userId: user.id, code }, { secrets: codeSecrets })
+        : undefined
       if (!result?.ok) {
         await limiter.codeFailed(request.ip)
         await audit.codeFailed(origin(request), { userId: user.id, purpose: 'activation', reason: result?.reason ?? 'malformed' })
-        return html(reply, 401, view.phoneConfirm({ sentTo: maskPhone(user.phone!), error: view.t('code.badOrExpired') }))
+        return html(reply, 401, view.phoneConfirm({ sentTo: maskPhone(user.phone), error: view.t('code.badOrExpired') }))
       }
-      await markPhoneVerified(db, user.id)
       // On to the offer the activation opened, if this device was offered one. The phone step itself opens none.
       if (await continueOffer(passkeyToken(request), 'phone')) return toOffer(reply, [endOfPhoneStep])
       return finishedPhoneStep(reply, await confirmedPhone(view, user.clientId))
@@ -348,13 +350,13 @@ export const accountRoutes =
         await sendPhoneCode(user)
       } catch (error) {
         if (error instanceof CodeLimitError) {
-          return html(reply, 429, view.phoneConfirm({ sentTo: maskPhone(user.phone!), error: view.t('phone.wait', { seconds: error.retryAfterSeconds }) }))
+          return html(reply, 429, view.phoneConfirm({ sentTo: maskPhone(user.phone), error: view.t('phone.wait', { seconds: error.retryAfterSeconds }) }))
         }
         if (!(error instanceof NotifierUnavailableError)) throw error
         request.log.error(error, 'the code to confirm the phone number could not be sent')
-        return html(reply, 503, view.phoneConfirm({ sentTo: maskPhone(user.phone!), error: view.t('phone.cannotSend') }))
+        return html(reply, 503, view.phoneConfirm({ sentTo: maskPhone(user.phone), error: view.t('phone.cannotSend') }))
       }
-      return html(reply, 200, view.phoneConfirm({ sentTo: maskPhone(user.phone!), notice: view.t('code.newOnItsWay') }))
+      return html(reply, 200, view.phoneConfirm({ sentTo: maskPhone(user.phone), notice: view.t('code.newOnItsWay') }))
     })
 
     app.post('/activate/phone/skip', async (request, reply) => {

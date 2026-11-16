@@ -1,8 +1,12 @@
 import { createHash } from 'node:crypto'
+import { sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import type { Database } from '../index.js'
 import { createTestDatabase, hasDatabase } from '../test/test-database.js'
+import { issueCode } from '../codes.js'
 import {
   activateUser,
+  confirmPhone,
   deactivateUser,
   endSessions,
   LifecycleError,
@@ -11,7 +15,7 @@ import {
   requestPasswordReset,
   unlockUser,
 } from './lifecycle.js'
-import { createUser, deleteUser, findUserById } from './users.js'
+import { createUser, deleteUser, findUserById, updateUser } from './users.js'
 
 const context = { actor: { type: 'client' as const, id: 'tester' }, ip: '203.0.113.7', userAgent: 'vitest' }
 const STATUSES = ['created', 'active', 'locked', 'deactivated'] as const
@@ -192,6 +196,122 @@ describe.skipIf(!hasDatabase)('user lifecycle', () => {
 
       expect(result.user.status).toBe('created')
       expect(result.activation).toBeDefined()
+    })
+  })
+
+  describe('confirming the phone number', () => {
+    const secrets = ['code-secret-code-secret-code-secret-code']
+    const A = '+4915112345678'
+    const B = '+4915187654321'
+    const self = (userId: string) => ({ actor: { type: 'user' as const, id: userId }, ip: '203.0.113.7', userAgent: 'vitest', self: true })
+    /** An active person with an unconfirmed number, and the code that was sent to it. */
+    const waiting = async (phone = A) => {
+      const user = await userIn('active')
+      await database.pool.query(`update users set phone = $1, phone_verified_at = null where id = $2`, [phone, user.id])
+      const { code } = await issueCode(database.db, { userId: user.id, channel: 'sms', purpose: 'activation', boundTo: phone }, { secrets })
+      return { id: user.id, code }
+    }
+    const confirm = (userId: string, code: string) => confirmPhone(database.db, self(userId), { userId, code }, { secrets })
+    const confirmedAt = async (userId: string) => (await findUserById(database.db, userId))!.phoneVerifiedAt
+
+    it('confirms the number with the code that was sent to it, and records it as the person’s own doing', async () => {
+      const { id, code } = await waiting()
+
+      expect(await confirm(id, code)).toEqual({ ok: true, channel: 'sms' })
+
+      expect(await confirmedAt(id)).toBeInstanceOf(Date)
+      expect(await event('user.phone.confirm', id)).toMatchObject({ actor_type: 'user', actor_id: id, details: { self: true } })
+      // and once: the code is used up, and there is nothing left to confirm
+      expect(await confirm(id, code)).toEqual({ ok: false, reason: 'none' })
+    })
+
+    it('refuses a wrong code, counts the attempt and records nothing', async () => {
+      const { id, code } = await waiting()
+      const wrong = code === '000000' ? '111111' : '000000'
+
+      for (let attempt = 0; attempt < 5; attempt++) expect(await confirm(id, wrong)).toEqual({ ok: false, reason: 'wrong' })
+      // The attempts were kept although nothing was confirmed: the right code is too late now.
+      expect(await confirm(id, code)).toEqual({ ok: false, reason: 'exhausted' })
+
+      expect(await confirmedAt(id)).toBeNull()
+      expect(await event('user.phone.confirm', id)).toBeUndefined()
+    })
+
+    it('does not confirm another number than the one the code was sent to', async () => {
+      const { id, code } = await waiting()
+      const user = (await findUserById(database.db, id))!
+      await database.db.transaction((tx) => updateUser(tx, context, user, { phone: B }))
+
+      expect(await confirm(id, code)).toEqual({ ok: false, reason: 'wrong' })
+
+      expect(await confirmedAt(id)).toBeNull()
+      expect(await event('user.phone.confirm', id)).toBeUndefined()
+    })
+
+    it('waits for a change of the number that is under way, and then refuses the code of the old one', async () => {
+      const { id, code } = await waiting()
+      const user = (await findUserById(database.db, id))!
+      let answered = false
+
+      const { pending } = await database.db.transaction(async (tx) => {
+        // The back office has changed the number and not finished yet.
+        await updateUser(tx, context, user, { phone: B })
+        const pending = confirm(id, code).finally(() => (answered = true))
+        await new Promise((resolve) => setTimeout(resolve, 200))
+        expect(answered, 'the confirmation must wait for the change').toBe(false)
+        // Wrapped, so that the change is finished here and not held until the confirmation has answered.
+        return { pending }
+      })
+
+      expect(await pending).toEqual({ ok: false, reason: 'wrong' })
+      const after = (await findUserById(database.db, id))!
+      expect(after.phone).toBe(B)
+      expect(after.phoneVerifiedAt).toBeNull()
+    })
+
+    it('is undone by a change of the number that comes right after it', async () => {
+      const { id, code } = await waiting()
+      const user = (await findUserById(database.db, id))!
+
+      // The change was decided on the number as it was, while the code was being entered.
+      expect(await confirm(id, code)).toEqual({ ok: true, channel: 'sms' })
+      await database.db.transaction((tx) => updateUser(tx, context, user, { phone: B }))
+
+      const after = (await findUserById(database.db, id))!
+      expect(after.phone).toBe(B)
+      expect(after.phoneVerifiedAt).toBeNull()
+    })
+
+    it('does not stand in the way of a new code that is issued while it waits for the old one: neither request fails', async () => {
+      const user = await userIn('active')
+      await database.pool.query(`update users set phone = $1, phone_verified_at = null where id = $2`, [A, user.id])
+      const start = new Date()
+      const { code } = await issueCode(database.db, { userId: user.id, channel: 'sms', purpose: 'activation', boundTo: A }, { secrets, now: start })
+      let confirming: Promise<unknown> = Promise.resolve()
+
+      const reissued = await database.db.transaction(async (tx) => {
+        // "Send a new code" has reached the old code and holds it ...
+        await tx.execute(sql`select 1 from otp_codes where user_id = ${user.id} for update`)
+        // ... when the code the person typed comes in: that holds the person's row and waits for the old code.
+        confirming = confirmPhone(database.db, self(user.id), { userId: user.id, code }, { secrets, now: start })
+        confirming.catch(() => {})
+        await new Promise((resolve) => setTimeout(resolve, 300))
+        // The new code is stored. It refers to the person's row, which must not make it wait for the confirmation.
+        return issueCode(tx as unknown as Database, { userId: user.id, channel: 'sms', purpose: 'activation', boundTo: A }, { secrets, now: new Date(start.getTime() + 2 * 60 * 1000) })
+      })
+
+      expect(reissued.code).toMatch(/^\d{6}$/)
+      // The code was valid when it was typed, so it counts.
+      await expect(confirming).resolves.toEqual({ ok: true, channel: 'sms' })
+      expect(await confirmedAt(user.id)).toBeInstanceOf(Date)
+    })
+
+    it('has nothing to confirm for a person without a number, or with a confirmed one', async () => {
+      const { id, code } = await waiting()
+      await database.pool.query(`update users set phone_verified_at = now() where id = $1`, [id])
+      expect(await confirm(id, code)).toEqual({ ok: false, reason: 'none' })
+      await database.pool.query(`update users set phone = null, phone_verified_at = null where id = $1`, [id])
+      expect(await confirm(id, code)).toEqual({ ok: false, reason: 'none' })
     })
   })
 

@@ -9,6 +9,7 @@ import type { SendPasswordResetCode } from '../auth/password-reset.js'
 import type { RateLimiter } from '../auth/rate-limiter.js'
 import { parseAcceptLanguage } from '../i18n/index.js'
 import type { MessageKey, Values } from '../i18n/index.js'
+import type { Notifier } from '../notifications/notifier.js'
 import type { ClientLogouts } from '../oidc/client-logouts.js'
 import { createFlash, type Flash } from '../own-login/flash.js'
 import { safeNext } from '../own-login/oidc.js'
@@ -16,9 +17,10 @@ import { createOwnSignIn } from '../own-login/sign-in.js'
 import type { Passkeys } from '../passkeys/index.js'
 import { refuseForeignPosts } from '../security/origin-check.js'
 import type { Ui } from '../ui/index.js'
-import { escapeHtml } from '../ui/pages.js'
+import { escapeHtml, type PageSet } from '../ui/pages.js'
 import { ACCOUNT_PATH, ACCOUNT_UI_CLIENT_ID } from './constants.js'
 import { registerPasskeyPages } from './passkey-pages.js'
+import { canConfirmPhone, PHONE, registerPhonePages } from './phone-pages.js'
 import { registerSecurityPages } from './security-pages.js'
 import { type AccountSession, type AccountUser, createAccountGate } from './session.js'
 
@@ -35,9 +37,13 @@ export interface AccountAreaDependencies {
   clientLogouts: ClientLogouts
   /** Sends the code with which a person chooses a new password. */
   sendPasswordResetCode: SendPasswordResetCode
-  /** The limit on asking for a new password, the same one as on the page for a forgotten one. */
-  limiter: Pick<RateLimiter, 'resetRequest'>
-  audit: Pick<LoginAudit, 'resetRequested' | 'codeSent' | 'blocked'>
+  /** The limit on asking for a new password, the same one as on the page for a forgotten one, and those on the code for the phone number. */
+  limiter: Pick<RateLimiter, 'resetRequest' | 'codeResend' | 'codeBlockedFor' | 'codeFailed'>
+  audit: Pick<LoginAudit, 'resetRequested' | 'codeSent' | 'codeFailed' | 'blocked'>
+  /** Sends the code that confirms a phone number, where this installation sends SMS at all. */
+  notifier: Pick<Notifier, 'smsAvailable' | 'sendPhoneCode'>
+  /** The secrets that sign one-time codes (see `deriveCodeSecrets`). */
+  codeSecrets: string[]
   /** How a person gets a new passkey, and the script that asks the device. */
   passkeys: Pick<Passkeys, 'enrolment' | 'script'>
 }
@@ -195,7 +201,8 @@ export const accountAreaRoutes =
     // it too would let any link on any site end the session.
     app.get(`${ACCOUNT_PATH}/signed-out`, async (request, reply) => reply.type('text/html').send(publicPage(request, reply, 'account.signedOut.title', 'account.signedOut.text')))
 
-    // --- Start page: who am I, read-only. The organisation owns these details, so nothing here changes them.
+    // --- Start page: who am I, read-only. The organisation owns these details, so nothing here changes them. The one
+    // thing a person can do is confirm the phone number that is stored, so that codes go to it.
 
     app.get(ACCOUNT_PATH, async (request, reply) => {
       const signedIn = await gate.requireAccountSession(request, reply)
@@ -216,7 +223,12 @@ export const accountAreaRoutes =
 <dl class="facts">
 ${fact('account.profile.name', `${user.firstName} ${user.lastName}`.trim())}
 ${fact('account.profile.email', user.email)}
-${fact('account.profile.phone', user.phone ? maskPhone(user.phone) : t('account.profile.noPhone'))}
+${
+  canConfirmPhone(dependencies, user)
+    ? `<dt>${escapeHtml(t('account.profile.phone'))}</dt><dd>${escapeHtml(maskPhone(user.phone))}<br><span class="muted">${escapeHtml(t('account.profile.phoneUnconfirmed'))}</span>
+<form method="post" action="${PHONE}/send"><button type="submit" class="secondary">${escapeHtml(t('account.phone.send'))}</button></form></dd>`
+    : fact('account.profile.phone', user.phone ? maskPhone(user.phone) : t('account.profile.noPhone'))
+}
 ${fact('account.profile.language', languageName)}
 </dl>
 <p class="muted">${escapeHtml(t('account.profile.note'))}</p>
@@ -227,12 +239,13 @@ ${fact('account.profile.language', languageName)}
     const context: AccountContext = { ...dependencies, gate, viewFor, page, redirectWith, requireRecentSignIn, formatTime }
     registerSecurityPages(app, context)
     registerPasskeyPages(app, context)
+    registerPhonePages(app, context)
   }
 
 /** What the pages of the area share: who the person is, how a page is drawn, and the step-up before a change. */
 export interface AccountContext extends AccountAreaDependencies {
   gate: ReturnType<typeof createAccountGate>
-  viewFor: (request: FastifyRequest, user?: Pick<AccountUser, 'language'>) => { language: string; t: (key: MessageKey, values?: Values) => string }
+  viewFor: (request: FastifyRequest, user?: Pick<AccountUser, 'language'>) => { view: PageSet; language: string; t: (key: MessageKey, values?: Values) => string }
   page: (request: FastifyRequest, reply: FastifyReply, user: AccountUser, current: string, title: string, content: string) => string
   redirectWith: (reply: FastifyReply, to: string, message: Flash) => FastifyReply
   requireRecentSignIn: (reply: FastifyReply, session: AccountSession, back: string) => boolean

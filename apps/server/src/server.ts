@@ -100,7 +100,7 @@ const app = buildApp({
   oidc: { provider, authenticate, db, notifier, cookieKeys: config.cookieKeys, ui, limiter, audit, passkeys },
   manage: { issuer: config.issuer, cookieKeys: config.cookieKeys, ui, organisation: organisationName, timeZone: config.timeZone },
   accountArea: accountPages.available
-    ? { db, issuer: config.issuer, cookieKeys: config.cookieKeys, ui, timeZone: config.timeZone, clientLogouts, sendPasswordResetCode, limiter, audit, passkeys }
+    ? { db, issuer: config.issuer, cookieKeys: config.cookieKeys, ui, timeZone: config.timeZone, clientLogouts, sendPasswordResetCode, limiter, audit, passkeys, notifier, codeSecrets: deriveCodeSecrets(config.cookieKeys) }
     : undefined,
   account: {
     db,

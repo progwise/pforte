@@ -79,6 +79,19 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   your `locales` folder ([#51](https://github.com/progwise/pforte/issues/51)).
 - **The audit log says when a device was remembered**: `deviceRemembered: true` on `user.activate.complete` (by an activation)
   and on `login.succeeded` (with a code). Until now remembering a device left no trace in the log.
+- **A phone number can be confirmed later, on the account pages.** Codes go by SMS only to a number its owner has
+  confirmed, and the only place to do that was the step right after choosing the first password. Whoever skipped it,
+  got a number afterwards (the first administrator, a later import or sync) or had it changed by the back office
+  received every code by e-mail, with no way to change that. Now the overview of `/account` says "Not confirmed, so your
+  sign-in codes come by e-mail" next to such a number and has the button "Confirm with a code by SMS": pforte sends a
+  code to the stored number, the person enters it, and the next sign-in code comes by SMS. The button is there only
+  when this pforte sends SMS. Sending the code needs a sign-in that is at most five minutes old and counts against the
+  limits on asking for codes. A confirmation is recorded as `user.phone.confirm` with `self: true`, now also at the
+  step after an activation. A code confirms the number it was sent to and no other: one that is on its way when an
+  administrator changes the number is a wrong code for the new one, also at that step. The new texts are
+  `account.profile.phoneUnconfirmed`, `account.phone.send`, `account.phone.intro`, `account.phone.introSend` and
+  `account.phone.unavailable`; **if you added a language in your `locales` folder**, add them there, or they appear in
+  English ([the account pages](docs/account.md#what-a-person-can-do), [SMS](docs/sms.md#phone-numbers)).
 
 ### Fixed
 
