@@ -309,6 +309,46 @@ describe.skipIf(!hasDatabase)('back-channel logout when sessions are ended for a
       expect(retried.sid).not.toBe(after.sid)
     })
 
+    it('is not asked again after a new sign-in when it stopped asking for the session ID meanwhile: the retry would name none', async () => {
+      const user = await signedOut('ida.sommer')
+      await signInTo(user.email, BACKEND)
+      let release!: () => void
+      receiver.state.hold = new Promise<void>((resolve) => (release = resolve))
+      receiver.state.answers = [500]
+
+      expect((await act(user.id, 'end-sessions')).statusCode).toBe(200)
+      await expect.poll(() => receiver.requests.length).toBe(1)
+      expect((await claimsOf(receiver.requests[0]!.logoutToken)).sid).toBeTruthy()
+      // An administrator changes the client, and the person signs in again, before the second attempt.
+      await setAddress(BACKEND.clientId, receiver.address('/backend'), false)
+      await signInTo(user.email, BACKEND)
+      release()
+      await h.settle()
+
+      // The queued logout names a session, but the token built now would not.
+      expect(receiver.requests).toHaveLength(1)
+      expect(await failures(user.id)).toContainEqual({ actorType: 'system', email: user.email, clientId: BACKEND.clientId, reason: 'signed_in_again', attempts: 1 })
+    })
+
+    it('is asked again without the session ID when it stopped asking for it and the person stayed signed out', async () => {
+      const user = await signedOut('ida.sommer')
+      await signInTo(user.email, BACKEND)
+      let release!: () => void
+      receiver.state.hold = new Promise<void>((resolve) => (release = resolve))
+      receiver.state.answers = [500]
+
+      expect((await act(user.id, 'end-sessions')).statusCode).toBe(200)
+      await expect.poll(() => receiver.requests.length).toBe(1)
+      await setAddress(BACKEND.clientId, receiver.address('/backend'), false)
+      release()
+      await h.settle()
+
+      // Nobody signed in again, so "all sessions of this person" ends nothing it should not.
+      expect(receiver.requests).toHaveLength(2)
+      expect((await claimsOf(receiver.requests[1]!.logoutToken)).sid).toBeUndefined()
+      expect(h.logoutFailures).toEqual([])
+    })
+
     it('whose address is removed while pforte is still trying is recorded, not passed over', async () => {
       const user = await signedOut('ida.sommer')
       await signInTo(user.email, WEB)

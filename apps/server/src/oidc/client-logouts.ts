@@ -35,6 +35,8 @@ const PAUSES_MS = [2_000, 8_000]
 /** The library's client, with the method its own sign-out uses. Not in its type declarations. */
 interface LogoutCapableClient {
   backchannelLogoutUri?: string
+  /** Whether the token it builds carries the session ID it is given. Without it the ID is dropped. */
+  backchannelLogoutSessionRequired?: boolean
   backchannelLogout(sub: string, sid?: string): Promise<void>
 }
 
@@ -70,7 +72,10 @@ export const createClientLogouts = ({ db, provider, background, pausesMs = PAUSE
       // A logout without a session ID means "all sessions of this person", and every attempt sends a new token,
       // dated now. Somebody who was signed out everywhere, or reset their password, may have signed in again
       // while this waited: the late token would end that new session too. So it is not sent any more.
-      if (attempt > 1 && !sid && (await isSignedInTo(db, userId, clientId))) return { reason: 'signed_in_again', attempts: attempt - 1 }
+      // Whether the token names a session is decided by the client as it is now, not as it was when the logout
+      // was queued: the library drops the ID for a client that no longer asks for it.
+      const namesSession = Boolean(sid) && client.backchannelLogoutSessionRequired === true
+      if (attempt > 1 && !namesSession && (await isSignedInTo(db, userId, clientId))) return { reason: 'signed_in_again', attempts: attempt - 1 }
       try {
         await client.backchannelLogout(userId, sid)
         return undefined
