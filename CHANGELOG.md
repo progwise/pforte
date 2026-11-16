@@ -17,6 +17,16 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   the administration and can be forgotten there, and an application that asks for `urn:pforte:acr:mfa` still gets the code.
   The token waits in a new cookie, `pforte_device_new`, until the next sign-in in that browser moves it to the others
   ([#44](https://github.com/progwise/pforte/issues/44)).
+- **Applications are told when somebody else ends a person's sessions** (back-channel logout). Until now a client with a
+  back-channel logout address got a logout token only when the person signed out at pforte. Now it also gets one when an
+  administrator locks, deactivates or deletes the person, signs them out everywhere or starts a password reset, and when the
+  person completes a password reset, so "locking a person ends their session in the application" holds without waiting for
+  the next token refresh. The token goes to every application the person has a session with or still holds tokens for. It
+  is sent after the change is saved, three attempts within about ten seconds, and never holds up or fails the action. The
+  audit event of the action says how many applications are to be told (`clientsToNotify`); one that pforte gave up on gets
+  the new event `user.sessions.notify_failed`. **If your application has a back-channel logout address, it now receives
+  tokens on these occasions**; a client registered without `backchannelLogoutSessionRequired` gets a token without `sid`, which
+  means all sessions of the person ([#27](https://github.com/progwise/pforte/issues/27)).
 - **A changed password is announced by e-mail.** After a password reset the person gets a mail that says their password was
   changed, with the page where they choose another one and the request to tell their administration if it was not them. Until
   now a reset that somebody else did showed only when the old password stopped working. The mail is always an e-mail, also

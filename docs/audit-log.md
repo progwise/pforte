@@ -46,6 +46,25 @@ An attack shows as many `login.password_failed` events from one `ip` (or for one
 `login.blocked`. To let the person in again at once, call `POST /admin/users/{id}/unlock`: for a user who is not locked
 it changes nothing but forgets the failed attempts held against their address.
 
+## Telling applications
+
+Six actions end every session of a person: `user.lock`, `user.deactivate`, `user.delete`, `user.sessions.end`,
+`user.password_reset.request` when an administrator starts the reset, and `user.password_reset.complete`. Their events
+carry `sessionsEnded` and `clientsToNotify`: how many applications with a back-channel logout address the person was
+signed in to, and are therefore sent a logout token (see [signing out](integrating-a-client.md#signing-out)). The number
+is written with the action, before the calls go out, and the log is append-only, so it says how many were to be told, not
+how many were.
+
+| Action | When | Details |
+| --- | --- | --- |
+| `user.sessions.notify_failed` | pforte gave up telling an application. | `clientId`, `attempts` (how many calls were made), `email`, and `reason`: `http_500` (the status the application answered with), `timeout` (no answer within 2.5 seconds), `unreachable`, `private_address` (pforte refuses to call it, see `OUTBOUND_ALLOW_PRIVATE_ADDRESSES`), `signed_in_again` (after a failed call the person signed in to the application anew, and a logout for all their sessions would have ended that too) or `address_removed` (after a failed call the client lost its logout address). |
+
+The actor of this event is pforte itself (`actorType: system`), the target is the person. The application is still signed
+in until it next renews its tokens; if that is too long, end its session of the person there.
+
+This event records a failure that pforte saw. **Its absence does not confirm that an application was told:** the calls are
+made after the action, from memory, so a restart of pforte in those seconds loses both the call and the event.
+
 ## How long events are kept
 
 Sign-in events pile up, since every attempt writes one, and say little after a while. They are **deleted after 180 days**

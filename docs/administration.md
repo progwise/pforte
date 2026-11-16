@@ -65,7 +65,9 @@ with the other clients as built in and cannot be changed, rotated or deleted.
 - **New user** creates a person in the status "Not activated". Sending them the activation link comes next to it.
 - **Actions** on a person's page depend on their status: lock and unlock, send the activation link (or activate again),
   deactivate, reset the password, sign out everywhere, and delete. Each opens a page that names the person and says what
-  will happen before anything changes; deleting asks you to type the person's e-mail address. The last administrator cannot
+  will happen before anything changes; deleting asks you to type the person's e-mail address. Locking, deactivating,
+  deleting, resetting the password and signing out everywhere end the person's sessions at pforte and tell the applications
+  that have a back-channel logout address to end theirs ([signing out](integrating-a-client.md#signing-out)). The last administrator cannot
   be locked, deactivated, deleted or demoted, and nobody can do these to themselves; the page says so.
 - **Signed in** shows the browsers where the person is signed in (and whether a code was entered) and the applications that
   stay signed in, such as an app on a phone. **Remembered devices** lists where no code is asked for (the person ticked the box with a code, or when

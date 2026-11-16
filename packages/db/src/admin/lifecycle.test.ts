@@ -109,10 +109,10 @@ describe.skipIf(!hasDatabase)('user lifecycle', () => {
       await addSession(user.id, 'user-2')
       await addSession(other.id, 'other-1')
 
-      const locked = await run('lock', user)
+      const { user: locked } = (await run('lock', user)) as Awaited<ReturnType<typeof lockUser>>
 
       expect(locked).toMatchObject({ status: 'locked' })
-      expect((locked as { lockedAt: Date }).lockedAt).toBeInstanceOf(Date)
+      expect(locked.lockedAt).toBeInstanceOf(Date)
       expect(await sessionsOf(user.id)).toBe(0)
       expect(await sessionsOf(other.id)).toBe(1)
       expect((await event('user.lock', user.id)).details).toMatchObject({ from: 'active', to: 'locked', sessionsEnded: 2 })
@@ -123,7 +123,7 @@ describe.skipIf(!hasDatabase)('user lifecycle', () => {
       await run('activate', user)
       await addSession(user.id, 'deact-1')
 
-      const deactivated = (await run('deactivate', (await findUserById(database.db, user.id))!)) as Awaited<ReturnType<typeof userIn>>
+      const { user: deactivated } = (await run('deactivate', (await findUserById(database.db, user.id))!)) as Awaited<ReturnType<typeof deactivateUser>>
 
       expect(deactivated.status).toBe('deactivated')
       expect(deactivated.activationTokenHash).toBeNull()
@@ -216,6 +216,164 @@ describe.skipIf(!hasDatabase)('user lifecycle', () => {
 
       expect(result.sessionsEnded).toBe(3)
       expect((await findUserById(database.db, user.id))!.status).toBe('locked')
+    })
+  })
+
+  describe('the applications to tell (back-channel logout)', () => {
+    let clientCounter = 0
+    /** A client, with a logout address unless told otherwise. */
+    const client = async ({ address = true, sessionRequired = false } = {}) => {
+      const clientId = `logout-client-${++clientCounter}`
+      await database.pool.query(
+        `insert into clients (client_id, name, type, backchannel_logout_uri, backchannel_logout_session_required) values ($1, $1, 'public', $2, $3)`,
+        [clientId, address ? `https://${clientId}.example.com/logout` : null, sessionRequired],
+      )
+      return clientId
+    }
+    const record = (accountId: string, type: 1 | 2 | 4 | 13, payload: object, expires = `interval '1 hour'`) =>
+      database.pool.query(`insert into oidc_payloads (id, type, payload, account_id, expires_at) values (gen_random_uuid()::text, $1, $2, $3, now() + ${expires})`, [
+        type,
+        JSON.stringify(payload),
+        accountId,
+      ])
+    /** A browser session in which the user is signed in to these clients, each under its session ID. */
+    const session = (accountId: string, sids: Record<string, string>, expires?: string) =>
+      record(accountId, 1, { accountId, authorizations: Object.fromEntries(Object.entries(sids).map(([clientId, sid]) => [clientId, { sid, grantId: `grant-of-${sid}` }])) }, expires)
+    /** What stays when an application keeps refreshing its tokens: the grant, without a browser session. */
+    const grant = (accountId: string, clientId: string, expires?: string) => record(accountId, 13, { accountId, clientId }, expires)
+    /** A refresh (4) or access (2) token: it keeps the ID of the session it was issued in, through every refresh. */
+    const token = (accountId: string, type: 2 | 4, clientId: string, sid: string | undefined, expires?: string) =>
+      record(accountId, type, { accountId, clientId, grantId: `grant-of-${sid}`, ...(sid ? { sid } : {}) }, expires)
+    const end = async (user: Awaited<ReturnType<typeof userIn>>) => (await run('end-sessions', user)) as Awaited<ReturnType<typeof endSessions>>
+
+    it('tells a client with a logout address once, however many sessions the user has with it', async () => {
+      const user = await userIn('active')
+      const listening = await client()
+      const deaf = await client({ address: false })
+      await session(user.id, { [listening]: 'sid-1', [deaf]: 'sid-2' })
+      await session(user.id, { [listening]: 'sid-3' })
+      await grant(user.id, listening)
+
+      const { logouts } = await end(user)
+
+      expect(logouts).toEqual([{ clientId: listening }])
+      expect((await event('user.sessions.end', user.id)).details).toMatchObject({ sessionsEnded: 3, clientsToNotify: 1 })
+    })
+
+    it('tells a client that asked for the session ID once per session, with that ID', async () => {
+      const user = await userIn('active')
+      const strict = await client({ sessionRequired: true })
+      await session(user.id, { [strict]: 'sid-b' })
+      await session(user.id, { [strict]: 'sid-a' })
+
+      const { logouts } = await end(user)
+
+      expect(logouts).toEqual([
+        { clientId: strict, sid: 'sid-a' },
+        { clientId: strict, sid: 'sid-b' },
+      ])
+      // Two logout tokens, but one application.
+      expect((await event('user.sessions.end', user.id)).details).toMatchObject({ clientsToNotify: 1 })
+    })
+
+    it('tells a client that only holds a grant, unless it asked for the session ID: there is none to name', async () => {
+      const user = await userIn('active')
+      const refreshing = await client()
+      const strict = await client({ sessionRequired: true })
+      await grant(user.id, refreshing)
+      await grant(user.id, strict)
+
+      const { logouts } = await end(user)
+
+      expect(logouts).toEqual([{ clientId: refreshing }])
+    })
+
+    it('names a session that is gone at pforte but still known from the tokens of a client that asked for the session ID', async () => {
+      const user = await userIn('active')
+      const strict = await client({ sessionRequired: true })
+      // The browser session expired or was cleaned up; the application kept refreshing.
+      await grant(user.id, strict)
+      await token(user.id, 4, strict, 'sid-refreshed')
+      await token(user.id, 2, strict, 'sid-refreshed')
+      // A second device, whose access token is all that is left.
+      await token(user.id, 2, strict, 'sid-other-device')
+      // And one session that is still there, with its token: named once.
+      await session(user.id, { [strict]: 'sid-live' })
+      await token(user.id, 4, strict, 'sid-live')
+
+      const { logouts } = await end(user)
+
+      expect(logouts).toEqual([
+        { clientId: strict, sid: 'sid-live' },
+        { clientId: strict, sid: 'sid-other-device' },
+        { clientId: strict, sid: 'sid-refreshed' },
+      ])
+      expect((await event('user.sessions.end', user.id)).details).toMatchObject({ clientsToNotify: 1 })
+    })
+
+    it('takes no session ID from an expired token, and tells a client without the setting once whatever its tokens name', async () => {
+      const user = await userIn('active')
+      const strict = await client({ sessionRequired: true })
+      const relaxed = await client()
+      await token(user.id, 4, strict, 'sid-expired', `interval '-1 minute'`)
+      await token(user.id, 4, relaxed, 'sid-a')
+      await token(user.id, 4, relaxed, 'sid-b')
+      await token(user.id, 2, relaxed, undefined)
+
+      const { logouts } = await end(user)
+
+      expect(logouts).toEqual([{ clientId: relaxed }])
+    })
+
+    it('tells nobody about sessions and grants that have expired, or of another user', async () => {
+      const user = await userIn('active')
+      const other = await userIn('active')
+      const past = await client()
+      const theirs = await client()
+      await session(user.id, { [past]: 'sid-old' }, `interval '-1 minute'`)
+      await grant(user.id, past, `interval '-1 minute'`)
+      await session(other.id, { [theirs]: 'sid-other' })
+
+      const { logouts } = await end(user)
+
+      expect(logouts).toEqual([])
+      expect((await event('user.sessions.end', user.id)).details).toMatchObject({ clientsToNotify: 0 })
+      // The other user's session is still there, and still to be told about.
+      expect((await end(other)).logouts).toEqual([{ clientId: theirs }])
+    })
+
+    it('tells nobody when the user has no sessions', async () => {
+      const user = await userIn('active')
+      await client()
+      expect((await end(user)).logouts).toEqual([])
+    })
+
+    it.each([
+      ['lock', 'user.lock', 'active'],
+      ['deactivate', 'user.deactivate', 'active'],
+      ['reset-password', 'user.password_reset.request', 'active'],
+      ['end-sessions', 'user.sessions.end', 'locked'],
+    ] as const)('%s returns the logouts and records how many applications are to be told', async (action, recorded, status) => {
+      const user = await userIn(status)
+      const listening = await client()
+      await session(user.id, { [listening]: 'sid-1' })
+
+      const result = (await run(action, user)) as { logouts: unknown }
+
+      expect(result.logouts).toEqual([{ clientId: listening }])
+      expect((await event(recorded, user.id)).details).toMatchObject({ clientsToNotify: 1 })
+      expect(await sessionsOf(user.id)).toBe(0)
+    })
+
+    it('deleting a user returns the logouts and records how many applications are to be told', async () => {
+      const user = await userIn('active')
+      const listening = await client()
+      await session(user.id, { [listening]: 'sid-1' })
+
+      const { logouts } = await database.db.transaction((tx) => deleteUser(tx, context, user))
+
+      expect(logouts).toEqual([{ clientId: listening }])
+      expect((await event('user.delete', user.id)).details).toMatchObject({ sessionsEnded: 1, clientsToNotify: 1 })
     })
   })
 

@@ -17,6 +17,7 @@ import { readCookie, setCookieHeader, sign, unsign } from '../interaction/signed
 import { parseAcceptLanguage } from '../i18n/index.js'
 import { type Notifier, NotifierUnavailableError } from '../notifications/notifier.js'
 import type { Ui } from '../ui/index.js'
+import type { ClientLogouts } from '../oidc/client-logouts.js'
 import type { Background } from '../security/background.js'
 import { refuseForeignPosts } from '../security/origin-check.js'
 import type { PageSet } from '../ui/pages.js'
@@ -45,6 +46,8 @@ export interface AccountDependencies {
   audit: LoginAudit
   /** Runs what must not delay an answer. */
   background: Background
+  /** Tells the applications of a user whose sessions a password reset ended. */
+  clientLogouts: ClientLogouts
 }
 
 const PHONE_COOKIE = 'pforte_phone_step'
@@ -61,7 +64,7 @@ const normalizeEmail = (value: unknown) => text(value).trim().toLowerCase()
 
 /** Pages that are not part of a sign-in: choosing the first password, and choosing a new one after forgetting it. */
 export const accountRoutes =
-  ({ db, sendPasswordResetCode, codeSecrets, notifier, selfServiceActivation, cookieKeys, secure, issuer, ui, limiter, audit, background }: AccountDependencies) =>
+  ({ db, sendPasswordResetCode, codeSecrets, notifier, selfServiceActivation, cookieKeys, secure, issuer, ui, limiter, audit, background, clientLogouts }: AccountDependencies) =>
   async (app: FastifyInstance) => {
     await app.register(formbody)
     ui.pages.addHeaders(app)
@@ -345,6 +348,7 @@ export const accountRoutes =
 
       const changed = await completePasswordReset(db, { userId: user.id, passwordHash: await hash(text(request.body?.password)), ...origin(request) })
       if (!changed) return refused('not_allowed')
+      clientLogouts.send(user, changed.logouts)
       if (result.channel === 'email') await markEmailVerified(db, user.id)
       // The rightful person learns of a reset that somebody else did. Not tied to the response: the notice must
       // go out even if the browser has gone, and a mail server that is down must not turn a reset into an error.

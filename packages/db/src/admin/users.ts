@@ -157,17 +157,21 @@ export const updateUser = async (
   return { user: updated!, changed: true as const, changes }
 }
 
-/** Deletes a user and everything that hangs on them, including sessions and tokens. The audit event keeps who they were. */
+/**
+ * Deletes a user and everything that hangs on them, including sessions and tokens. The audit event keeps who they were.
+ * Returns the logouts to send to the applications they were signed in to.
+ */
 export const deleteUser = async (tx: DatabaseOrTransaction, context: RequestContext, user: UserRow) => {
   await assertAdminStays(tx, context, user, 'delete')
-  const { sessionsEnded } = await endUserSessions(tx, user.id)
+  const { sessionsEnded, clientsToNotify, logouts } = await endUserSessions(tx, user.id)
   await recordAuditEvent(
     tx,
     audit(context, {
       action: 'user.delete',
       target: { type: 'user', id: user.id },
-      details: { email: user.email, firstName: user.firstName, lastName: user.lastName, sessionsEnded },
+      details: { email: user.email, firstName: user.firstName, lastName: user.lastName, sessionsEnded, clientsToNotify },
     }),
   )
   await tx.delete(users).where(eq(users.id, user.id))
+  return { logouts }
 }

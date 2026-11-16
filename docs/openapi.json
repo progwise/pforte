@@ -1794,7 +1794,7 @@
         "tags": [
           "Users"
         ],
-        "description": "Removes the user, their claims and devices. The audit log keeps who they were.",
+        "description": "Removes the user, their claims and devices, ends their sessions and tells their applications (back-channel logout). The audit log keeps who they were.",
         "parameters": [
           {
             "schema": {
@@ -5467,7 +5467,7 @@
         "tags": [
           "Lifecycle"
         ],
-        "description": "For a created or active user. Ends all their sessions and refresh tokens; they cannot sign in until unlocked.",
+        "description": "For a created or active user. Ends all their sessions and refresh tokens and tells their applications (back-channel logout); they cannot sign in until unlocked.",
         "parameters": [
           {
             "schema": {
@@ -6367,7 +6367,7 @@
         "tags": [
           "Lifecycle"
         ],
-        "description": "For someone who has left. Ends all sessions and refresh tokens and cancels a pending activation link.",
+        "description": "For someone who has left. Ends all sessions and refresh tokens, tells their applications (back-channel logout) and cancels a pending activation link.",
         "parameters": [
           {
             "schema": {
@@ -7320,7 +7320,7 @@
         "tags": [
           "Lifecycle"
         ],
-        "description": "For an active user. Sends them a code to choose a new password and ends all their sessions and refresh tokens, since the account may be compromised.",
+        "description": "For an active user. Sends them a code to choose a new password, ends all their sessions and refresh tokens and tells their applications (back-channel logout), since the account may be compromised.",
         "parameters": [
           {
             "schema": {
@@ -7770,7 +7770,7 @@
         "tags": [
           "Lifecycle"
         ],
-        "description": "Deletes their sessions, grants and refresh tokens and revokes their remembered devices, so they must sign in again, with a code. Their status does not change.",
+        "description": "Deletes their sessions, grants and refresh tokens, revokes their remembered devices and tells their applications (back-channel logout), so they must sign in again, with a code. Their status does not change.",
         "parameters": [
           {
             "schema": {

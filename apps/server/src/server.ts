@@ -10,6 +10,7 @@ import { checkConfig, checkDevelopmentLeftovers, startupFailure } from './securi
 import { bootstrapAdministrator } from './manage/bootstrap.js'
 import { ensureAdminUiClient } from './manage/setup.js'
 import { createBackground } from './security/background.js'
+import { createClientLogouts } from './oidc/client-logouts.js'
 import { createLoginAudit } from './auth/login-audit.js'
 import { createRateLimiter } from './auth/rate-limiter.js'
 import { createPasswordResetSender } from './auth/password-reset.js'
@@ -74,6 +75,12 @@ const audit = createLoginAudit({
   secret: deriveCodeSecrets(config.cookieKeys)[0]!,
   onError: (error) => app.log.error(error, 'a sign-in event could not be written to the audit log'),
 })
+const clientLogouts = createClientLogouts({
+  db,
+  provider,
+  background,
+  onFailure: (failure) => app.log.warn(failure, 'an application could not be told that the sessions of a user ended (back-channel logout)'),
+})
 const sendPasswordResetCode = createPasswordResetSender({
   db,
   notifier,
@@ -100,6 +107,7 @@ const app = buildApp({
     limiter,
     audit,
     background,
+    clientLogouts,
   },
   admin: {
     db,
@@ -108,6 +116,7 @@ const app = buildApp({
     sendPasswordResetCode,
     limiter,
     allowPrivateAddresses: config.allowPrivateAddresses,
+    clientLogouts,
   },
 })
 

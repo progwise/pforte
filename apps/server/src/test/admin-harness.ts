@@ -12,6 +12,7 @@ import { createLoginAudit } from '../auth/login-audit.js'
 import { createRateLimiter } from '../auth/rate-limiter.js'
 import { createPasswordResetSender } from '../auth/password-reset.js'
 import { createUi } from '../ui/index.js'
+import { createClientLogouts } from '../oidc/client-logouts.js'
 import { createProviderHolder } from '../oidc/provider.js'
 import { ADMIN_UI_CLIENT_ID } from '../manage/constants.js'
 import { basicAuth, Browser, registerCodeSource, signIn } from './browser.js'
@@ -21,7 +22,7 @@ export const ISSUER = 'https://localhost:3300'
 const COOKIE_KEYS = ['k'.repeat(40)]
 
 /** A seeded test database with the whole app (provider, login and admin API) on top of it. */
-export const createAdminHarness = async ({ selfServiceActivation = true, allowPrivateAddresses = false } = {}) => {
+export const createAdminHarness = async ({ selfServiceActivation = true, allowPrivateAddresses = false, logoutPausesMs = [10, 10] } = {}) => {
   const database = await createTestDatabase()
   await seed(database.db)
 
@@ -38,9 +39,14 @@ export const createAdminHarness = async ({ selfServiceActivation = true, allowPr
       issuer: ISSUER,
       cookieKeys: COOKIE_KEYS,
       jwks: { keys: [{ ...jwk, kty: 'RSA', kid: 'test-key', alg: 'RS256', use: 'sig' }] },
+      // As in the server: what lets such an address be registered also lets it be called.
+      allowPrivateAddresses,
     },
     db: database.db,
   })
+  /** Tells applications of ended sessions as the server does, but without its pauses between the attempts. */
+  const logoutFailures: { clientId: string; reason: string; attempts: number }[] = []
+  const clientLogouts = createClientLogouts({ db: database.db, provider, background, pausesMs: logoutPausesMs, onFailure: (failure) => logoutFailures.push(failure) })
   /** Everything the app asked the notifier to send, and a switch to make sending fail. */
   const { notifier, notifications, lastCode, lastResetCode, lastPhoneCode } = createRecordingNotifier()
   const sendPasswordResetCode = createPasswordResetSender({ db: database.db, notifier, codeSecrets: deriveCodeSecrets(COOKIE_KEYS), issuer: ISSUER })
@@ -62,6 +68,7 @@ export const createAdminHarness = async ({ selfServiceActivation = true, allowPr
       limiter,
       audit: loginAudit,
       background,
+      clientLogouts,
     },
     admin: {
       db: database.db,
@@ -70,6 +77,7 @@ export const createAdminHarness = async ({ selfServiceActivation = true, allowPr
       sendPasswordResetCode,
       limiter,
       allowPrivateAddresses,
+      clientLogouts,
     },
   })
   await app.ready()
@@ -146,6 +154,7 @@ export const createAdminHarness = async ({ selfServiceActivation = true, allowPr
     /** Waits until the work that goes on after responses (the password reset mail) is done. */
     settle: () => background.idle(),
     backgroundErrors,
+    logoutFailures,
     close: async () => {
       await background.idle()
       await app.close()
