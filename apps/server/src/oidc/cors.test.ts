@@ -7,6 +7,7 @@ import { buildApp } from '../app.js'
 import { createAuthenticate } from '../auth/authenticate.js'
 import { createLoginAudit } from '../auth/login-audit.js'
 import { createRateLimiter } from '../auth/rate-limiter.js'
+import { testPasskeys } from '../test/passkeys.js'
 import { createUi } from '../ui/index.js'
 import { createRecordingNotifier } from '../test/recording-notifier.js'
 import { createProviderHolder } from './provider.js'
@@ -31,13 +32,15 @@ describe.skipIf(!hasDatabase)('CORS', () => {
       config: { issuer: 'http://localhost:3300', cookieKeys: ['k'.repeat(40)], jwks: testJwks() },
       db: database.db,
     })
+    const recording = createRecordingNotifier()
     app = buildApp({
       getDatabaseTime: () => getDatabaseTime(database.db),
       oidc: {
         provider: oidc,
         authenticate: await createAuthenticate(database.db),
         db: database.db,
-        notifier: createRecordingNotifier().notifier,
+        notifier: recording.notifier,
+        passkeys: testPasskeys({ issuer: 'http://localhost:3300', db: database.db, notifier: recording.notifier }),
         cookieKeys: ['k'.repeat(40)],
         ui: createUi(),
         limiter: createRateLimiter({ db: database.db, secret: 'rate-limit-test-secret' }),

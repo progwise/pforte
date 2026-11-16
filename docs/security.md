@@ -18,8 +18,8 @@ Every response, from the pages to the admin API and the OpenID endpoints, carrie
 
 The pages with forms add a strict **Content-Security-Policy**: no scripts at all, styles only from the one stylesheet in
 the page, fonts and the logo only from pforte itself, no framing, no `<base>`. They also send `Cache-Control: no-store`.
-The page that creates a passkey is the exception to "no scripts": its policy allows [one script](#the-one-script), by
-its exact address.
+The pages that deal with passkeys are the exception to "no scripts": their policy allows [one script](#the-one-script),
+by its exact address.
 
 Two headers are left out on purpose:
 
@@ -50,6 +50,9 @@ affected either.
 | `pforte_device_new` | The token of a device that an activation remembered, until the next sign-in in that browser moves it into `pforte_device`. | like `pforte_device` |
 | `pforte_manage`, `pforte_manage_login`, `pforte_manage_flash` | The session of a person in the administration, the sign-in on its way there and back, and the message an action leaves for the next page. Signed. | `HttpOnly`, `Secure` (https), `SameSite=Strict`, path `/manage`; 8 hours at most, 10 minutes, 2 minutes |
 | `pforte_account`, `pforte_account_login`, `pforte_account_flash` | The same for [the account pages](account.md). The session holds who the person is, which sign-in it came from and when, no token. Signed. | `HttpOnly`, `Secure` (https), `SameSite=Lax`, path `/account`; 1 hour, 10 minutes, 2 minutes |
+| `pforte_passkey_step` | A sign-in that is complete (password and code were right) while the person is asked whether they want a [passkey](passkeys.md). It says who and how they signed in, so the sign-in can be finished after their answer. Signed. | `HttpOnly`, `Secure` (https), `SameSite=Strict`, 15 minutes, only for that sign-in's path |
+| `pforte_activation_passkey` | The same question at the end of an activation: who has just chosen their password. Signed. | like the above, path `/activate` |
+| `pforte_passkey_offer` | Who has answered the offer of a passkey in this browser, and until when each is left alone: 90 days after "not now", 400 days after a passkey was created or used. A person is a short hash in it, not their id. Signed. | `HttpOnly`, `Secure` (https), `SameSite=Strict`, 400 days, path `/interaction` |
 | `_session`, `_interaction`, … | The provider's own: the single sign-on session and the open sign-in. Signed with `COOKIE_KEYS`. | `HttpOnly`, `Secure` (https). `SameSite=None` over https, because OpenID Connect requires the authorization endpoint to accept POST; `Lax` over http |
 
 A test signs in over https and checks that every cookie has `HttpOnly`, `Secure` and a `SameSite` value.
@@ -96,17 +99,29 @@ passkey is stored, and cannot be turned off; a mail server that is down does not
 
 ## Passkeys
 
-A passkey is made on the person's device and pforte keeps its public half ([the account pages](account.md#passkeys)).
-What pforte insists on:
+A passkey is made on the person's device and pforte keeps its public half; with it the person signs in without
+password and code ([passkeys](passkeys.md)). What pforte insists on, when one is made and when one is used:
 
 - **The device checks the person every time** (user verification is required). An answer from a device that did not is
   refused.
-- **The passkey is made for pforte's host and on pforte's own page.** The answer of the device names the origin of the
-  page it was on and the host it is for; both must be the ones of `ISSUER`, to the port.
-- **A question is answered once.** The challenge is random and is kept at pforte, not in the browser, for five minutes,
-  for the person and the sign-in it was asked in. The first answer that names it uses it up, right or wrong, in one
-  database statement, so of two answers at the same moment one is too late. An answer cannot be sent a second time,
-  also not after its passkey was removed, and not in another session.
+- **The answer is for pforte's host and comes from pforte's own page.** The answer of the device names the origin of the
+  page it was on and the host it is for; both must be the ones of `ISSUER`, to the port. This is what a fake login
+  page cannot get around: the device signs the address of the page it is really on.
+- **A question is answered once.** The challenge is random and is kept at pforte, not in the browser. The first answer
+  that names it uses it up, right or wrong, in one database statement, so of two answers at the same moment one is too
+  late. An answer cannot be sent a second time: not to sign in again, and not to bring back a passkey that was removed.
+- **A question belongs to one place.** One about a new passkey is for one person and for where it was asked: the
+  sign-in at the account pages, the sign-in in progress, the activation. It lasts five minutes on the account pages and a
+  quarter of an hour in an offer. One about a sign-in belongs to that sign-in, is the only one it has (showing the login
+  page again replaces it) and lasts as long as the sign-in may take, an hour. A question for a sign-in is never one for a
+  new passkey, nor the other way round.
+- **A sign-in is the passkey's own.** The signature is checked with the key stored for that passkey; the person is the
+  one the passkey was made for, and must be able to sign in (not locked, not deactivated). A device that names another
+  person than the passkey belongs to is refused, as is a signature counter that goes back, which a copy of a passkey
+  that is not synced would show.
+- **Who may make one.** Only the person themselves, right after showing who they are: with two factors at most five
+  minutes ago on the account pages, with a code a moment ago in the offer after a sign-in, with the activation link and
+  their new password at the end of an activation.
 - **A passkey is known once.** A credential that is stored already, for this person or another, is not stored again.
 - **Twenty per person, also under load.** The person's row is locked while their passkeys are counted and the new one
   is stored, so passkeys that arrive at the same moment are counted one after the other.
@@ -119,7 +134,9 @@ The library that checks the answers is `@simplewebauthn/server`.
 ## The one script
 
 pforte's pages run no script, with one exception. WebAuthn, the browser interface behind passkeys, can only be reached
-from script, so the page that creates a passkey loads one file.
+from script, so the pages that deal with passkeys load one file: the login page (the passkey button and the autofill of
+the e-mail field), the code page and the activation page (where it only finds out whether the device can make a
+passkey), the offer of a passkey, and the page of the account pages that adds one.
 
 - **One file, served by pforte**, under an address that contains a hash of its content. No inline script, no other
   origin, no dependency and no build step: the text in `apps/server/src/passkeys/script.ts` is what the browser gets.
@@ -130,8 +147,11 @@ from script, so the page that creates a passkey loads one file.
   field of a form that is sent like any other. So the policy has no `connect-src`, there is no endpoint that answers
   JSON to a page, and the check that [forms come from pforte's own pages](#forms-only-from-pfortes-own-pages) covers
   this form too.
-- **The page works without it.** With the script blocked, or in a browser without passkeys, the button stays disabled
-  and the page says that this browser cannot create a passkey.
+- **It decides nothing.** It asks the device what the page tells it to ask and hands back what the device said. What a
+  sign-in is worth, who a passkey is for and whether an answer holds is decided by pforte, from the answer.
+- **Every page works without it.** With the script blocked, or in a browser without passkeys, the login page is the one
+  for password and code (the passkey button is hidden until the script shows it), no passkey is offered after a code or
+  an activation, and the page that adds one keeps its button disabled and says that this browser cannot create a passkey.
 
 Two kinds of test hold this: the server is driven with a device in software (right and wrong answers), and Chrome with
 its virtual authenticator runs the script itself, including an attempt to run a second script, which the policy stops.

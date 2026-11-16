@@ -65,7 +65,7 @@ export const listSignInEvents = async (db: DatabaseOrTransaction, userId: string
         eq(auditEvents.targetType, 'user'),
         eq(auditEvents.targetId, userId),
         or(
-          inArray(auditEvents.action, ['login.succeeded', 'login.password_failed']),
+          inArray(auditEvents.action, ['login.succeeded', 'login.password_failed', 'login.passkey_failed']),
           and(eq(auditEvents.action, 'login.code_failed'), sql`${auditEvents.details}->>'purpose' = 'login'`),
           and(eq(auditEvents.action, 'login.blocked'), sql`${auditEvents.details}->>'scope' in ('password', 'code', 'code_resend')`),
         ),

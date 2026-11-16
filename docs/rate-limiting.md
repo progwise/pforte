@@ -34,6 +34,7 @@ answers `429 Too Many Requests` with a `Retry-After` header and a message in the
 | --- | --- | --- |
 | Wrong passwords | 5 per address **and** IP, 20 per address, 30 per IP, each per 15 minutes | Wrong passwords. A right one forgives the mistakes of that address from that IP. |
 | Wrong codes | 30 per IP per 15 minutes | Wrong, expired-by-attempts and malformed codes at sign-in, password reset and phone confirmation. On top of this, a code allows 5 attempts. |
+| Refused passkeys | 30 per IP per 15 minutes | Sign-ins with a passkey that pforte refused, for whatever reason. A held-back address is not checked at all, also not with the right passkey. |
 | Asking for another code | 10 per IP per hour | "Send a new code" and "send it by e-mail instead". The first code of a sign-in is not counted: it needs the password. A user also gets at most one code a minute and five an hour. |
 | Password reset requests | 5 per address and 30 per IP per hour | Every request, for an address that exists or not. |
 | Wrong activation links | 20 per IP per 15 minutes | Links that do not work. |

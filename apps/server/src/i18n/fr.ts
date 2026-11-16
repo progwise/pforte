@@ -11,6 +11,13 @@ export const fr: Catalog = {
   'login.password': 'Mot de passe',
   'login.submit': 'Se connecter',
   'login.forgot': 'Mot de passe oublié ?',
+  'login.passkey': "Se connecter avec une clé d'accès",
+  'login.passkeyCancelled': "Vous n'avez pas été connecté : la demande a été annulée ou l'appareil a abandonné. Réessayez, ou utilisez l'adresse e-mail et le mot de passe.",
+  'login.passkeyFailed': "Cette clé d'accès ne permet pas de se connecter ici. Utilisez l'adresse e-mail et le mot de passe.",
+  'passkeyOffer.title': 'Se connecter plus vite la prochaine fois',
+  'passkeyOffer.text': "La prochaine fois, vous pourrez vous connecter ici avec votre visage, votre doigt ou le code de cet appareil : sans mot de passe, sans code. Pour cela, votre appareil conserve une clé d'accès. Le mot de passe et le code continuent de fonctionner.",
+  'passkeyOffer.skip': 'Pas maintenant',
+  'passkeyOffer.failed': "Aucune clé d'accès n'a été créée. Vous pouvez réessayer ou continuer sans.",
   'login.wrong': "L'adresse e-mail ou le mot de passe n'est pas correct.",
 
   'code.title': 'Saisir le code',
@@ -110,6 +117,7 @@ export const fr: Catalog = {
   'mail.passkeyAdded.subject': "Une clé d'accès a été ajoutée à votre compte chez {organisation}",
   'mail.passkeyAdded.text':
     "Bonjour {firstName},\n\nune clé d'accès vient d'être ajoutée à votre compte chez {organisation}. Elle a été créée avec : {device}.\n\nAvec une clé d'accès, on se connecte sans mot de passe ni code.\n\nSi c'était vous, vous n'avez rien à faire.\n\nSi ce n'était pas vous, supprimez la clé d'accès maintenant :\n\n{url}\n\nChoisissez ensuite un nouveau mot de passe et prévenez votre administration.\n",
+  'mail.passkeyAdded.textNoLink': "Bonjour {firstName},\n\nune clé d'accès vient d'être ajoutée à votre compte chez {organisation}. Elle a été créée avec : {device}.\n\nAvec une clé d'accès, on se connecte sans mot de passe ni code.\n\nSi c'était vous, vous n'avez rien à faire.\n\nSi ce n'était pas vous, prévenez maintenant votre administration : elle peut supprimer la clé d'accès. Choisissez ensuite un nouveau mot de passe.\n",
 
   // The account pages, where a person sees how they are signed in.
   'account.title': 'Votre compte',
@@ -142,6 +150,7 @@ export const fr: Catalog = {
   'account.sessions.until': "Jusqu'au",
   'account.sessions.how': 'Connexion',
   'account.sessions.withCode': 'Avec un code',
+  'account.sessions.withPasskey': "Avec une clé d'accès",
   'account.sessions.withoutCode': 'Mot de passe seul, sur un appareil mémorisé',
   'account.sessions.applications': 'Applications',
   'account.sessions.noApplications': 'Aucune pour le moment',
@@ -174,6 +183,8 @@ export const fr: Catalog = {
   'account.signIns.browser': 'Navigateur',
   'account.signIns.succeededCode': 'Connexion avec un code',
   'account.signIns.succeededDevice': 'Connexion sur un appareil mémorisé',
+  'account.signIns.succeededPasskey': "Connexion avec une clé d'accès",
+  'account.signIns.passkeyFailed': "Une clé d'accès a été refusée",
   'account.signIns.passwordFailed': 'Mot de passe incorrect',
   'account.signIns.codeFailed': 'Code incorrect',
   'account.signIns.blocked': 'Bloqué après trop de tentatives',

@@ -14,6 +14,13 @@ export const en = {
   'login.password': 'Password',
   'login.submit': 'Sign in',
   'login.forgot': 'Forgot your password?',
+  'login.passkey': 'Sign in with a passkey',
+  'login.passkeyCancelled': 'You were not signed in: the request was cancelled or the device gave up. Try again, or use e-mail address and password.',
+  'login.passkeyFailed': 'This passkey cannot sign in here. Use e-mail address and password.',
+  'passkeyOffer.title': 'Sign in faster next time',
+  'passkeyOffer.text': 'Next time you can sign in here with your face, your finger or the PIN of this device: no password, no code. For that your device keeps a passkey. Password and code keep working.',
+  'passkeyOffer.skip': 'Not now',
+  'passkeyOffer.failed': 'No passkey was created. You can try again, or go on without one.',
   'login.wrong': 'The e-mail or password is not correct.',
 
   'code.title': 'Enter your code',
@@ -111,6 +118,7 @@ export const en = {
   'mail.passkeyAdded.subject': 'A passkey was added to your account at {organisation}',
   'mail.passkeyAdded.text':
     'Hello {firstName},\n\na passkey was just added to your account at {organisation}. It was created with: {device}.\n\nWith a passkey, somebody signs in without password and code.\n\nIf that was you, there is nothing to do.\n\nIf it was not you, remove the passkey now:\n\n{url}\n\nThen choose a new password and tell your administration.\n',
+  'mail.passkeyAdded.textNoLink': 'Hello {firstName},\n\na passkey was just added to your account at {organisation}. It was created with: {device}.\n\nWith a passkey, somebody signs in without password and code.\n\nIf that was you, there is nothing to do.\n\nIf it was not you, tell your administration now: they can remove the passkey. Then choose a new password.\n',
 
   // The account pages, where a person sees how they are signed in.
   'account.title': 'Your account',
@@ -143,6 +151,7 @@ export const en = {
   'account.sessions.until': 'Until',
   'account.sessions.how': 'Sign-in',
   'account.sessions.withCode': 'With a code',
+  'account.sessions.withPasskey': 'With a passkey',
   'account.sessions.withoutCode': 'Password only, on a remembered device',
   'account.sessions.applications': 'Applications',
   'account.sessions.noApplications': 'None yet',
@@ -175,6 +184,8 @@ export const en = {
   'account.signIns.browser': 'Browser',
   'account.signIns.succeededCode': 'Signed in with a code',
   'account.signIns.succeededDevice': 'Signed in on a remembered device',
+  'account.signIns.succeededPasskey': 'Signed in with a passkey',
+  'account.signIns.passkeyFailed': 'A passkey was refused',
   'account.signIns.passwordFailed': 'Wrong password',
   'account.signIns.codeFailed': 'Wrong code',
   'account.signIns.blocked': 'Held back after too many attempts',

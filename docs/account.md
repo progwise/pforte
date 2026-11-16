@@ -10,9 +10,9 @@ are for the people who sign in, not for those who run pforte: that is [the admin
 | Page | What it shows | What can be done |
 | --- | --- | --- |
 | **Overview** | Name, e-mail address, mobile phone number (all but its first and last digits hidden) and language. | Nothing: see below. |
-| **Signed in** | The browsers in which the person is signed in, with the applications of each and whether a code was entered, and the applications that stay signed in without a browser because they hold a refresh token, such as an app on a phone. | *Sign out everywhere*: ends every session and application, this page included, and forgets the remembered devices. Applications with a back-channel logout address are told ([signing out](integrating-a-client.md#signing-out)). |
+| **Signed in** | The browsers in which the person is signed in, with the applications of each and how they signed in there (with a code, with a passkey, or with the password only on a remembered device), and the applications that stay signed in without a browser because they hold a refresh token, such as an app on a phone. | *Sign out everywhere*: ends every session and application, this page included, and forgets the remembered devices. Applications with a back-channel logout address are told ([signing out](integrating-a-client.md#signing-out)). |
 | **Devices** | The devices on which no code is asked for, with the browser, when it was last used and until when it is remembered. | Forget one, or all. The next sign-in there asks for a code. |
-| **Sign-ins** | The last ten times somebody signed in to the account or tried to: a sign-in with a code or on a remembered device, a wrong password, a wrong code, a hold after too many attempts, each with the time, the network address and the browser. Only what happened at the sign-in: a wrong code at the password reset or an activation is in the audit log, not here. | Nothing. A person who sees a line that was not them changes their password. |
+| **Sign-ins** | The last ten times somebody signed in to the account or tried to: a sign-in with a code, with a passkey or on a remembered device, a wrong password, a wrong code, a passkey that was refused, a hold after too many attempts, each with the time, the network address and the browser. Only what happened at the sign-in: a wrong code at the password reset or an activation is in the audit log, not here. | Nothing. A person who sees a line that was not them changes their password. |
 | **Passkeys** | The person's passkeys, with the browser each was created with, when, and when it was last used. | Add one, remove one: see [passkeys](#passkeys). |
 | **Password** | What happens next. | *Send me a code* starts the password reset pforte already has: a code by SMS to a confirmed phone, otherwise by e-mail, and then the page where the code and the new password are entered. As after every reset, all sessions end and the person is told by mail. |
 
@@ -35,9 +35,9 @@ start with `account.` and can be replaced like every other
 ## A change needs a recent sign-in
 
 Looking needs a session. A change (signing out everywhere, forgetting a device, adding or removing a passkey, asking for
-the code of a new password) needs a sign-in with a code that is **at most five minutes old**, checked on every single
+the code of a new password) needs a sign-in with a code or a passkey that is **at most five minutes old**, checked on every single
 action. If the sign-in is
-older, the person signs in again, with password and code even though they are signed in, and comes back to the page they
+older, the person signs in again, with password and code or with their passkey, even though they are signed in, and comes back to the page they
 were on. What they were about to do is not done for them: the page says to repeat it, however long the sign-in took.
 
 Adding a passkey takes two steps, with the device's own question in between. The sign-in is checked when the page that
@@ -52,17 +52,18 @@ an administrator can tell it from the same action done by the back office.
 ## Passkeys
 
 A passkey is a key pair. The private half stays on the person's device or in their password manager and is used only
-after the device has checked the person itself: face, finger or the device's PIN. pforte stores the public half.
-
-**Signing in with a passkey is not in pforte yet.** This version creates, lists and removes them; the sign-in follows
-([#45](https://github.com/progwise/pforte/issues/45)).
+after the device has checked the person itself: face, finger or the device's PIN. pforte stores the public half. With
+it the person signs in without password and code; what that means for people, applications and administrators is under
+[passkeys](passkeys.md). This page is where a person looks after theirs. Most get their first one from the offer after
+a sign-in with a code, not here.
 
 - **Adding one.** *Add a passkey* opens a page that says what will happen; *Create passkey* lets the device ask. The
   passkey is one the device finds without a user name, it is made for the host of your pforte address, and the device must
   have checked the person. pforte does not ask which make of device it is (no attestation).
 - **A mail follows.** Every new passkey is announced to the person by e-mail, with the browser it was created with and the
   link to this page, so that a passkey somebody else added is noticed. The mail is always sent; its texts are
-  `mail.passkeyAdded.subject` and `mail.passkeyAdded.text`.
+  `mail.passkeyAdded.subject` and `mail.passkeyAdded.text` (`mail.passkeyAdded.textNoLink` where there are no account
+  pages to link to).
 - **Removing one.** The passkey is deleted at pforte. The device may still list it, because pforte cannot delete
   anything there; the page says so.
 - **Twenty at most** per person.
@@ -72,16 +73,16 @@ after the device has checked the person itself: face, finger or the device's PIN
   cannot create a passkey. It is the only page of the account pages that runs a script; see
   [security measures](security.md#the-one-script).
 
-A passkey belongs to the host in `ISSUER`. **If that host changes, every passkey stops working**, because no device
-offers a passkey to another host.
+A passkey belongs to the host in `ISSUER`. **If that host changes, every passkey stops working**
+([why](passkeys.md#the-address-of-pforte-binds-every-passkey)).
 
 ## Signing in
 
 A person signs in to the account pages the way they sign in to any application, at pforte's own login page. Two things
 differ:
 
-- **A code is always asked for.** A remembered device does not count here. Somebody who is signed in at pforte with a
-  password only is asked to sign in again, with a code.
+- **Two factors are always asked for:** password and code, or a passkey. A remembered device does not count here.
+  Somebody who is signed in at pforte with a password only is asked to sign in again.
 - **The session lasts one hour.** After that the person passes through the sign-in again, which they do not notice while
   they are still signed in at pforte.
 

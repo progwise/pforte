@@ -1,20 +1,22 @@
 import formbody from '@fastify/formbody'
 import type { Database } from '@progwise/pforte-db'
+import { findPasskeyByCredentialId, openPasskeyChallenge, recordPasskeyUse, takePasskeyChallenge } from '@progwise/pforte-db/admin'
 import { changeCodeChannel, checkCode, CodeLimitError, currentCode, issueCode, markEmailVerified } from '@progwise/pforte-db/codes'
 import { findRememberedDevice, rememberDevice } from '@progwise/pforte-db/devices'
 import { findActiveUserById } from '@progwise/pforte-db/oidc'
 import { recordLogin } from '@progwise/pforte-db/users'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import { ACR_PASSWORD, ACR_SECOND_FACTOR, secondFactorAssurance } from '../auth/assurance.js'
+import { ACR_PASSWORD, ACR_SECOND_FACTOR, passkeyAssurance, secondFactorAssurance } from '../auth/assurance.js'
 import { channelFor, maskEmail, maskPhone } from '../auth/channels.js'
 import { deriveCodeSecrets } from '../auth/code-secrets.js'
 import type { Authenticate, AuthResult } from '../auth/authenticate.js'
-import type { LoginAudit, Origin } from '../auth/login-audit.js'
+import type { LoginAudit, Origin, PasskeyFailure } from '../auth/login-audit.js'
 import type { RateLimiter } from '../auth/rate-limiter.js'
 import { type Channel, type Notifier, NotifierUnavailableError } from '../notifications/notifier.js'
 import { applyIssuerHeaders } from '../oidc/issuer-headers.js'
 import type { ProviderHolder } from '../oidc/provider.js'
 import { parseAcceptLanguage } from '../i18n/index.js'
+import { isHandleOf, namedBy, type Passkeys } from '../passkeys/index.js'
 import type { Ui } from '../ui/index.js'
 import type { PageSet } from '../ui/pages.js'
 import { tooManyRequests } from '../ui/too-many.js'
@@ -35,10 +37,32 @@ export interface InteractionDependencies {
   limiter: RateLimiter
   /** Tells the audit log what happened to attempts to sign in. */
   audit: LoginAudit
+  /** Signing in with a passkey, and offering one after a sign-in with a code. */
+  passkeys: Passkeys
 }
 
 const STEP_COOKIE = 'pforte_second_factor'
 const STEP_LIFETIME_SECONDS = 15 * 60
+
+/** How long the question of a login page waits for a passkey: as long as the sign-in itself may take. */
+const SIGN_IN_QUESTION_SECONDS = 60 * 60
+
+const OFFER_COOKIE = 'pforte_passkey_step'
+const OFFER_LIFETIME_SECONDS = 15 * 60
+/**
+ * A sign-in that is complete (password and code were right) and waits for the answer to "do you want a passkey?".
+ * It says what the sign-in was worth, so that it can be finished after the answer, whatever the answer is.
+ */
+interface Offer {
+  /** Tells this cookie from the one between password and code, which is signed with the same keys and must never do as this one. */
+  purpose: 'passkey-offer'
+  uid: string
+  userId: string
+  acr: string
+  amr: string[]
+  expiresAt: number
+  language: string
+}
 
 interface Step {
   uid: string
@@ -50,7 +74,7 @@ interface Step {
 
 /** The login pages the provider redirects to ("interactions"). */
 export const interactionRoutes =
-  ({ provider, authenticate, db, notifier, cookieKeys, ui, limiter, audit }: InteractionDependencies) =>
+  ({ provider, authenticate, db, notifier, cookieKeys, ui, limiter, audit, passkeys }: InteractionDependencies) =>
   async (app: FastifyInstance) => {
     await app.register(formbody)
 
@@ -90,6 +114,27 @@ export const interactionRoutes =
         parseAcceptLanguage(request.headers['accept-language']),
       )
 
+    type Details = NonNullable<Awaited<ReturnType<typeof interactionFor>>>
+
+    /**
+     * The login page, with a new question for a device that holds a passkey. The question belongs to this
+     * sign-in and is the only one it has: showing the page again replaces it.
+     */
+    const loginPage = async (request: FastifyRequest, reply: FastifyReply, details: Details, { email = '', error }: { email?: string; error?: string } = {}) => {
+      const client = await provider.current().Client.find(String(details.params.client_id))
+      const options = await passkeys.ceremonies.requestOptions()
+      await openPasskeyChallenge(db, { challenge: options.challenge, boundTo: `sign-in:${details.uid}` }, new Date(Date.now() + SIGN_IN_QUESTION_SECONDS * 1000), { only: true })
+      passkeys.script.allow(reply)
+      return ui.pages.for(languageOf(request, details.params)).login({
+        uid: details.uid,
+        clientName: client?.clientName,
+        clientId: client?.clientId,
+        email,
+        error,
+        passkey: { attributes: passkeys.script.requestAttributes(options), script: passkeys.script.tag },
+      })
+    }
+
     const expired = (request: FastifyRequest, reply: FastifyReply) => {
       const view = ui.pages.for(languageOf(request))
       return reply.code(400).type('text/html').send(view.notice(view.t('error.signInExpiredTitle'), view.t('error.signInExpired')))
@@ -125,19 +170,9 @@ export const interactionRoutes =
         return reply.code(400).type('text/html').send(view.notice(view.t('error.notSupportedTitle'), view.t('error.notSupported')))
       }
 
-      const client = await provider.current().Client.find(String(details.params.client_id))
       const loginHint = details.params.login_hint
-      return reply
-        .type('text/html')
-        .send(
-          ui.pages.for(languageOf(request, details.params)).login({
-            uid: details.uid,
-            clientName: client?.clientName,
-            clientId: client?.clientId,
-            // The application may suggest who is signing in (OpenID Connect `login_hint`).
-            email: typeof loginHint === 'string' ? loginHint : '',
-          }),
-        )
+      // The application may suggest who is signing in (OpenID Connect `login_hint`).
+      return reply.type('text/html').send(await loginPage(request, reply, details, { email: typeof loginHint === 'string' ? loginHint : '' }))
     })
 
     app.post<{ Params: { uid: string }; Body: { email?: unknown; password?: unknown } }>(
@@ -165,19 +200,10 @@ export const interactionRoutes =
         if (!result.ok) {
           await limiter.passwordFailed(address, request.ip)
           await audit.passwordFailed(originOf(request), { email: address, reason: result.reason, userId: result.userId })
-          const client = await provider.current().Client.find(String(details.params.client_id))
           return reply
             .code(401)
             .type('text/html')
-            .send(
-              view.login({
-                uid: details.uid,
-                clientName: client?.clientName,
-                clientId: client?.clientId,
-                email: typeof email === 'string' ? email : '',
-                error: view.t('login.wrong'),
-              }),
-            )
+            .send(await loginPage(request, reply, details, { email: typeof email === 'string' ? email : '', error: view.t('login.wrong') }))
         }
 
         await limiter.passwordSucceeded(address, request.ip)
@@ -214,9 +240,12 @@ export const interactionRoutes =
     type StepUser = NonNullable<Awaited<ReturnType<typeof stepFor>>>['user']
 
     /** The code page, telling where the code that is valid now was sent. */
-    const codePageFor = async (user: StepUser, uid: string, language: string, extra: { error?: string; notice?: string } = {}) => {
+    const codePageFor = async (reply: FastifyReply, user: StepUser, uid: string, language: string, extra: { error?: string; notice?: string } = {}) => {
       const channel = (await currentCode(db, { userId: user.id, purpose: 'login' }))?.channel ?? 'email'
+      // The script only finds out whether this device can make a passkey, for the offer after the code.
+      passkeys.script.allow(reply)
       return ui.pages.for(language).code({
+        passkeyProbe: { field: passkeys.script.capableField, script: passkeys.script.tag },
         uid,
         channel,
         sentTo: channel === 'sms' && user.phone ? maskPhone(user.phone) : maskEmail(user.email),
@@ -305,7 +334,7 @@ export const interactionRoutes =
       if (!details) return expired(request, reply)
       const current = await stepFor(request, details.uid)
       if (!current) return reply.redirect(cookiePath(details.uid), 303)
-      return reply.type('text/html').send(await codePageFor(current.user, details.uid, current.step.language))
+      return reply.type('text/html').send(await codePageFor(reply, current.user, details.uid, current.step.language))
     })
 
     app.post<{ Params: { uid: string }; Body: { code?: unknown; remember?: unknown } }>('/interaction/:uid/code', async (request, reply) => {
@@ -330,7 +359,7 @@ export const interactionRoutes =
         if (result.reason === 'wrong' || result.reason === 'exhausted') await limiter.codeFailed(request.ip)
         await audit.codeFailed(originOf(request), { userId: user.id, purpose: 'login', reason: result.reason })
         const error = ui.pages.for(current.step.language).t(`code.${result.reason}`)
-        return reply.code(401).type('text/html').send(await codePageFor(user, details.uid, current.step.language, { error }))
+        return reply.code(401).type('text/html').send(await codePageFor(reply, user, details.uid, current.step.language, { error }))
       }
 
       if (result.channel === 'email') await markEmailVerified(db, user.id)
@@ -351,7 +380,125 @@ export const interactionRoutes =
         acr: secondFactorAssurance(result.channel).acr,
         deviceRemembered: remember,
       })
-      return finishLogin(request, reply, user.id, secondFactorAssurance(result.channel), cookies)
+      const assurance = secondFactorAssurance(result.channel)
+      // A person who has just entered a code is who they say they are: the moment to offer a passkey, if this
+      // device can make one and they were not asked here before. The sign-in waits for their answer.
+      if (passkeys.offers.wanted(request.headers.cookie, user.id, (request.body as { passkeys?: unknown } | undefined)?.passkeys)) {
+        const offer: Offer = { purpose: 'passkey-offer', uid: details.uid, userId: user.id, ...assurance, expiresAt: Date.now() + OFFER_LIFETIME_SECONDS * 1000, language: current.step.language }
+        cookies.push(setCookieHeader(OFFER_COOKIE, sign(cookieKeys, offer), { path: cookiePath(details.uid), maxAgeSeconds: OFFER_LIFETIME_SECONDS, secure }))
+        reply.header('Set-Cookie', cookies)
+        return reply.redirect(`${cookiePath(details.uid)}/passkey-offer`, 303)
+      }
+      return finishLogin(request, reply, user.id, assurance, cookies)
+    })
+
+    // --- Signing in with a passkey: one step, no password and no code
+
+    app.post<{ Params: { uid: string }; Body: { credential?: unknown } }>('/interaction/:uid/passkey', async (request, reply) => {
+      const details = await interactionFor(request, reply, request.params.uid)
+      if (!details) return expired(request, reply)
+      if (details.prompt.name !== 'login') return reply.redirect(cookiePath(details.uid), 303)
+      const view = ui.pages.for(languageOf(request, details.params))
+
+      const wait = await limiter.passkeyBlockedFor(request.ip)
+      if (wait > 0) {
+        await audit.blocked(originOf(request), { scope: 'passkey' })
+        return tooManyRequests(reply, view, wait)
+      }
+      // Says the same whatever was wrong, as a wrong password does.
+      const refuse = async (reason: PasskeyFailure, userId?: string) => {
+        await limiter.passkeyFailed(request.ip)
+        await audit.passkeyFailed(originOf(request), { userId, reason })
+        return reply.code(401).type('text/html').send(await loginPage(request, reply, details, { error: view.t('login.passkeyFailed') }))
+      }
+
+      let answer: unknown
+      try {
+        answer = JSON.parse(typeof request.body?.credential === 'string' ? request.body.credential : '')
+      } catch {
+        return refuse('malformed')
+      }
+      const { challenge, credentialId, userHandle } = namedBy(answer)
+      if (!challenge || !credentialId) return refuse('malformed')
+
+      // The question of this sign-in is used up by the first answer that names it, before the answer is looked
+      // at. An answer that was given before, or to the question of another sign-in, finds nothing.
+      if (!(await takePasskeyChallenge(db, { challenge, boundTo: `sign-in:${details.uid}` }))) return refuse('expired')
+
+      const passkey = await findPasskeyByCredentialId(db, credentialId)
+      if (!passkey) return refuse('unknown_passkey')
+      // A person who is locked or deactivated signs in with nothing, also not with a passkey.
+      const user = await findActiveUserById(db, passkey.userId)
+      if (!user) return refuse('not_allowed', passkey.userId)
+      if (userHandle && !isHandleOf(userHandle, user.id)) return refuse('wrong_person', user.id)
+      const used = await passkeys.ceremonies.verifySignIn(answer, challenge, passkey)
+      if (!used) return refuse('verification_failed', user.id)
+
+      await recordPasskeyUse(db, passkey.id, used)
+      await recordLogin(db, user.id)
+      await audit.succeeded(originOf(request), { userId: user.id, method: 'passkey', acr: passkeyAssurance.acr })
+      // This browser has a passkey of this person: nothing to offer them here.
+      return finishLogin(request, reply, user.id, passkeyAssurance, [passkeys.offers.answered(request.headers.cookie, user.id, 'done')])
+    })
+
+    // --- The offer of a passkey, between a sign-in with a code and the way back to the application
+
+    const offerPath = (uid: string) => `${cookiePath(uid)}/passkey-offer`
+    const clearOffer = (uid: string) => setCookieHeader(OFFER_COOKIE, '', { path: cookiePath(uid), maxAgeSeconds: 0, secure })
+
+    /** The sign-in that waits behind the offer, if its cookie is one, belongs to this interaction and the person can still sign in. */
+    const offerFor = async (request: FastifyRequest, uid: string) => {
+      const offer = unsign<Offer>(cookieKeys, readCookie(request.headers.cookie, OFFER_COOKIE))
+      if (offer?.purpose !== 'passkey-offer' || offer.uid !== uid || !(offer.expiresAt >= Date.now())) return undefined
+      if (typeof offer.acr !== 'string' || !Array.isArray(offer.amr) || typeof offer.userId !== 'string') return undefined
+      const user = await findActiveUserById(db, offer.userId)
+      return user ? { offer, user } : undefined
+    }
+    type Waiting = NonNullable<Awaited<ReturnType<typeof offerFor>>>
+
+    /** Ends the sign-in that waited, as the code had ended it without the offer. */
+    const finishOffered = (request: FastifyRequest, reply: FastifyReply, { offer, user }: Waiting, answer: 'later' | 'done') =>
+      finishLogin(request, reply, user.id, { acr: offer.acr, amr: offer.amr }, [clearOffer(offer.uid), passkeys.offers.answered(request.headers.cookie, user.id, answer)])
+
+    const offerPage = async (request: FastifyRequest, reply: FastifyReply, { offer, user }: Waiting, error?: string) => {
+      const options = await passkeys.enrolment.ask(user, `offer:${offer.uid}`, OFFER_LIFETIME_SECONDS)
+      // Somebody with as many passkeys as an account may have is not offered another: on they go.
+      if (!options) return finishOffered(request, reply, { offer, user }, 'done')
+      passkeys.script.allow(reply)
+      const view = ui.pages.for(offer.language)
+      return reply
+        .code(error ? 422 : 200)
+        .type('text/html')
+        .send(view.passkeyOffer({ action: offerPath(offer.uid), skipAction: `${offerPath(offer.uid)}/skip`, attributes: passkeys.script.createAttributes(options), script: passkeys.script.tag, error }))
+    }
+
+    app.get<{ Params: { uid: string } }>('/interaction/:uid/passkey-offer', async (request, reply) => {
+      const details = await interactionFor(request, reply, request.params.uid)
+      if (!details) return expired(request, reply)
+      const waiting = await offerFor(request, details.uid)
+      if (!waiting) return reply.redirect(cookiePath(details.uid), 303)
+      return offerPage(request, reply, waiting)
+    })
+
+    app.post<{ Params: { uid: string }; Body: { credential?: unknown } }>('/interaction/:uid/passkey-offer', async (request, reply) => {
+      const details = await interactionFor(request, reply, request.params.uid)
+      if (!details) return expired(request, reply)
+      const waiting = await offerFor(request, details.uid)
+      if (!waiting) return reply.redirect(cookiePath(details.uid), 303)
+
+      const outcome = await passkeys.enrolment.complete(request, waiting.user, `offer:${details.uid}`, request.body?.credential)
+      // Made, or there already: either way this browser has nothing more to be offered.
+      if (outcome === 'added' || outcome === 'duplicate' || outcome === 'too-many') return finishOffered(request, reply, waiting, 'done')
+      // Not made. The person is signed in all the same: they try again, or go on with "not now".
+      return offerPage(request, reply, waiting, ui.pages.for(waiting.offer.language).t('passkeyOffer.failed'))
+    })
+
+    app.post<{ Params: { uid: string } }>('/interaction/:uid/passkey-offer/skip', async (request, reply) => {
+      const details = await interactionFor(request, reply, request.params.uid)
+      if (!details) return expired(request, reply)
+      const waiting = await offerFor(request, details.uid)
+      if (!waiting) return reply.redirect(cookiePath(details.uid), 303)
+      return finishOffered(request, reply, waiting, 'later')
     })
 
     app.post<{ Params: { uid: string }; Body: { channel?: unknown } }>('/interaction/:uid/code/resend', async (request, reply) => {
@@ -379,11 +526,11 @@ export const interactionRoutes =
           .code(429)
           .header('Retry-After', error.retryAfterSeconds)
           .type('text/html')
-          .send(await codePageFor(current.user, details.uid, current.step.language, { error: limitMessage(view, error) }))
+          .send(await codePageFor(reply, current.user, details.uid, current.step.language, { error: limitMessage(view, error) }))
       }
       return reply
         .type('text/html')
-        .send(await codePageFor(current.user, details.uid, current.step.language, { notice: ui.pages.for(current.step.language).t('code.newOnItsWay') }))
+        .send(await codePageFor(reply, current.user, details.uid, current.step.language, { notice: ui.pages.for(current.step.language).t('code.newOnItsWay') }))
     })
 
     app.post<{ Params: { uid: string } }>('/interaction/:uid/abort', async (request, reply) => {

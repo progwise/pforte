@@ -13,6 +13,8 @@ export const LIMITS = {
   passwordPerIp: { max: 30, windowSeconds: FIFTEEN_MINUTES },
   /** Wrong codes from one IP, on top of the five attempts each code has. */
   codeFailuresPerIp: { max: 30, windowSeconds: FIFTEEN_MINUTES },
+  /** Sign-ins with a passkey that were refused, from one IP. */
+  passkeyFailuresPerIp: { max: 30, windowSeconds: FIFTEEN_MINUTES },
   /** Codes that people ask for again, from one IP. The first code of a sign-in is not counted: it needs the password. */
   codeResendsPerIp: { max: 10, windowSeconds: ONE_HOUR },
   /** Many people can sit behind one address, so this is generous; the limit per address protects a mailbox. */
@@ -51,6 +53,8 @@ export interface RateLimiter {
   passwordSucceeded(email: string, ip: string | undefined): Promise<void>
   codeBlockedFor(ip: string | undefined): Promise<number>
   codeFailed(ip: string | undefined): Promise<void>
+  passkeyBlockedFor(ip: string | undefined): Promise<number>
+  passkeyFailed(ip: string | undefined): Promise<void>
   /** Counts a request for another code and returns the wait if that was one too many. */
   codeResend(ip: string | undefined): Promise<number>
   /** Counts a password reset request for the address and the IP, and returns the wait if it was one too many. */
@@ -90,6 +94,8 @@ export const createRateLimiter = ({ db, secret, now = () => new Date() }: RateLi
     passwordSucceeded: (email, ip) => clear(db, [`pw:addrip:${address(email)}:${ipKey(ip)}`]),
     codeBlockedFor: (ip) => blockedFor(db, [rule(`code:ip:${ipKey(ip)}`, LIMITS.codeFailuresPerIp)], now()),
     codeFailed: (ip) => count(db, [rule(`code:ip:${ipKey(ip)}`, LIMITS.codeFailuresPerIp)], now()),
+    passkeyBlockedFor: (ip) => blockedFor(db, [rule(`passkey:ip:${ipKey(ip)}`, LIMITS.passkeyFailuresPerIp)], now()),
+    passkeyFailed: (ip) => count(db, [rule(`passkey:ip:${ipKey(ip)}`, LIMITS.passkeyFailuresPerIp)], now()),
     codeResend: (ip) => consume(db, rule(`coderesend:ip:${ipKey(ip)}`, LIMITS.codeResendsPerIp), now()),
     async resetRequest(email, ip) {
       // Both are counted, whatever the first one says, so that neither counter lags behind.

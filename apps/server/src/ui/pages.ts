@@ -12,12 +12,27 @@ export interface PagesOptions {
   theme?: Theme
 }
 
+/** A hidden field that says whether the device can make a passkey, and the script that fills it in. */
+export interface PasskeyProbe {
+  field: string
+  script: string
+}
+
 /** The pages of one language. */
 export interface PageSet {
   language: string
   /** A text in this language, for the parts of a page that routes fill in themselves. */
   t(key: MessageKey, values?: Values): string
-  login(options: { uid: string; clientName?: string; /** Carried to the page for a forgotten password. */ clientId?: string; email?: string; error?: string }): string
+  login(options: {
+    uid: string
+    clientName?: string
+    /** Carried to the page for a forgotten password. */
+    clientId?: string
+    email?: string
+    error?: string
+    /** Lets a person sign in with a passkey: the attributes of the form that asks the device, and the script. */
+    passkey?: { attributes: string; script: string }
+  }): string
   code(options: {
     uid: string
     channel: 'email' | 'sms'
@@ -29,9 +44,16 @@ export interface PageSet {
     notice?: string
     /** Shown to users without a phone number, who therefore get codes by e-mail. */
     phoneHint?: boolean
+    /** Finds out whether this device can make a passkey: a hidden field of the form, and the script that fills it. */
+    passkeyProbe?: PasskeyProbe
   }): string
   /** `remember` is the box as the person left it, when the page is shown again; without it the configured default. */
-  activation(options: { token: string; error?: string; remember?: boolean }): string
+  activation(options: { token: string; error?: string; remember?: boolean; passkeyProbe?: PasskeyProbe }): string
+  /**
+   * Offers to make a passkey, to somebody who has just shown who they are: after a sign-in with a code, after an
+   * activation. `action` takes the device's answer, `skipAction` is "not now".
+   */
+  passkeyOffer(options: { action: string; skipAction: string; /** The attributes of the form that asks the device. */ attributes: string; script: string; error?: string }): string
   /** `clientId` is the application the person came from, so the last page of the reset can lead back to it. */
   forgotPassword(options: { email?: string; error?: string; clientId?: string }): string
   resetCode(options: { email: string; notice?: string; error?: string; clientId?: string }): string
@@ -130,25 +152,35 @@ ${footer}</body>
       language,
       t,
 
-      login: ({ uid, clientName, clientId, email = '', error }) =>
+      login: ({ uid, clientName, clientId, email = '', error, passkey }) =>
         page(
           t('login.title'),
           `<h1>${escapeHtml(clientName ? t('login.titleTo', { client: clientName }) : t('login.title'))}</h1>
 ${alert(error)}
 <form method="post" action="/interaction/${encodeURIComponent(uid)}/login">
 <label for="email">${escapeHtml(t('common.email'))}</label>
-<input id="email" name="email" type="email" autocomplete="username" required autofocus value="${escapeHtml(email)}">
+<input id="email" name="email" type="email" autocomplete="${passkey ? 'username webauthn' : 'username'}" required autofocus value="${escapeHtml(email)}">
 <label for="password">${escapeHtml(t('login.password'))}</label>
 <input id="password" name="password" type="password" autocomplete="current-password" required>
 <button type="submit">${escapeHtml(t('login.submit'))}</button>
 </form>
+${
+  // Hidden until the script finds that this browser knows passkeys: without it the page is the one above and below.
+  passkey
+    ? `<form method="post" action="/interaction/${encodeURIComponent(uid)}/passkey" ${passkey.attributes}>
+<input type="hidden" name="credential">
+<p class="error" role="alert" data-passkey-message="failed" hidden>${escapeHtml(t('login.passkeyCancelled'))}</p>
+<button type="submit" class="secondary">${escapeHtml(t('login.passkey'))}</button>
+</form>`
+    : ''
+}
 <p><a href="/reset?lang=${encodeURIComponent(language)}${clientQuery(clientId)}">${escapeHtml(t('login.forgot'))}</a></p>
 <form method="post" action="/interaction/${encodeURIComponent(uid)}/abort">
 <button type="submit" class="secondary">${escapeHtml(t('common.cancel'))}</button>
-</form>`,
+</form>${passkey ? `\n${passkey.script}` : ''}`,
         ),
 
-      code: ({ uid, channel, sentTo, canUseEmail, error, notice, phoneHint }) =>
+      code: ({ uid, channel, sentTo, canUseEmail, error, notice, phoneHint, passkeyProbe }) =>
         page(
           t('code.title'),
           `<h1>${escapeHtml(t('code.title'))}</h1>
@@ -156,7 +188,7 @@ ${alert(error)}
 ${status(notice)}
 ${alert(error)}
 <form method="post" action="/interaction/${encodeURIComponent(uid)}/code">
-${codeField}
+${codeField}${passkeyProbe ? `\n${passkeyProbe.field}` : ''}
 <label class="check"><input type="checkbox" name="remember"${rememberDeviceDefault ? ' checked' : ''}> ${escapeHtml(t('code.remember'))}</label>
 <button type="submit">${escapeHtml(t('code.submit'))}</button>
 </form>
@@ -174,20 +206,40 @@ ${
 <form method="post" action="/interaction/${encodeURIComponent(uid)}/abort">
 <button type="submit" class="secondary">${escapeHtml(t('common.cancel'))}</button>
 </form>
-${phoneHint ? `<p><small>${escapeHtml(t('code.phoneHint'))}</small></p>` : ''}`,
+${phoneHint ? `<p><small>${escapeHtml(t('code.phoneHint'))}</small></p>` : ''}${passkeyProbe ? `\n${passkeyProbe.script}` : ''}`,
         ),
 
-      activation: ({ token, error, remember = rememberDeviceDefault }) =>
+      activation: ({ token, error, remember = rememberDeviceDefault, passkeyProbe }) =>
         page(
           t('activate.title'),
           `<h1>${escapeHtml(t('activate.title'))}</h1>
 ${alert(error)}
 <form method="post" action="/activate">
-<input type="hidden" name="token" value="${escapeHtml(token)}">
+<input type="hidden" name="token" value="${escapeHtml(token)}">${passkeyProbe ? `\n${passkeyProbe.field}` : ''}
 ${passwordFields}
 <label class="check"><input type="checkbox" name="remember"${remember ? ' checked' : ''}> ${escapeHtml(t('code.remember'))}</label>
 <button type="submit">${escapeHtml(t('activate.submit'))}</button>
-</form>`,
+</form>${passkeyProbe ? `\n${passkeyProbe.script}` : ''}`,
+        ),
+
+      // The same messages as on the account page that makes a passkey; here the way on never depends on the device.
+      passkeyOffer: ({ action, skipAction, attributes, script, error }) =>
+        page(
+          t('passkeyOffer.title'),
+          `<h1>${escapeHtml(t('passkeyOffer.title'))}</h1>
+<p>${escapeHtml(t('passkeyOffer.text'))}</p>
+${alert(error)}
+<form method="post" action="${escapeHtml(action)}" ${attributes}>
+<input type="hidden" name="credential">
+<p class="error" role="alert" data-passkey-message="unsupported">${escapeHtml(t('account.passkeys.new.unsupported'))}</p>
+<p class="error" role="alert" data-passkey-message="failed" hidden>${escapeHtml(t('account.passkeys.new.failed'))}</p>
+<p class="error" role="alert" data-passkey-message="exists" hidden>${escapeHtml(t('account.passkeys.new.exists'))}</p>
+<button type="submit" disabled>${escapeHtml(t('account.passkeys.new.button'))}</button>
+</form>
+<form method="post" action="${escapeHtml(skipAction)}">
+<button type="submit" class="secondary">${escapeHtml(t('passkeyOffer.skip'))}</button>
+</form>
+${script}`,
         ),
 
       forgotPassword: ({ email = '', error, clientId }) =>

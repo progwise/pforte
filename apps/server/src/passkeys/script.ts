@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import type { Ui } from '../ui/index.js'
 import { escapeHtml } from '../ui/pages.js'
-import type { PasskeyCreationOptions } from './ceremonies.js'
+import type { PasskeyCreationOptions, PasskeyRequestOptions } from './ceremonies.js'
 
 /**
  * The one script pforte's pages have: the browser half of a passkey. WebAuthn can only be reached from script,
@@ -12,13 +12,16 @@ import type { PasskeyCreationOptions } from './ceremonies.js'
  * goes into a hidden field of that form, and the form is sent as any other. So the page needs no permission to
  * make requests of its own, and the check that a form comes from pforte's own page covers this one too.
  *
- * A page that uses it works without it: the button stays disabled and the page says that this browser cannot do
- * it. Written for browsers as they are, not for a build step: no dependency, no module, nothing to compile.
+ * A page that uses it works without it. Where a passkey is made, the button stays disabled and the page says that
+ * this browser cannot do it. Where somebody signs in, the passkey button stays hidden and the page is the one for
+ * e-mail address and password. Written for browsers as they are, not for a build step: no dependency, no module,
+ * nothing to compile.
  */
 const SOURCE = String.raw`(function () {
   'use strict'
 
-  var supported = typeof window.PublicKeyCredential === 'function' && !!navigator.credentials && typeof navigator.credentials.create === 'function'
+  var supported = typeof window.PublicKeyCredential === 'function' && !!navigator.credentials && typeof navigator.credentials.create === 'function' && typeof navigator.credentials.get === 'function'
+  if (!supported) return
 
   var toBuffer = function (text) {
     var binary = atob(text.replace(/-/g, '+').replace(/_/g, '/'))
@@ -32,6 +35,11 @@ const SOURCE = String.raw`(function () {
     for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
     return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
   }
+  var withBufferIds = function (credentials) {
+    return (credentials || []).map(function (credential) {
+      return Object.assign({}, credential, { id: toBuffer(credential.id) })
+    })
+  }
 
   // Newer browsers read and write the JSON form themselves. The rest is for those that do not.
   var creationOptions = function (json) {
@@ -39,62 +47,135 @@ const SOURCE = String.raw`(function () {
     var options = Object.assign({}, json)
     options.challenge = toBuffer(json.challenge)
     options.user = Object.assign({}, json.user, { id: toBuffer(json.user.id) })
-    options.excludeCredentials = (json.excludeCredentials || []).map(function (credential) {
-      return Object.assign({}, credential, { id: toBuffer(credential.id) })
-    })
+    options.excludeCredentials = withBufferIds(json.excludeCredentials)
     return options
   }
-  var created = function (credential) {
+  var requestOptions = function (json) {
+    if (typeof PublicKeyCredential.parseRequestOptionsFromJSON === 'function') return PublicKeyCredential.parseRequestOptionsFromJSON(json)
+    var options = Object.assign({}, json)
+    options.challenge = toBuffer(json.challenge)
+    options.allowCredentials = withBufferIds(json.allowCredentials)
+    return options
+  }
+  var answerOf = function (credential) {
     if (typeof credential.toJSON === 'function') return credential.toJSON()
     var response = credential.response
-    return {
+    var answer = {
       id: credential.id,
       rawId: toText(credential.rawId),
       type: credential.type,
-      response: {
-        clientDataJSON: toText(response.clientDataJSON),
-        attestationObject: toText(response.attestationObject),
-        transports: typeof response.getTransports === 'function' ? response.getTransports() : [],
-      },
+      response: { clientDataJSON: toText(response.clientDataJSON) },
       clientExtensionResults: credential.getClientExtensionResults(),
       authenticatorAttachment: credential.authenticatorAttachment || undefined,
     }
+    if (response.attestationObject) {
+      // A new passkey.
+      answer.response.attestationObject = toText(response.attestationObject)
+      answer.response.transports = typeof response.getTransports === 'function' ? response.getTransports() : []
+    } else {
+      // A sign-in.
+      answer.response.authenticatorData = toText(response.authenticatorData)
+      answer.response.signature = toText(response.signature)
+      if (response.userHandle) answer.response.userHandle = toText(response.userHandle)
+    }
+    return answer
   }
 
   var show = function (form, name) {
     var messages = form.querySelectorAll('[data-passkey-message]')
     for (var i = 0; i < messages.length; i++) messages[i].hidden = messages[i].getAttribute('data-passkey-message') !== name
   }
+  var each = function (selector, use) {
+    var found = document.querySelectorAll(selector)
+    for (var i = 0; i < found.length; i++) use(found[i])
+  }
+  var send = function (form, field, credential) {
+    field.value = JSON.stringify(answerOf(credential))
+    form.submit()
+  }
 
-  var forms = document.querySelectorAll('form[data-passkey="create"]')
-  for (var i = 0; i < forms.length; i++) {
-    (function (form) {
-      var button = form.querySelector('button[type="submit"]')
-      var field = form.querySelector('input[name="credential"]')
-      if (!supported || !button || !field) return
+  // A form that makes a passkey: the button asks the device, the answer goes into the hidden field.
+  each('form[data-passkey="create"]', function (form) {
+    var button = form.querySelector('button[type="submit"]')
+    var field = form.querySelector('input[name="credential"]')
+    if (!button || !field) return
+    show(form, '')
+    button.disabled = false
+
+    form.addEventListener('submit', function (event) {
+      // The second time round the answer is in the field, and the form goes to pforte.
+      if (field.value) return
+      event.preventDefault()
+      button.disabled = true
       show(form, '')
-      button.disabled = false
+      navigator.credentials
+        .create({ publicKey: creationOptions(JSON.parse(form.getAttribute('data-options'))) })
+        .then(function (credential) {
+          send(form, field, credential)
+        })
+        .catch(function (error) {
+          // The device says "invalid state" when it holds a passkey of this person already. Everything else
+          // is the person saying no, or the device giving up.
+          show(form, error && error.name === 'InvalidStateError' ? 'exists' : 'failed')
+          button.disabled = false
+        })
+    })
+  })
 
-      form.addEventListener('submit', function (event) {
-        // The second time round the answer is in the field, and the form goes to pforte.
-        if (field.value) return
-        event.preventDefault()
-        button.disabled = true
-        show(form, '')
-        navigator.credentials
-          .create({ publicKey: creationOptions(JSON.parse(form.getAttribute('data-options'))) })
-          .then(function (credential) {
-            field.value = JSON.stringify(created(credential))
-            form.submit()
-          })
-          .catch(function (error) {
-            // The device says "invalid state" when it holds a passkey of this person already. Everything else
-            // is the person saying no, or the device giving up.
-            show(form, error && error.name === 'InvalidStateError' ? 'exists' : 'failed')
-            button.disabled = false
-          })
+  // A form that signs in with a passkey. It is hidden until here: a browser without passkeys never sees it.
+  // The device is asked in two ways with the same question: through the browser's autofill of the e-mail
+  // field, which waits quietly until the person picks a passkey there, and through the button.
+  each('form[data-passkey="get"]', function (form) {
+    var button = form.querySelector('button[type="submit"]')
+    var field = form.querySelector('input[name="credential"]')
+    if (!button || !field) return
+    var json = JSON.parse(form.getAttribute('data-options'))
+    var waiting = null
+
+    var ask = function (quietly) {
+      if (waiting) waiting.abort()
+      waiting = typeof AbortController === 'function' ? new AbortController() : null
+      var request = { publicKey: requestOptions(json) }
+      if (quietly) request.mediation = 'conditional'
+      if (waiting) request.signal = waiting.signal
+      return navigator.credentials.get(request).then(function (credential) {
+        send(form, field, credential)
       })
-    })(forms[i])
+    }
+    var askQuietly = function () {
+      if (typeof PublicKeyCredential.isConditionalMediationAvailable !== 'function') return
+      PublicKeyCredential.isConditionalMediationAvailable()
+        .then(function (available) {
+          // Ends without a word when the button takes over, or when the person never picks a passkey.
+          if (available) ask(true).catch(function () {})
+        })
+        .catch(function () {})
+    }
+
+    form.hidden = false
+    askQuietly()
+
+    form.addEventListener('submit', function (event) {
+      if (field.value) return
+      event.preventDefault()
+      button.disabled = true
+      show(form, '')
+      ask(false).catch(function () {
+        show(form, 'failed')
+        button.disabled = false
+        askQuietly()
+      })
+    })
+  })
+
+  // A field that tells pforte whether this device can check its person itself, so that a passkey is offered
+  // only where one can be made.
+  if (typeof PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function') {
+    PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
+      .then(function (available) {
+        if (available) each('input[data-passkey-capable]', function (input) { input.value = '1' })
+      })
+      .catch(function () {})
   }
 })()
 `
@@ -118,6 +199,10 @@ export const createPasskeyScript = ({ issuer, ui }: { issuer: string; ui: Pick<U
     tag: `<script src="${path}" defer></script>`,
     /** The form attributes the script looks for when a passkey is to be created. */
     createAttributes: (options: PasskeyCreationOptions) => `data-passkey="create" data-options="${escapeHtml(JSON.stringify(options))}"`,
+    /** The form attributes the script looks for when somebody is to sign in with a passkey. The form starts hidden. */
+    requestAttributes: (options: PasskeyRequestOptions) => `data-passkey="get" data-options="${escapeHtml(JSON.stringify(options))}" hidden`,
+    /** A field of a form that says `1` when the device can make a passkey, and nothing without the script. */
+    capableField: '<input type="hidden" name="passkeys" value="" data-passkey-capable>',
     routes: async (app: FastifyInstance) => {
       app.get(path, async (_request, reply) =>
         reply

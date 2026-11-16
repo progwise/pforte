@@ -11,6 +11,13 @@ export const hu: Catalog = {
   'login.password': 'Jelszó',
   'login.submit': 'Bejelentkezés',
   'login.forgot': 'Elfelejtette a jelszavát?',
+  'login.passkey': 'Bejelentkezés jelkulccsal',
+  'login.passkeyCancelled': 'Nem jelentkezett be: a kérést megszakították, vagy az eszköz feladta. Próbálja újra, vagy használja az e-mail-címét és a jelszavát.',
+  'login.passkeyFailed': 'Ezzel a jelkulccsal itt nem lehet bejelentkezni. Használja az e-mail-címét és a jelszavát.',
+  'passkeyOffer.title': 'Legközelebb gyorsabb bejelentkezés',
+  'passkeyOffer.text': 'Legközelebb az arcával, az ujjlenyomatával vagy az eszköz PIN-kódjával jelentkezhet be itt: jelszó és kód nélkül. Ehhez az eszköze megjegyez egy jelkulcsot. A jelszó és a kód továbbra is működik.',
+  'passkeyOffer.skip': 'Most nem',
+  'passkeyOffer.failed': 'Nem készült jelkulcs. Megpróbálhatja újra, vagy folytathatja nélküle.',
   'login.wrong': 'Az e-mail-cím vagy a jelszó nem helyes.',
 
   'code.title': 'Adja meg a kódot',
@@ -108,6 +115,7 @@ export const hu: Catalog = {
   'mail.passkeyAdded.subject': 'Jelkulcsot adtak a(z) {organisation} fiókjához',
   'mail.passkeyAdded.text':
     'Kedves {firstName}!\n\nA(z) {organisation} fiókjához az imént jelkulcsot adtak hozzá. Ezzel készült: {device}.\n\nJelkulccsal jelszó és kód nélkül lehet bejelentkezni.\n\nHa Ön volt, nincs teendője.\n\nHa nem Ön volt, távolítsa el most a jelkulcsot:\n\n{url}\n\nEzután válasszon új jelszót, és értesítse az adminisztrációt.\n',
+  'mail.passkeyAdded.textNoLink': 'Kedves {firstName}!\n\nA(z) {organisation} fiókjához az imént jelkulcsot adtak hozzá. Ezzel készült: {device}.\n\nJelkulccsal jelszó és kód nélkül lehet bejelentkezni.\n\nHa Ön volt, nincs teendője.\n\nHa nem Ön volt, értesítse most az adminisztrációt: el tudják távolítani a jelkulcsot. Ezután válasszon új jelszót.\n',
 
   // The account pages, where a person sees how they are signed in.
   'account.title': 'Az Ön fiókja',
@@ -140,6 +148,7 @@ export const hu: Catalog = {
   'account.sessions.until': 'Eddig',
   'account.sessions.how': 'Bejelentkezés módja',
   'account.sessions.withCode': 'Kóddal',
+  'account.sessions.withPasskey': 'Jelkulccsal',
   'account.sessions.withoutCode': 'Csak jelszóval, megjegyzett eszközön',
   'account.sessions.applications': 'Alkalmazások',
   'account.sessions.noApplications': 'Még nincs',
@@ -172,6 +181,8 @@ export const hu: Catalog = {
   'account.signIns.browser': 'Böngésző',
   'account.signIns.succeededCode': 'Bejelentkezés kóddal',
   'account.signIns.succeededDevice': 'Bejelentkezés megjegyzett eszközön',
+  'account.signIns.succeededPasskey': 'Bejelentkezés jelkulccsal',
+  'account.signIns.passkeyFailed': 'Egy jelkulcsot elutasítottunk',
   'account.signIns.passwordFailed': 'Hibás jelszó',
   'account.signIns.codeFailed': 'Hibás kód',
   'account.signIns.blocked': 'Túl sok próbálkozás után feltartóztatva',

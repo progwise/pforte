@@ -47,15 +47,22 @@ describe.skipIf(!hasDatabase)('passkeys in a real browser', () => {
     await h?.close()
   })
 
-  /** Signs the person in to their account pages, as they would: password, then the code from the mail. */
-  const signIn = async (target: Page) => {
+  /**
+   * Signs the person in to their account pages, as they would: password, then the code from the mail. On a
+   * device that can make a passkey the offer follows the code; `offer` says what the person does with it.
+   */
+  const signIn = async (target: Page, offer: 'not now' | 'create' | 'stop' = 'not now') => {
     await target.goto(`${origin}/account`)
     await target.fill('#email', EMAIL)
     await target.fill('#password', 'dev-password')
-    await target.click('button[type="submit"]')
+    await target.click('form[action$="/login"] button[type="submit"]')
     await target.waitForURL(/\/interaction\/[^/]+\/code$/)
     await target.fill('#code', h.notifications.findLast((notification) => notification.kind === 'login-code' && notification.user.email === EMAIL)!.code!)
-    await target.click('button[type="submit"]')
+    await target.click('form[action$="/code"] button[type="submit"]')
+    await target.waitForURL((url) => url.pathname === '/account' || url.pathname.endsWith('/passkey-offer'))
+    if (!target.url().endsWith('/passkey-offer') || offer === 'stop') return
+    if (offer === 'create') await target.click('form[data-passkey="create"] button[type="submit"]')
+    else await target.click('form[action$="/passkey-offer/skip"] button')
     await target.waitForURL(`${origin}/account`)
   }
   const watch = (target: Page) => {
@@ -194,6 +201,167 @@ describe.skipIf(!hasDatabase)('passkeys in a real browser', () => {
     } finally {
       await plain.close()
     }
+  })
+
+  describe('signing in', () => {
+    const withPasskey = async () => {
+      await page.goto(`${origin}/account/passkeys/new`)
+      await page.click('form[data-passkey] button[type="submit"]')
+      await page.waitForURL(`${origin}/account/passkeys`)
+    }
+    /** The same browser and device, as if on another day: signed out everywhere, the passkey still on the device. */
+    const signedOut = () => context.clearCookies()
+    /**
+     * Takes the browser's autofill away, so that only the button asks the device. Chrome's device in software
+     * answers the quiet question of the autofill by itself, as a person does who picks their passkey there.
+     */
+    const withoutAutofill = () =>
+      page.addInitScript(() => {
+        PublicKeyCredential.isConditionalMediationAvailable = () => Promise.resolve(false)
+      })
+
+    it('signs in through the autofill of the e-mail field, without a click on the page', async () => {
+      await withPasskey()
+      await signedOut()
+
+      await page.goto(`${origin}/account`)
+      // Straight to the account pages, which insist on two factors: no password, no code.
+      await page.waitForURL(`${origin}/account`)
+
+      await page.goto(`${origin}/account/sessions`)
+      expect(await page.textContent('table.list')).toContain('With a passkey')
+      // The one code of this test was for the sign-in before the passkey existed.
+      expect(h.notifications.filter((notification) => notification.kind === 'login-code')).toHaveLength(1)
+      expect(complaints).toEqual([])
+    })
+
+    it('shows the passkey button once the script has run, and signs in with a click on it', async () => {
+      await withPasskey()
+      await signedOut()
+      await withoutAutofill()
+
+      await page.goto(`${origin}/account`)
+      await page.waitForURL(/\/interaction\/[^/]+$/)
+      await expect.poll(() => page.isVisible('form[data-passkey="get"] button')).toBe(true)
+      await page.click('form[data-passkey="get"] button')
+
+      await page.waitForURL(`${origin}/account`)
+      expect(complaints).toEqual([])
+    })
+
+    it('signs in in a browser that cannot read or write the JSON form itself', async () => {
+      await withPasskey()
+      await signedOut()
+      await page.addInitScript(() => {
+        // @ts-expect-error: taking away what older browsers do not have
+        delete PublicKeyCredential.parseRequestOptionsFromJSON
+        // @ts-expect-error: as above
+        delete PublicKeyCredential.prototype.toJSON
+      })
+
+      await page.goto(`${origin}/account`)
+
+      await page.waitForURL(`${origin}/account`)
+      expect(complaints).toEqual([])
+    })
+
+    it('says so when the device does not go through with it, and password and code still work on that page', async () => {
+      await withPasskey()
+      await signedOut()
+      await devtools.send('WebAuthn.setUserVerified', { authenticatorId, isUserVerified: false })
+      await page.goto(`${origin}/account`)
+      await page.waitForURL(/\/interaction\/[^/]+$/)
+
+      await page.click('form[data-passkey="get"] button')
+
+      await expect.poll(() => page.isVisible('form[data-passkey="get"] [data-passkey-message="failed"]')).toBe(true)
+      expect(await page.isEnabled('form[data-passkey="get"] button')).toBe(true)
+      await page.fill('#email', EMAIL)
+      await page.fill('#password', 'dev-password')
+      await page.click('form[action$="/login"] button[type="submit"]')
+      await page.waitForURL(/\/interaction\/[^/]+\/code$/)
+    })
+
+    it('says so when pforte does not know the passkey any more, on the login page', async () => {
+      await withPasskey()
+      await h.database.pool.query('delete from passkeys')
+      await signedOut()
+      await withoutAutofill()
+      await page.goto(`${origin}/account`)
+      await page.waitForURL(/\/interaction\/[^/]+$/)
+
+      await page.click('form[data-passkey="get"] button')
+
+      await page.waitForURL(/\/interaction\/[^/]+\/passkey$/)
+      expect(await page.textContent('.error')).toContain('This passkey cannot sign in here.')
+      // The page is a login page again, with its passkey button.
+      await expect.poll(() => page.isVisible('form[data-passkey="get"] button')).toBe(true)
+    })
+
+    it('hides the passkey button where the script does not run: the page is the one for password and code', async () => {
+      const plain = await chrome.newContext({ javaScriptEnabled: false })
+      try {
+        const target = await plain.newPage()
+        await target.goto(`${origin}/account`)
+        expect(await target.isVisible('form[data-passkey="get"]')).toBe(false)
+        expect(await target.isVisible('#password')).toBe(true)
+      } finally {
+        await plain.close()
+      }
+    })
+  })
+
+  describe('the offer after a sign-in with a code', () => {
+    it('comes on a device that can make a passkey, makes one, and is not made again', async () => {
+      await context.clearCookies()
+
+      await signIn(page, 'stop')
+      expect(page.url()).toMatch(/\/passkey-offer$/)
+      await expect.poll(() => page.isEnabled('form[data-passkey="create"] button[type="submit"]')).toBe(true)
+      await page.click('form[data-passkey="create"] button[type="submit"]')
+      await page.waitForURL(`${origin}/account`)
+
+      expect(await stored()).toHaveLength(1)
+      const { credentials } = await devtools.send('WebAuthn.getCredentials', { authenticatorId })
+      expect(credentials).toHaveLength(1)
+      expect(complaints).toEqual([])
+
+      // The browser is not asked again: after the next code it goes straight on.
+      await page.goto(`${origin}/account/passkeys`)
+      await page.click('form[action="/account/passkeys/remove"] button')
+      await page.waitForURL(`${origin}/account/passkeys`)
+      // Gone from the device as well: otherwise it would answer the login page with a passkey pforte no longer knows.
+      await devtools.send('WebAuthn.clearCredentials', { authenticatorId })
+      const cookies = await context.cookies(`${origin}/interaction/x`)
+      await context.clearCookies()
+      await context.addCookies(cookies.filter((cookie) => cookie.name === 'pforte_passkey_offer'))
+      await signIn(page, 'stop')
+      expect(page.url()).toBe(`${origin}/account`)
+    })
+
+    it('does not come where the device cannot check its person', async () => {
+      const other = await chrome.newContext()
+      try {
+        const target = await other.newPage()
+        const session = await other.newCDPSession(target)
+        await session.send('WebAuthn.enable')
+        // A security key on a cable: no face, no finger, nothing of the device's own.
+        await session.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'usb', hasResidentKey: true, hasUserVerification: false, automaticPresenceSimulation: true } })
+
+        await signIn(target, 'stop')
+
+        expect(target.url()).toBe(`${origin}/account`)
+      } finally {
+        await other.close()
+      }
+    })
+
+    it('goes on with "Not now"', async () => {
+      await context.clearCookies()
+      await signIn(page, 'not now')
+      expect(page.url()).toBe(`${origin}/account`)
+      expect(await stored()).toEqual([])
+    })
   })
 
   it('lets the policy stop every script but its own', async () => {

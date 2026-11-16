@@ -90,17 +90,17 @@ const sendPasswordResetCode = createPasswordResetSender({
   codeSecrets: deriveCodeSecrets(config.cookieKeys),
   issuer: config.issuer,
 })
-const passkeys = createPasskeys({ issuer: config.issuer, ui, name: organisationName })
+const passkeys = createPasskeys({ issuer: config.issuer, ui, db, notifier, background, cookieKeys: config.cookieKeys, name: organisationName, accountPages: accountPages.available })
 const app = buildApp({
   ui,
   passkeys,
   trustProxy: config.trustProxy,
   issuer: config.issuer,
   getDatabaseTime: () => getDatabaseTime(db),
-  oidc: { provider, authenticate, db, notifier, cookieKeys: config.cookieKeys, ui, limiter, audit },
+  oidc: { provider, authenticate, db, notifier, cookieKeys: config.cookieKeys, ui, limiter, audit, passkeys },
   manage: { issuer: config.issuer, cookieKeys: config.cookieKeys, ui, organisation: organisationName, timeZone: config.timeZone },
   accountArea: accountPages.available
-    ? { db, issuer: config.issuer, cookieKeys: config.cookieKeys, ui, timeZone: config.timeZone, clientLogouts, sendPasswordResetCode, limiter, audit, passkeys, notifier, background }
+    ? { db, issuer: config.issuer, cookieKeys: config.cookieKeys, ui, timeZone: config.timeZone, clientLogouts, sendPasswordResetCode, limiter, audit, passkeys }
     : undefined,
   account: {
     db,
@@ -116,6 +116,7 @@ const app = buildApp({
     audit,
     background,
     clientLogouts,
+    passkeys,
   },
   admin: {
     db,

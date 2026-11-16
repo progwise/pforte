@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { createTestDatabase, hasDatabase } from '../test/test-database.js'
-import { addPasskey, deleteExpiredPasskeyChallenges, listPasskeys, MAX_PASSKEYS, openPasskeyChallenge, removePasskey, takePasskeyChallenge } from './passkeys.js'
+import { addPasskey, deleteExpiredPasskeyChallenges, findPasskeyByCredentialId, listPasskeys, MAX_PASSKEYS, openPasskeyChallenge, recordPasskeyUse, removePasskey, takePasskeyChallenge } from './passkeys.js'
 import { createUser, deleteUser } from './users.js'
 
 const context = { actor: { type: 'client' as const, id: 'tester' }, ip: '203.0.113.7', userAgent: 'vitest' }
@@ -97,6 +97,20 @@ describe.skipIf(!hasDatabase)('passkeys', () => {
     expect(removed[0].details).toEqual({ email: 'anna@example.com', passkeyId: own.id, label: 'own' })
   })
 
+  it('is found by the id its device knows it by, and notes when it was used', async () => {
+    const added = await add(context, anna, passkey('one'))
+    if (added.kind !== 'added') throw new Error('not added')
+
+    const found = await findPasskeyByCredentialId(database.db, 'credential-one')
+    expect(found).toEqual({ id: added.id, userId: anna.id, credentialId: 'credential-one', publicKey: 'key-one', counter: 0, transports: ['internal'] })
+    expect(await findPasskeyByCredentialId(database.db, 'credential-nobody-has')).toBeUndefined()
+
+    const when = new Date('2026-11-16T10:00:00Z')
+    await recordPasskeyUse(database.db, added.id, { counter: 5, synced: false }, when)
+    expect(await listPasskeys(database.db, anna.id)).toMatchObject([{ lastUsedAt: when, synced: false }])
+    expect((await findPasskeyByCredentialId(database.db, 'credential-one'))!.counter).toBe(5)
+  })
+
   it('keeps a long label short', async () => {
     await add(context, anna, { ...passkey('long'), label: 'x'.repeat(500) })
     expect((await listPasskeys(database.db, anna.id))[0]!.label).toHaveLength(100)
@@ -104,7 +118,7 @@ describe.skipIf(!hasDatabase)('passkeys', () => {
 
   describe('the question a device is asked', () => {
     const soon = () => new Date(Date.now() + 5 * 60_000)
-    const asked = (challenge: string, user = anna, grantId = 'grant-1') => ({ challenge, userId: user.id, grantId })
+    const asked = (challenge: string, user = anna, boundTo = 'account:grant-1') => ({ challenge, userId: user.id, boundTo })
     const pending = async () => Number((await database.pool.query('select count(*) from passkey_challenges')).rows[0].count)
 
     it('is good for one answer', async () => {
@@ -127,7 +141,7 @@ describe.skipIf(!hasDatabase)('passkeys', () => {
       await openPasskeyChallenge(database.db, asked('q1'), soon())
 
       expect(await takePasskeyChallenge(database.db, asked('q1', ben))).toBe(false)
-      expect(await takePasskeyChallenge(database.db, asked('q1', anna, 'grant-2'))).toBe(false)
+      expect(await takePasskeyChallenge(database.db, asked('q1', anna, 'account:grant-2'))).toBe(false)
       expect(await takePasskeyChallenge(database.db, asked('never-asked'))).toBe(false)
       expect(await takePasskeyChallenge(database.db, asked('q1'))).toBe(true)
     })
@@ -139,18 +153,43 @@ describe.skipIf(!hasDatabase)('passkeys', () => {
       expect(await pending()).toBe(0)
     })
 
-    it('clears away what has run out: for the person with their next question, for everybody with the cleanup', async () => {
+    it('clears away what has run out: in a place with its next question, everywhere with the cleanup', async () => {
       const past = new Date(Date.now() - 1000)
-      await openPasskeyChallenge(database.db, asked('annas-old'), past, new Date(0))
-      await openPasskeyChallenge(database.db, asked('bens-open', ben), soon())
-      await openPasskeyChallenge(database.db, asked('bens-old', ben), past, new Date(0))
+      await openPasskeyChallenge(database.db, asked('annas-old'), past, { now: new Date(0) })
+      await openPasskeyChallenge(database.db, asked('bens-open', ben, 'account:grant-7'), soon())
+      await openPasskeyChallenge(database.db, asked('bens-old', ben, 'account:grant-9'), past, { now: new Date(0) })
 
       await openPasskeyChallenge(database.db, asked('annas-new'), soon())
       expect(await pending()).toBe(3)
 
       expect(await deleteExpiredPasskeyChallenges(database.db)).toBe(1)
       expect(await takePasskeyChallenge(database.db, asked('annas-new'))).toBe(true)
-      expect(await takePasskeyChallenge(database.db, asked('bens-open', ben))).toBe(true)
+      expect(await takePasskeyChallenge(database.db, asked('bens-open', ben, 'account:grant-7'))).toBe(true)
+    })
+
+    it('of a sign-in names nobody, and is not the question of a new passkey in the same place', async () => {
+      const signIn = { challenge: 'q-sign-in', boundTo: 'sign-in:interaction-1' }
+      await openPasskeyChallenge(database.db, signIn, soon())
+
+      // Not for a person, not in another sign-in.
+      expect(await takePasskeyChallenge(database.db, { ...signIn, userId: anna.id })).toBe(false)
+      expect(await takePasskeyChallenge(database.db, { ...signIn, boundTo: 'sign-in:interaction-2' })).toBe(false)
+      expect(await takePasskeyChallenge(database.db, signIn)).toBe(true)
+
+      // And the other way round: a question about a new passkey is none for a sign-in.
+      await openPasskeyChallenge(database.db, asked('q-create', anna, 'offer:interaction-1'), soon())
+      expect(await takePasskeyChallenge(database.db, { challenge: 'q-create', boundTo: 'offer:interaction-1' })).toBe(false)
+    })
+
+    it('can be the only one of its place: a login page that is shown again has the newest question', async () => {
+      const place = 'sign-in:interaction-1'
+      await openPasskeyChallenge(database.db, { challenge: 'first', boundTo: place }, soon(), { only: true })
+      await openPasskeyChallenge(database.db, { challenge: 'elsewhere', boundTo: 'sign-in:interaction-2' }, soon(), { only: true })
+      await openPasskeyChallenge(database.db, { challenge: 'second', boundTo: place }, soon(), { only: true })
+
+      expect(await takePasskeyChallenge(database.db, { challenge: 'first', boundTo: place })).toBe(false)
+      expect(await takePasskeyChallenge(database.db, { challenge: 'second', boundTo: place })).toBe(true)
+      expect(await takePasskeyChallenge(database.db, { challenge: 'elsewhere', boundTo: 'sign-in:interaction-2' })).toBe(true)
     })
 
     it('goes with the person when they are deleted', async () => {

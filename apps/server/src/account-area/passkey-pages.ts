@@ -1,28 +1,15 @@
-import { addPasskey, listPasskeys, MAX_PASSKEYS, openPasskeyChallenge, type RequestContext, removePasskey, takePasskeyChallenge } from '@progwise/pforte-db/admin'
+import { listPasskeys, MAX_PASSKEYS, type RequestContext, removePasskey } from '@progwise/pforte-db/admin'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
-import { NotifierUnavailableError } from '../notifications/notifier.js'
-import { passkeyLabel } from '../passkeys/index.js'
 import { escapeHtml } from '../ui/pages.js'
 import { ACCOUNT_PATH } from './constants.js'
 import type { AccountContext } from './routes.js'
 import { STEP_UP_SECONDS } from './routes.js'
-import type { AccountUser } from './session.js'
+import type { AccountSession, AccountUser } from './session.js'
 
 const PASSKEYS = `${ACCOUNT_PATH}/passkeys`
 const NEW = `${PASSKEYS}/new`
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-/** The challenge an answer says it is for. It is read from the answer only to find the question; whether the answer is one is checked after. */
-const challengeNamedBy = (answer: unknown) => {
-  try {
-    const clientData = (answer as { response?: { clientDataJSON?: unknown } } | null)?.response?.clientDataJSON
-    const challenge = typeof clientData === 'string' ? (JSON.parse(Buffer.from(clientData, 'base64url').toString()) as { challenge?: unknown } | null)?.challenge : undefined
-    return typeof challenge === 'string' && challenge ? challenge : undefined
-  } catch {
-    return undefined
-  }
-}
 
 /**
  * The pages where a person sees their passkeys, adds one and removes one. As on the other pages of the area,
@@ -37,7 +24,10 @@ const challengeNamedBy = (answer: unknown) => {
  * answer that names it. So an answer works once: not a second time, and not again after its passkey was removed.
  */
 export const registerPasskeyPages = (app: FastifyInstance, ctx: AccountContext) => {
-  const { db, issuer, gate, viewFor, page, redirectWith, requireRecentSignIn, formatTime, passkeys, notifier, background } = ctx
+  const { db, gate, viewFor, page, redirectWith, requireRecentSignIn, formatTime, passkeys } = ctx
+
+  /** A question belongs to the sign-in at the account pages it was asked in. */
+  const boundTo = (session: AccountSession) => `account:${session.grantId}`
 
   const selfContext = (request: FastifyRequest, user: AccountUser): RequestContext => ({
     actor: { type: 'user', id: user.id },
@@ -85,11 +75,8 @@ ${list}
     if (!requireRecentSignIn(reply, session, NEW)) return reply
     const { t } = viewFor(request, user)
 
-    const own = await listPasskeys(db, user.id)
-    if (own.length >= MAX_PASSKEYS) return redirectWith(reply, PASSKEYS, { kind: 'error', key: 'account.passkeys.tooMany', values: { count: String(MAX_PASSKEYS) } })
-
-    const options = await passkeys.ceremonies.creationOptions(user, own)
-    await openPasskeyChallenge(db, { challenge: options.challenge, userId: user.id, grantId: session.grantId }, new Date(Date.now() + STEP_UP_SECONDS * 1000))
+    const options = await passkeys.enrolment.ask(user, boundTo(session), STEP_UP_SECONDS)
+    if (!options) return redirectWith(reply, PASSKEYS, { kind: 'error', key: 'account.passkeys.tooMany', values: { count: String(MAX_PASSKEYS) } })
     passkeys.script.allow(reply)
 
     // Without the script, or in a browser that knows no passkeys, the page stays as it is sent: the button
@@ -117,39 +104,9 @@ ${passkeys.script.tag}`
     if (!signedIn) return reply
     const { user, session } = signedIn
 
-    let answer: unknown
-    try {
-      answer = JSON.parse(typeof request.body?.credential === 'string' ? request.body.credential : '')
-    } catch {
-      answer = undefined
-    }
-    const challenge = challengeNamedBy(answer)
-    if (!challenge) return redirectWith(reply, PASSKEYS, { kind: 'error', key: 'account.passkeys.rejected' })
-
-    // The question is good for one answer, whatever that answer turns out to be: it is used up here, before the
-    // answer is looked at. One that was never asked, was asked of somebody else or in another sign-in, has run
-    // out or was answered before is not there.
-    if (!(await takePasskeyChallenge(db, { challenge, userId: user.id, grantId: session.grantId }))) return redirectWith(reply, PASSKEYS, { kind: 'error', key: 'account.passkeys.expired' })
-
-    const created = await passkeys.ceremonies.verifyCreation(answer, challenge)
-    if (!created) return redirectWith(reply, PASSKEYS, { kind: 'error', key: 'account.passkeys.rejected' })
-
-    const label = passkeyLabel(request.headers['user-agent'])
-    const added = await db.transaction((tx) => addPasskey(tx, selfContext(request, user), user, { ...created, label }))
-    if (added.kind === 'too-many') return redirectWith(reply, PASSKEYS, { kind: 'error', key: 'account.passkeys.tooMany', values: { count: String(MAX_PASSKEYS) } })
-    if (added.kind === 'duplicate') return redirectWith(reply, PASSKEYS, { kind: 'error', key: 'account.passkeys.duplicate' })
-
-    // The rightful person learns of a passkey that somebody else added. Not tied to the response: a mail server
-    // that is down must not turn a passkey that exists into an error.
-    const { t } = viewFor(request, user)
-    background.run(async () => {
-      try {
-        await notifier.sendPasskeyAdded(user, { device: label ?? t('account.passkeys.unknown'), url: `${issuer}${PASSKEYS}` })
-      } catch (error) {
-        if (error instanceof NotifierUnavailableError) request.log.error(error, 'the notice that a passkey was added could not be sent')
-        else throw error
-      }
-    })
+    const outcome = await passkeys.enrolment.complete(request, user, boundTo(session), request.body?.credential)
+    if (outcome === 'too-many') return redirectWith(reply, PASSKEYS, { kind: 'error', key: 'account.passkeys.tooMany', values: { count: String(MAX_PASSKEYS) } })
+    if (outcome !== 'added') return redirectWith(reply, PASSKEYS, { kind: 'error', key: `account.passkeys.${outcome}` })
     return redirectWith(reply, PASSKEYS, { kind: 'ok', key: 'account.passkeys.added' })
   })
 

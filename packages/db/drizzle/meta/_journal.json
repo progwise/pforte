@@ -92,6 +92,13 @@
       "when": 1794837364079,
       "tag": "0012_add_passkey_challenges",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794837848019,
+      "tag": "0013_bind_passkey_challenges",
+      "breakpoints": true
     }
   ]
 }

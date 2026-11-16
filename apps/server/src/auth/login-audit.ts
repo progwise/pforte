@@ -13,6 +13,13 @@ export interface Origin {
 
 export type CodePurpose = 'login' | 'password_reset' | 'activation'
 
+/**
+ * Why a sign-in with a passkey was refused: the answer was no answer, its question was not asked here or had run
+ * out, pforte does not know the passkey (it was removed), its person cannot sign in, the device named another
+ * person than the one the passkey belongs to, or the signature did not hold.
+ */
+export type PasskeyFailure = 'malformed' | 'expired' | 'unknown_passkey' | 'not_allowed' | 'wrong_person' | 'verification_failed'
+
 /** What the audit log is told about attempts to sign in. See docs/audit-log.md. */
 export interface LoginAudit {
   passwordFailed(origin: Origin, attempt: { email: string; reason: AuthFailure; userId?: string }): Promise<void>
@@ -21,7 +28,9 @@ export interface LoginAudit {
   codeSent(origin: Origin, sent: { userId: string; purpose: CodePurpose; channel: 'email' | 'sms'; fellBack?: boolean }): Promise<void>
   codeFailed(origin: Origin, failure: { userId?: string; email?: string; purpose: CodePurpose; reason: string }): Promise<void>
   /** `deviceRemembered`: the person ticked "Remember this device" with the code, and the browser was not remembered yet. */
-  succeeded(origin: Origin, success: { userId: string; method: 'code' | 'remembered_device'; channel?: 'email' | 'sms'; acr: string; deviceRemembered?: boolean }): Promise<void>
+  succeeded(origin: Origin, success: { userId: string; method: 'code' | 'remembered_device' | 'passkey'; channel?: 'email' | 'sms'; acr: string; deviceRemembered?: boolean }): Promise<void>
+  /** A sign-in with a passkey was refused. `userId` is whose passkey it was, if pforte knows the passkey. */
+  passkeyFailed(origin: Origin, failure: { userId?: string; reason: PasskeyFailure }): Promise<void>
   resetRequested(origin: Origin, request: { userId: string }): Promise<void>
 }
 
@@ -81,6 +90,8 @@ export const createLoginAudit = ({ db, secret, onError = () => {} }: LoginAuditO
 
     succeeded: (origin, { userId, method, channel, acr, deviceRemembered }) =>
       record(origin, { action: 'login.succeeded', userId, details: { method, ...(channel ? { channel } : {}), acr, ...(deviceRemembered ? { deviceRemembered: true } : {}) } }),
+
+    passkeyFailed: (origin, { userId, reason }) => record(origin, { action: 'login.passkey_failed', userId, details: { reason } }),
 
     resetRequested: (origin, { userId }) => record(origin, { action: 'user.password_reset.request', userId, details: { self: true } }),
   }

@@ -32,22 +32,25 @@ export const passkeys = pgTable(
 )
 
 /**
- * The questions devices were asked when a passkey is to be created, until their answers come back. A question is
- * good for one answer: the row is deleted by the answer that names it, so the same answer cannot be sent again,
- * also not after its passkey was removed. It belongs to one person and to the sign-in they asked it in.
+ * The questions devices were asked, until their answers come back: to make a passkey, or to sign in with one.
+ * A question is good for one answer: the row is deleted by the answer that names it, so the same answer cannot be
+ * sent again, also not after its passkey was removed.
  */
 export const passkeyChallenges = pgTable(
   'passkey_challenges',
   {
     /** The random value the device signs, base64url. */
     challenge: text().primaryKey(),
-    userId: uuid()
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    /** The sign-in at the account pages (its grant) in which the question was asked. */
-    grantId: text().notNull(),
+    /** The person a new passkey is for. Empty for a sign-in, where the passkey says who it is. */
+    userId: uuid().references(() => users.id, { onDelete: 'cascade' }),
+    /**
+     * Where the question was asked, and the only place its answer is taken: a sign-in at the account pages
+     * (`account:<grant>`), a sign-in in progress (`sign-in:<interaction>`, `offer:<interaction>`) or an
+     * activation (`activation:<user>`).
+     */
+    boundTo: text().notNull(),
     expiresAt: timestamptz().notNull(),
     ...timestamps(),
   },
-  (table) => [index('passkey_challenges_user_id').on(table.userId), index('passkey_challenges_expires_at').on(table.expiresAt)],
+  (table) => [index('passkey_challenges_bound_to').on(table.boundTo), index('passkey_challenges_expires_at').on(table.expiresAt)],
 )

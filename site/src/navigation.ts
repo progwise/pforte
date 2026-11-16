@@ -38,6 +38,7 @@ export const navigation: NavigationGroup[] = [
       { slug: 'configuration', source: 'docs/configuration.md' },
       { slug: 'administration', source: 'docs/administration.md', menu: 'The administration' },
       { slug: 'account', source: 'docs/account.md', menu: 'The account pages' },
+      { slug: 'passkeys', source: 'docs/passkeys.md' },
       { slug: 'import', source: 'docs/import.md', menu: 'Importing users' },
       { slug: 'branding-and-languages', source: 'docs/branding-and-languages.md', menu: 'Branding and languages' },
       { slug: 'sms', source: 'docs/sms.md', menu: 'Codes by SMS' },

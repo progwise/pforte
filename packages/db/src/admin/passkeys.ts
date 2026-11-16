@@ -1,4 +1,4 @@
-import { and, count, desc, eq, lt } from 'drizzle-orm'
+import { and, count, desc, eq, isNull, lt } from 'drizzle-orm'
 import { type DatabaseOrTransaction, recordAuditEvent, type Transaction } from '../audit.js'
 import type { Database } from '../index.js'
 import { passkeyChallenges, passkeys, users } from '../schema/index.js'
@@ -78,27 +78,37 @@ export const removePasskey = async (tx: DatabaseOrTransaction, context: RequestC
 
 export interface PasskeyChallenge {
   challenge: string
-  userId: string
-  /** The sign-in at the account pages in which the question is asked. */
-  grantId: string
+  /** The person a new passkey is for. Left out for a sign-in, where the passkey says who it is. */
+  userId?: string
+  /** Where the question is asked, and the only place its answer is taken; see the table. */
+  boundTo: string
 }
 
-/** Notes a question a device is about to be asked. What has run out for this person is cleared away on the occasion. */
-export const openPasskeyChallenge = async (db: DatabaseOrTransaction, { challenge, userId, grantId }: PasskeyChallenge, expiresAt: Date, now = new Date()) => {
-  await db.delete(passkeyChallenges).where(and(eq(passkeyChallenges.userId, userId), lt(passkeyChallenges.expiresAt, now)))
-  await db.insert(passkeyChallenges).values({ challenge, userId, grantId, expiresAt })
+const sameQuestion = ({ challenge, userId, boundTo }: PasskeyChallenge) =>
+  and(eq(passkeyChallenges.challenge, challenge), eq(passkeyChallenges.boundTo, boundTo), userId ? eq(passkeyChallenges.userId, userId) : isNull(passkeyChallenges.userId))
+
+/**
+ * Notes a question a device is about to be asked. What has run out in the same place is cleared away on the
+ * occasion. With `only`, every other question of that place goes too: a sign-in page that is shown again has one
+ * question, the newest.
+ */
+export const openPasskeyChallenge = async (
+  db: DatabaseOrTransaction,
+  { challenge, userId, boundTo }: PasskeyChallenge,
+  expiresAt: Date,
+  { now = new Date(), only = false }: { now?: Date; only?: boolean } = {},
+) => {
+  await db.delete(passkeyChallenges).where(and(eq(passkeyChallenges.boundTo, boundTo), only ? undefined : lt(passkeyChallenges.expiresAt, now)))
+  await db.insert(passkeyChallenges).values({ challenge, userId, boundTo, expiresAt })
 }
 
 /**
- * Uses a question up: true if it was asked of this person in this sign-in and has not run out. The row is
- * deleted in the same statement, so of two answers that name it, also at the same moment, one finds it and the
- * other does not. A question of somebody else, or of another sign-in, is not touched.
+ * Uses a question up: true if it was asked in this place (and, for a new passkey, of this person) and has not
+ * run out. The row is deleted in the same statement, so of two answers that name it, also at the same moment,
+ * one finds it and the other does not. A question of another place or person is not touched.
  */
-export const takePasskeyChallenge = async (db: DatabaseOrTransaction, { challenge, userId, grantId }: PasskeyChallenge, now = new Date()) => {
-  const [taken] = await db
-    .delete(passkeyChallenges)
-    .where(and(eq(passkeyChallenges.challenge, challenge), eq(passkeyChallenges.userId, userId), eq(passkeyChallenges.grantId, grantId)))
-    .returning({ expiresAt: passkeyChallenges.expiresAt })
+export const takePasskeyChallenge = async (db: DatabaseOrTransaction, question: PasskeyChallenge, now = new Date()) => {
+  const [taken] = await db.delete(passkeyChallenges).where(sameQuestion(question)).returning({ expiresAt: passkeyChallenges.expiresAt })
   return taken !== undefined && taken.expiresAt > now
 }
 
@@ -106,4 +116,18 @@ export const takePasskeyChallenge = async (db: DatabaseOrTransaction, { challeng
 export const deleteExpiredPasskeyChallenges = async (db: Database, now = new Date()) => {
   const deleted = await db.delete(passkeyChallenges).where(lt(passkeyChallenges.expiresAt, now)).returning({ challenge: passkeyChallenges.challenge })
   return deleted.length
+}
+
+/** The passkey a device names when it signs in, with what is needed to check its signature, or undefined. */
+export const findPasskeyByCredentialId = async (db: DatabaseOrTransaction, credentialId: string) => {
+  const [passkey] = await db
+    .select({ id: passkeys.id, userId: passkeys.userId, credentialId: passkeys.credentialId, publicKey: passkeys.publicKey, counter: passkeys.counter, transports: passkeys.transports })
+    .from(passkeys)
+    .where(eq(passkeys.credentialId, credentialId))
+  return passkey
+}
+
+/** Notes a sign-in with a passkey: when, the counter its device reported, and whether it is synced now. */
+export const recordPasskeyUse = async (db: DatabaseOrTransaction, passkeyId: string, { counter, synced }: { counter: number; synced: boolean }, now = new Date()) => {
+  await db.update(passkeys).set({ counter, synced, lastUsedAt: now }).where(eq(passkeys.id, passkeyId))
 }

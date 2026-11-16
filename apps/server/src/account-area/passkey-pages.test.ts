@@ -45,8 +45,8 @@ describe.skipIf(!hasDatabase)('the account pages: passkeys', () => {
   const idOf = async (email: string) => (await h.database.pool.query(`select id from users where email = $1`, [email])).rows[0].id as string
   const passkeysOf = async (email: string) => (await h.database.pool.query(`select * from passkeys where user_id = $1 order by created_at`, [await idOf(email)])).rows
   const mails = () => h.notifications.filter((notification) => notification.kind === 'passkey-added')
-  /** The questions pforte is waiting for an answer to. */
-  const open = async () => (await h.database.pool.query('select challenge, user_id, expires_at from passkey_challenges order by created_at')).rows
+  /** The questions about a new passkey that pforte is waiting for an answer to. Those of the login pages are not these. */
+  const open = async () => (await h.database.pool.query(`select challenge, user_id, expires_at from passkey_challenges where bound_to like 'account:%' order by created_at`)).rows
 
   /** A browser in which this person is signed in to their account pages, a moment ago. */
   const signedIn = async (email: string) => {
