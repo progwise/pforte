@@ -55,7 +55,9 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   application the person had signed in to, also one that is signed in only as long as its browser session lasts. Now the
   table has the applications that hold a refresh token, such as an app on a phone, as the account pages show them; the
   others are in the table of browsers. `GET /admin/users/{id}/sessions` still returns every grant and says which is which
-  with the new field `staysSignedIn` ([#60](https://github.com/progwise/pforte/issues/60)).
+  with the new field `staysSignedIn`. **If your client of the admin API checks answers against the OpenAPI document of
+  0.2.0, it rejects this one**: that document allows no other fields in a grant. Use the document of this version. A
+  client that ignores fields it does not know needs no change ([#60](https://github.com/progwise/pforte/issues/60)).
 
 ## 0.2.0 (2026-10-23)
 
