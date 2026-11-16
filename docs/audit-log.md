@@ -55,6 +55,11 @@ for the code of a new password. These are the events an administrator's action w
 differences: the actor is the person themselves (`actorType: user`, `actorId` equal to the target), and the details carry
 `self: true`.
 
+A person can also confirm their phone number there, which only they can do: `user.phone.confirm`, with `self: true`. The
+code that was sent for it is a `login.code_sent` with `purpose: activation` and `channel: sms`, a wrong one a
+`login.code_failed` with the same purpose, as at the step after an activation. The confirmation at that step itself is
+not recorded.
+
 ### Passkeys
 
 | Action | When | Details |

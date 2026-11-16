@@ -74,3 +74,8 @@ something a static request cannot do, for example fetching a token before each c
 Numbers are stored in international format (`+4915112345678`). A number only receives codes after the user has
 confirmed it with a code, which happens right after choosing the first password. When an administrator changes
 a user's number, the confirmation is dropped, and codes go by e-mail until the new number is confirmed.
+
+A person who has a number that is not confirmed (they skipped the step, got the number later, or it was changed)
+confirms it on [the account pages](account.md): the overview there says so next to the number and has the button
+*Confirm with a code by SMS*. An administrator sees on a person's page whether the phone is confirmed, and cannot
+confirm it for them: only the person holds the phone.

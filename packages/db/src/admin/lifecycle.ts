@@ -241,6 +241,15 @@ export const requestPasswordReset = async (tx: DatabaseOrTransaction, context: R
   return { user, logouts }
 }
 
+/**
+ * A person entered the code that was sent to their phone number: codes can go there by SMS from now on. Keeps the
+ * first time if the number was confirmed before.
+ */
+export const confirmPhone = async (tx: DatabaseOrTransaction, context: RequestContext, user: UserRow) => {
+  await tx.update(users).set({ phoneVerifiedAt: new Date() }).where(and(eq(users.id, user.id), isNull(users.phoneVerifiedAt)))
+  await recordAuditEvent(tx, audit(context, 'user.phone.confirm', user, {}))
+}
+
 export const endSessions = async (tx: DatabaseOrTransaction, context: RequestContext, user: UserRow) => {
   assertAllowed(user, 'end-sessions')
   const { logouts, ...ended } = await endUserSessions(tx, user.id)

@@ -79,7 +79,7 @@ describe.skipIf(!hasDatabase)('the account pages: sessions, devices, sign-ins an
   const lastAudit = async (action: string, email: string) => (await h.audit(action, await idOf(email))).at(-1)
 
   const PAGES = ['/account/sessions', '/account/devices', '/account/sign-ins', '/account/password']
-  const ACTIONS = ['/account/sessions/end', '/account/devices/forget', '/account/devices/forget-all', '/account/password']
+  const ACTIONS = ['/account/sessions/end', '/account/devices/forget', '/account/devices/forget-all', '/account/password', '/account/phone/send']
 
   describe('every page', () => {
     it('opens for the person, with the five sections and its own marked', async () => {

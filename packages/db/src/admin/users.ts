@@ -1,6 +1,6 @@
-import { and, asc, eq, exists, gt, ilike, or, sql } from 'drizzle-orm'
+import { and, asc, eq, exists, gt, ilike, isNull, or, sql } from 'drizzle-orm'
 import { type AuditEventInput, type DatabaseOrTransaction, recordAuditEvent } from '../audit.js'
-import { userClaims, users } from '../schema/index.js'
+import { otpCodes, userClaims, users } from '../schema/index.js'
 import { assertAdminStays } from './admins.js'
 import { endUserSessions } from './lifecycle.js'
 
@@ -148,7 +148,15 @@ export const updateUser = async (
   if (changes.isAdmin && changes.isAdmin.to === false) await assertAdminStays(tx, context, user, 'take the admin right from')
   const values: Record<string, unknown> = Object.fromEntries(Object.entries(changes).map(([field, { to }]) => [field, to]))
   // A confirmation belongs to the address or number that was confirmed, not to the user.
-  if (changes.phone) values.phoneVerifiedAt = null
+  if (changes.phone) {
+    values.phoneVerifiedAt = null
+    // A code that is on its way to the old number must not confirm the new one.
+    const now = new Date()
+    await tx
+      .update(otpCodes)
+      .set({ expiresAt: now })
+      .where(and(eq(otpCodes.userId, user.id), eq(otpCodes.purpose, 'activation'), isNull(otpCodes.consumedAt), gt(otpCodes.expiresAt, now)))
+  }
   if (changes.email) values.emailVerifiedAt = null
   const [updated] = await tx.update(users).set(values).where(eq(users.id, user.id)).returning()
   await recordAuditEvent(

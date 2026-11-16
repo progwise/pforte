@@ -9,7 +9,7 @@ are for the people who sign in, not for those who run pforte: that is [the admin
 
 | Page | What it shows | What can be done |
 | --- | --- | --- |
-| **Overview** | Name, e-mail address, mobile phone number (all but its first and last digits hidden) and language. | Nothing: see below. |
+| **Overview** | Name, e-mail address, mobile phone number (all but its first and last digits hidden) and language. | Confirm the phone number, if it is not confirmed yet and this pforte [sends SMS](sms.md): see below. Nothing else. |
 | **Signed in** | The browsers in which the person is signed in, with the applications of each and how they signed in there (with a code, with a passkey, or with the password only on a remembered device), and the applications that stay signed in without a browser because they hold a refresh token, such as an app on a phone. | *Sign out everywhere*: ends every session and application, this page included, and forgets the remembered devices. Applications with a back-channel logout address are told ([signing out](integrating-a-client.md#signing-out)). |
 | **Devices** | The devices on which no code is asked for, with the browser, when it was last used and until when it is remembered. | Forget one, or all. The next sign-in there asks for a code. |
 | **Sign-ins** | The last ten times somebody signed in to the account or tried to: a sign-in with a code, with a passkey or on a remembered device, a wrong password, a wrong code, a passkey that was refused, a hold after too many attempts, each with the time, the network address and the browser. Only what happened at the sign-in: a wrong code at the password reset or an activation is in the audit log, not here. | Nothing. A person who sees a line that was not them changes their password. |
@@ -25,6 +25,13 @@ e-mail address and the phone number and would overwrite whatever a person typed 
 through the organisation. The links of your [branding](branding-and-languages.md), such as imprint and privacy policy,
 are below the page as on every other one.
 
+**The one thing a person does there is confirm their phone number.** Codes go by SMS only to a number the person has
+confirmed, which normally happens right after they chose their first password. Somebody who skipped that step, had no
+number then, or whose number the back office has changed since, sees "Not confirmed, so your sign-in codes come by
+e-mail" next to the number, with the button *Confirm with a code by SMS*. pforte sends a code to the stored number, the
+person enters it, and from the next sign-in on the codes come by SMS. The number itself is not changed. The button is
+there only when this pforte sends SMS at all.
+
 **There is no password field.** The change of password is the reset, with a new code to the mailbox or the phone. So
 somebody who finds a computer unlocked cannot set a password with what is on the screen.
 
@@ -35,7 +42,7 @@ start with `account.` and can be replaced like every other
 ## A change needs a recent sign-in
 
 Looking needs a session. A change (signing out everywhere, forgetting a device, adding or removing a passkey, asking for
-the code of a new password) needs a sign-in with a code or a passkey that is **at most five minutes old**, checked on every single
+the code of a new password or of the phone number) needs a sign-in with a code or a passkey that is **at most five minutes old**, checked on every single
 action. If the sign-in is
 older, the person signs in again, with password and code or with their passkey, even though they are signed in, and comes back to the page they
 were on. What they were about to do is not done for them: the page says to repeat it, however long the sign-in took.
@@ -45,6 +52,10 @@ asks the device is opened, and the device's answer is accepted for five minutes 
 sign-in the question was asked in. Checking again at the answer
 could refuse a passkey the device has already made, and the person would keep a passkey on their phone that pforte does
 not know.
+
+Confirming the phone number takes two steps as well. The sign-in is checked when the code is sent. Entering the code is
+not checked again: the code is newer than the sign-in and runs out after ten minutes, and the person may have waited for
+the SMS.
 
 Every change is written to the [audit log](audit-log.md) with the person as the actor and `self: true` in the details, so
 an administrator can tell it from the same action done by the back office.
