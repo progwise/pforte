@@ -149,6 +149,8 @@ input#code { text-align: center; font-size: 1.6rem; letter-spacing: 0.5em; paddi
 button { width: 100%; padding: 0.75rem; font: 600 1rem var(--font-heading); color: var(--primary-text); background: var(--primary);
   border: 0; border-radius: var(--radius-small); cursor: pointer; }
 button.secondary { margin-top: 0.5rem; color: var(--link); background: transparent; }
+/* A link that belongs to the form above it: under its button, in line with the buttons that follow. */
+p.aside { margin: 0.75rem 0 0.25rem; text-align: center; }
 button:disabled { opacity: 0.55; cursor: not-allowed; }
 [hidden] { display: none !important; }
 label.check { display: flex; gap: 0.5rem; align-items: flex-start; margin-bottom: 1rem; font-weight: 400; font-family: var(--font-body); }
