@@ -5658,6 +5658,12 @@
                               "null"
                             ]
                           },
+                          "amr": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "applications": {
                             "type": "array",
                             "items": {
@@ -5682,6 +5688,7 @@
                           "startedAt",
                           "expiresAt",
                           "acr",
+                          "amr",
                           "applications"
                         ],
                         "additionalProperties": false

@@ -206,6 +206,25 @@ describe.skipIf(!hasDatabase)('user lifecycle', () => {
       expect((await event('user.password_reset.request', user.id)).details).toMatchObject({ sessionsEnded: 1 })
     })
 
+    it.each(['end-sessions', 'reset-password', 'lock', 'deactivate'] as const)('%s moves the count on that a sign-in under way was begun with, for that person only', async (action) => {
+      const user = await userIn('active')
+      const other = await userIn('active')
+      const epoch = async (id: string) => (await findUserById(database.db, id))!.sessionEpoch
+      expect(await epoch(user.id)).toBe(0)
+
+      await run(action, user)
+      expect(await epoch(user.id)).toBe(1)
+      expect(await epoch(other.id)).toBe(0)
+    })
+
+    it('unlocking does not move the count back, and what leaves the sessions alone leaves it alone', async () => {
+      const user = await userIn('active')
+      await run('lock', user)
+      await run('unlock', (await findUserById(database.db, user.id))!)
+
+      expect((await findUserById(database.db, user.id))!.sessionEpoch).toBe(1)
+    })
+
     it('ending sessions reports how many rows went and leaves the status alone', async () => {
       const user = await userIn('locked')
       await addSession(user.id, 'end-1')

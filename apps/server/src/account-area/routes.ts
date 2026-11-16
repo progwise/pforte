@@ -9,13 +9,11 @@ import type { SendPasswordResetCode } from '../auth/password-reset.js'
 import type { RateLimiter } from '../auth/rate-limiter.js'
 import { parseAcceptLanguage } from '../i18n/index.js'
 import type { MessageKey, Values } from '../i18n/index.js'
-import type { Notifier } from '../notifications/notifier.js'
 import type { ClientLogouts } from '../oidc/client-logouts.js'
 import { createFlash, type Flash } from '../own-login/flash.js'
 import { safeNext } from '../own-login/oidc.js'
 import { createOwnSignIn } from '../own-login/sign-in.js'
 import type { Passkeys } from '../passkeys/index.js'
-import type { Background } from '../security/background.js'
 import { refuseForeignPosts } from '../security/origin-check.js'
 import type { Ui } from '../ui/index.js'
 import { escapeHtml } from '../ui/pages.js'
@@ -40,12 +38,8 @@ export interface AccountAreaDependencies {
   /** The limit on asking for a new password, the same one as on the page for a forgotten one. */
   limiter: Pick<RateLimiter, 'resetRequest'>
   audit: Pick<LoginAudit, 'resetRequested' | 'codeSent' | 'blocked'>
-  /** What a device is asked when a passkey is created, and the script that asks. */
-  passkeys: Passkeys
-  /** Tells a person that a passkey was added to their account. */
-  notifier: Pick<Notifier, 'sendPasskeyAdded'>
-  /** Runs what must not delay an answer. */
-  background: Background
+  /** How a person gets a new passkey, and the script that asks the device. */
+  passkeys: Pick<Passkeys, 'enrolment' | 'script'>
 }
 
 const LOGIN_COOKIE = 'pforte_account_login'

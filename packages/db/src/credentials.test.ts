@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { activateUser } from './admin/lifecycle.js'
+import { activateUser, endSessions } from './admin/lifecycle.js'
+import { findPasskeyOffer } from './admin/passkeys.js'
 import { createUser, findUserById } from './admin/users.js'
 import { completeActivation, completePasswordReset, findPendingActivation } from './credentials.js'
 import { findRememberedDevice, rememberDevice } from './devices.js'
@@ -74,6 +75,41 @@ describe.skipIf(!hasDatabase)('activation and password reset', () => {
     const { user, token, expiresAt } = await withLink()
     expect(await completeActivation(database.db, { token, passwordHash: 'h', remember: true }, new Date(expiresAt.getTime() + day))).toBeUndefined()
     expect((await database.pool.query(`select count(*) from devices where user_id = $1`, [user.id])).rows[0].count).toBe('0')
+  })
+
+  describe('with the offer of a passkey', () => {
+    const offer = () => ({ boundTo: 'activation', details: { done: 'account' }, expiresAt: new Date(Date.now() + 30 * 60_000) })
+    const offersOf = async (userId: string) => Number((await database.pool.query(`select count(*) from passkey_offers where user_id = $1`, [userId])).rows[0].count)
+
+    it('opens it with the activation and returns its token; without being asked it opens none', async () => {
+      const { user, token } = await withLink()
+      const done = await completeActivation(database.db, { token, passwordHash: 'h', passkeyOffer: offer() })
+
+      expect(await findPasskeyOffer(database.db, { token: done!.offerToken!, boundTo: 'activation' })).toEqual({ userId: user.id, details: { done: 'account' } })
+
+      const plain = await withLink()
+      expect((await completeActivation(database.db, { token: plain.token, passwordHash: 'h' }))!.offerToken).toBeUndefined()
+      expect(await offersOf(plain.user.id)).toBe(0)
+    })
+
+    it('opens none when the link is not valid, and one when several requests use the link at once', async () => {
+      const { user, token, expiresAt } = await withLink()
+      expect(await completeActivation(database.db, { token, passwordHash: 'h', passkeyOffer: offer() }, new Date(expiresAt.getTime() + day))).toBeUndefined()
+      expect(await offersOf(user.id)).toBe(0)
+
+      const results = await Promise.all([1, 2, 3].map((n) => completeActivation(database.db, { token, passwordHash: `hash-${n}`, passkeyOffer: offer() })))
+      expect(results.filter(Boolean)).toHaveLength(1)
+      expect(await offersOf(user.id)).toBe(1)
+    })
+
+    it('is there as soon as the account is active: what ends the sessions right after finds it', async () => {
+      const { user, token } = await withLink()
+      const done = await completeActivation(database.db, { token, passwordHash: 'h', passkeyOffer: offer() })
+
+      await database.db.transaction(async (tx) => endSessions(tx, context, (await findUserById(tx, user.id))!))
+
+      expect(await findPasskeyOffer(database.db, { token: done!.offerToken!, boundTo: 'activation' })).toBeUndefined()
+    })
   })
 
   it('works once, even when two requests race', async () => {

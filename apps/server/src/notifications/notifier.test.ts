@@ -147,6 +147,17 @@ describe('mail notifier', () => {
       expect(mail.text).not.toMatch(/\{[a-zA-Z]+\}/)
     }
   })
+
+  it('sends the person to their administration when there are no account pages to link to', async () => {
+    sent.length = 0
+    for (const language of ['en', 'de', 'fr', 'hu']) await notifier.sendPasskeyAdded({ ...user, language }, { device: 'Safari, iPhone' })
+    expect(sent).toHaveLength(4)
+    for (const mail of sent) {
+      expect(mail.text).toContain('Safari, iPhone')
+      expect(mail.text).not.toMatch(/https?:|\{[a-zA-Z]+\}|undefined/)
+    }
+    expect(sent[0]!.text).toContain('tell your administration now: they can remove the passkey')
+  })
 })
 
 describe('mail notifier with SMS', () => {

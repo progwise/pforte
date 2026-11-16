@@ -14,7 +14,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const DAY = /^\d{4}-\d{2}-\d{2}$/
 /** Suggestions for the action filter: every action pforte records. */
 const KNOWN_ACTIONS = [
-  'login.*', 'login.succeeded', 'login.password_failed', 'login.code_sent', 'login.code_failed', 'login.blocked',
+  'login.*', 'login.succeeded', 'login.password_failed', 'login.code_sent', 'login.code_failed', 'login.passkey_failed', 'login.blocked',
   'user.*', 'user.create', 'user.update', 'user.delete', 'user.lock', 'user.unlock', 'user.activate', 'user.deactivate',
   'user.activation.request', 'user.password_reset.request', 'user.password_reset.complete', 'user.sessions.end', 'user.sessions.notify_failed', 'user.device.revoke', 'user.devices.revoke', 'user.passkey.add', 'user.passkey.remove', 'user.claims.set',
   'client.*', 'client.create', 'client.update', 'client.delete', 'client.rotate_secret', 'client.claim_types.set',

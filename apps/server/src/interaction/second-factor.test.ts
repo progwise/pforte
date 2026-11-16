@@ -214,6 +214,90 @@ describe.skipIf(!hasDatabase)('second factor at sign-in', () => {
     await h.database.pool.query(`update users set status = 'active' where email = $1`, [email])
   })
 
+  describe('a sign-in between password and code, when the sessions of the person are ended', () => {
+    const email = 'ben.keller@example.com'
+    const idOf = async () => (await user(email)).id as string
+    const sessions = async () => Number((await h.database.pool.query(`select count(*) from oidc_payloads where account_id = $1 and type = 1`, [await idOf()])).rows[0].count)
+
+    beforeEach(async () => {
+      await h.database.pool.query('delete from rate_limits')
+      await h.database.pool.query(`delete from audit_events where action = 'login.code_failed'`)
+      await h.database.pool.query(`delete from oidc_payloads where account_id = $1`, [await idOf()])
+    })
+
+    it.each([
+      ['an administrator starts a password reset for them', async () => h.api('POST', `/users/${await idOf()}/reset-password`)],
+      ['an administrator signs them out everywhere', async () => h.api('POST', `/users/${await idOf()}/end-sessions`)],
+      [
+        'they are locked, and unlocked again',
+        async () => {
+          await h.api('POST', `/users/${await idOf()}/lock`)
+          return h.api('POST', `/users/${await idOf()}/unlock`)
+        },
+      ],
+    ])('is over when %s: the code it was sent does not finish it', async (_name, end) => {
+      // Somebody has typed the password, as it was, and holds the code that was sent for it.
+      const { browser, interaction } = await passwordStep(email)
+      const code = codeFor(email)
+
+      expect((await end()).statusCode).toBeLessThan(400)
+
+      const response = await browser.request('POST', `${interaction}/code`, { form: { code } })
+      // Back to the start, and nobody is signed in.
+      expect(response.statusCode).toBe(303)
+      expect(response.headers.location).toBe(interaction)
+      expect(await sessions()).toBe(0)
+      // The code was not even looked at: it is not used up, and no attempt is counted against it.
+      const { rows } = await h.database.pool.query(`select consumed_at, attempts from otp_codes where user_id = $1 and purpose = 'login'`, [await idOf()])
+      expect(rows).toEqual([{ consumed_at: null, attempts: 0 }])
+      const failures = (await h.database.pool.query(`select details from audit_events where action = 'login.code_failed' and target_id = $1`, [await idOf()])).rows
+      expect(failures.map((row) => row.details)).toEqual([{ purpose: 'login', reason: 'sessions_ended' }])
+    })
+
+    it('cannot get itself a new code either: the step is over, not only its code', async () => {
+      const { browser, interaction } = await passwordStep(email)
+      await h.api('POST', `/users/${await idOf()}/reset-password`)
+      const sent = h.notifications.filter((n) => n.kind === 'login-code').length
+
+      // Everything that belongs to the step leads back to the login page.
+      for (const response of [
+        await browser.request('GET', `${interaction}/code`),
+        await browser.request('POST', `${interaction}/code/resend`),
+        await browser.request('POST', `${interaction}/code/resend`, { form: { channel: 'email' } }),
+      ]) {
+        expect(response.statusCode).toBe(303)
+        expect(response.headers.location).toBe(interaction)
+      }
+      expect(h.notifications.filter((n) => n.kind === 'login-code')).toHaveLength(sent)
+    })
+
+    it('needs a sign-in from the start, which then works', async () => {
+      const { browser, interaction, verifier } = await passwordStep(email)
+      await h.api('POST', `/users/${await idOf()}/end-sessions`)
+      await browser.request('POST', `${interaction}/code`, { form: { code: codeFor(email) } })
+      await h.database.pool.query('delete from otp_codes')
+
+      // The same browser, the same sign-in to the application: password and a new code.
+      const again = await browser.request('POST', `${interaction}/login`, { form: { email, password: 'dev-password' } })
+      expect(again.headers.location).toBe(`${interaction}/code`)
+      const done = await browser.request('POST', `${interaction}/code`, { form: { code: codeFor(email) } })
+      const resumed = await browser.request('GET', done.headers.location as string)
+      expect(new URL(resumed.headers.location as string).searchParams.get('code')).toBeTruthy()
+      expect(verifier).toBeTruthy()
+    })
+
+    it('is not disturbed by sessions that were ended before it began, or by those of somebody else', async () => {
+      await h.api('POST', `/users/${await idOf()}/end-sessions`)
+      const { browser, interaction } = await passwordStep(email)
+      const other = await user('anna.schmidt@example.com')
+      await h.api('POST', `/users/${other.id}/end-sessions`)
+
+      const response = await browser.request('POST', `${interaction}/code`, { form: { code: codeFor(email) } })
+
+      expect(String(response.headers.location)).toContain('/auth/')
+    })
+  })
+
   it('says so when the code cannot be sent, and signs nobody in', async () => {
     h.notifier.failWith = new NotifierUnavailableError('SMTP is down')
     const { login } = await passwordStep('anna.schmidt@example.com')

@@ -11,6 +11,13 @@ export const de: Catalog = {
   'login.password': 'Passwort',
   'login.submit': 'Anmelden',
   'login.forgot': 'Passwort vergessen?',
+  'login.passkey': 'Mit Passkey anmelden',
+  'login.passkeyCancelled': 'Sie wurden nicht angemeldet: Die Anfrage wurde abgebrochen oder das Gerät hat aufgegeben. Versuchen Sie es noch einmal oder nutzen Sie E-Mail-Adresse und Passwort.',
+  'login.passkeyFailed': 'Mit diesem Passkey ist hier keine Anmeldung möglich. Nutzen Sie E-Mail-Adresse und Passwort.',
+  'passkeyOffer.title': 'Beim nächsten Mal schneller anmelden',
+  'passkeyOffer.text': 'Beim nächsten Mal können Sie sich hier mit Gesicht, Finger oder der PIN dieses Geräts anmelden: ohne Passwort, ohne Code. Dafür merkt sich Ihr Gerät einen Passkey. Passwort und Code funktionieren weiter.',
+  'passkeyOffer.skip': 'Jetzt nicht',
+  'passkeyOffer.failed': 'Es wurde kein Passkey erstellt. Sie können es noch einmal versuchen oder ohne fortfahren.',
   'login.wrong': 'Die E-Mail-Adresse oder das Passwort ist nicht richtig.',
 
   'code.title': 'Code eingeben',
@@ -109,6 +116,7 @@ export const de: Catalog = {
   'mail.passkeyAdded.subject': 'Ihrem Konto bei {organisation} wurde ein Passkey hinzugefügt',
   'mail.passkeyAdded.text':
     'Guten Tag {firstName},\n\nIhrem Konto bei {organisation} wurde soeben ein Passkey hinzugefügt. Erstellt mit: {device}.\n\nMit einem Passkey meldet sich jemand ohne Passwort und Code an.\n\nWenn Sie das waren, müssen Sie nichts tun.\n\nWenn Sie das nicht waren, entfernen Sie den Passkey jetzt:\n\n{url}\n\nWählen Sie danach ein neues Passwort und informieren Sie Ihre Administration.\n',
+  'mail.passkeyAdded.textNoLink': 'Guten Tag {firstName},\n\nIhrem Konto bei {organisation} wurde soeben ein Passkey hinzugefügt. Erstellt mit: {device}.\n\nMit einem Passkey meldet sich jemand ohne Passwort und Code an.\n\nWenn Sie das waren, müssen Sie nichts tun.\n\nWenn Sie das nicht waren, informieren Sie jetzt Ihre Administration: Sie kann den Passkey entfernen. Wählen Sie danach ein neues Passwort.\n',
 
   // The account pages, where a person sees how they are signed in.
   'account.title': 'Ihr Konto',
@@ -141,6 +149,7 @@ export const de: Catalog = {
   'account.sessions.until': 'Bis',
   'account.sessions.how': 'Anmeldung',
   'account.sessions.withCode': 'Mit Code',
+  'account.sessions.withPasskey': 'Mit Passkey',
   'account.sessions.withoutCode': 'Nur Passwort, auf einem gemerkten Gerät',
   'account.sessions.applications': 'Anwendungen',
   'account.sessions.noApplications': 'Noch keine',
@@ -173,6 +182,8 @@ export const de: Catalog = {
   'account.signIns.browser': 'Browser',
   'account.signIns.succeededCode': 'Mit Code angemeldet',
   'account.signIns.succeededDevice': 'Auf einem gemerkten Gerät angemeldet',
+  'account.signIns.succeededPasskey': 'Mit Passkey angemeldet',
+  'account.signIns.passkeyFailed': 'Ein Passkey wurde abgelehnt',
   'account.signIns.passwordFailed': 'Falsches Passwort',
   'account.signIns.codeFailed': 'Falscher Code',
   'account.signIns.blocked': 'Nach zu vielen Versuchen aufgehalten',

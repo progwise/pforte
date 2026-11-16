@@ -121,6 +121,7 @@ The userinfo endpoint returns the same claims without those of the token itself 
 | `acr` | `amr` | Meaning |
 | --- | --- | --- |
 | `urn:pforte:acr:mfa` | `["pwd", "otp"]` | The password and a code from an e-mail or an SMS, entered now. |
+| `urn:pforte:acr:mfa` | `["pop", "mfa"]` | A [passkey](passkeys.md): the person's device checked them (face, finger or PIN) and signed with a key only it holds. |
 | `urn:pforte:acr:pwd` | `["pwd"]` | The password only: the person's browser is remembered and skips the code. |
 
 You can ask for the stronger one, see [asking for more](#asking-for-more).

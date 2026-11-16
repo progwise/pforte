@@ -6,6 +6,7 @@ import { NotifierUnavailableError } from '../notifications/notifier.js'
 import { type AdminHarness, createAdminHarness, ISSUER } from '../test/admin-harness.js'
 import { type AnswerOptions, createAuthenticator, type CreationQuestion } from '../test/authenticator.js'
 import { Browser } from '../test/browser.js'
+import { endSessionsDuring } from '../test/held-user.js'
 import { driveSignIn } from '../test/manage-session.js'
 
 const COOKIE_KEYS = ['k'.repeat(40)]
@@ -45,8 +46,8 @@ describe.skipIf(!hasDatabase)('the account pages: passkeys', () => {
   const idOf = async (email: string) => (await h.database.pool.query(`select id from users where email = $1`, [email])).rows[0].id as string
   const passkeysOf = async (email: string) => (await h.database.pool.query(`select * from passkeys where user_id = $1 order by created_at`, [await idOf(email)])).rows
   const mails = () => h.notifications.filter((notification) => notification.kind === 'passkey-added')
-  /** The questions pforte is waiting for an answer to. */
-  const open = async () => (await h.database.pool.query('select challenge, user_id, expires_at from passkey_challenges order by created_at')).rows
+  /** The questions about a new passkey that pforte is waiting for an answer to. Those of the login pages are not these. */
+  const open = async () => (await h.database.pool.query(`select challenge, user_id, expires_at from passkey_challenges where bound_to like 'account:%' order by created_at`)).rows
 
   /** A browser in which this person is signed in to their account pages, a moment ago. */
   const signedIn = async (email: string) => {
@@ -388,6 +389,22 @@ describe.skipIf(!hasDatabase)('the account pages: passkeys', () => {
       expect(await passkeysOf(A.email)).toHaveLength(1)
       await h.settle()
       expect(mails()).toHaveLength(1)
+    })
+
+    it('stores no passkey when the sessions are ended while the answer of the device is being checked', async () => {
+      const browser = await signedIn(A.email)
+      const asked = await question(browser)
+      const credential = JSON.stringify(device.create(asked))
+
+      const response = await endSessionsDuring(h, idOfAnna, () => post(browser, '/account/passkeys/new', { credential }))
+
+      // The session of the account pages is over, and so is what it was about to do.
+      expect(response.statusCode).toBe(303)
+      expect(response.headers.location).toBe('/account/login')
+      expect(await passkeysOf(A.email)).toEqual([])
+      expect(await h.audit('user.passkey.add', idOfAnna)).toEqual([])
+      await h.settle()
+      expect(mails()).toEqual([])
     })
 
     it('does not store a credential that is known already, whoever has it', async () => {

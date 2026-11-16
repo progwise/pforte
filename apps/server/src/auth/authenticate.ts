@@ -6,7 +6,11 @@ import { findUserByEmail } from '@progwise/pforte-db/users'
 /** Why a sign-in was refused. The person is only ever told "e-mail or password is not correct"; the audit log gets the reason. */
 export type AuthFailure = 'unknown_user' | 'not_allowed' | 'wrong_password'
 
-export type AuthResult = { ok: true; userId: string } | { ok: false; reason: AuthFailure; userId?: string }
+/**
+ * `sessionEpoch` is how often the person's sessions had been ended when the password was checked, read with the
+ * password itself. The sign-in carries it to the code step, which refuses if it has moved on.
+ */
+export type AuthResult = { ok: true; userId: string; sessionEpoch: number } | { ok: false; reason: AuthFailure; userId?: string }
 
 export type Authenticate = (email: string, password: string) => Promise<AuthResult>
 
@@ -34,6 +38,6 @@ export const createAuthenticate = async (db: Database): Promise<Authenticate> =>
     if (!user) return { ok: false, reason: 'unknown_user' }
     if (!canSignIn) return { ok: false, reason: 'not_allowed', userId: user.id }
     if (!passwordMatches) return { ok: false, reason: 'wrong_password', userId: user.id }
-    return { ok: true, userId: user.id }
+    return { ok: true, userId: user.id, sessionEpoch: user.sessionEpoch }
   }
 }

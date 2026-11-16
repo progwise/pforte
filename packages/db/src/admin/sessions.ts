@@ -6,8 +6,10 @@ import { oidcPayloads } from '../schema/index.js'
 export interface UserSession {
   startedAt: Date
   expiresAt: Date | null
-  /** The assurance of the sign-in, e.g. `urn:pforte:acr:mfa` when a code was entered. */
+  /** The assurance of the sign-in, e.g. `urn:pforte:acr:mfa` when a code was entered or a passkey was used. */
   acr: string | null
+  /** What the person did to sign in (RFC 8176): `pwd` and `otp` or `sms` for password and code, `pop` for a passkey. */
+  amr: string[]
   /** The applications this browser is signed in to. */
   clientIds: string[]
 }
@@ -47,12 +49,13 @@ export const listUserSessions = async (db: DatabaseOrTransaction, userId: string
   const grants: UserGrant[] = []
   for (const row of rows) {
     if (row.type === MODEL_TYPES.RefreshToken) continue
-    const payload = row.payload as { loginTs?: number; acr?: string; authorizations?: Record<string, unknown>; clientId?: string }
+    const payload = row.payload as { loginTs?: number; acr?: string; amr?: unknown; authorizations?: Record<string, unknown>; clientId?: string }
     if (row.type === MODEL_TYPES.Session) {
       sessions.push({
         startedAt: typeof payload.loginTs === 'number' ? new Date(payload.loginTs * 1000) : row.createdAt,
         expiresAt: row.expiresAt,
         acr: payload.acr ?? null,
+        amr: Array.isArray(payload.amr) ? payload.amr.filter((method): method is string => typeof method === 'string') : [],
         clientIds: Object.keys(payload.authorizations ?? {}).sort(),
       })
     } else if (payload.clientId) {

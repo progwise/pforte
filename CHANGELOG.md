@@ -30,16 +30,30 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   registered a client under that ID yourself, it is not touched and the pages stay off until you have moved it to another
   ID; the log says so at every start
   ([the account pages](docs/account.md), [#18](https://github.com/progwise/pforte/issues/18)).
-- **Passkeys, first part: creating and removing them.** On the account pages a person adds a passkey (*Passkeys*, then
-  *Add a passkey*): the device asks for face, finger or its PIN and keeps the passkey; pforte stores the public half.
-  The person is told of every new passkey by e-mail and can remove one on the same page; an administrator sees and
-  removes them on the person's page and with `GET /admin/users/{id}/passkeys` and
-  `DELETE /admin/users/{id}/passkeys/{passkeyId}`. A password reset and "sign out everywhere" leave passkeys alone.
-  **Signing in with a passkey is not in yet**; it follows before this is released. **pforte's pages now run one script**,
-  on the page that creates a passkey only: one file served by pforte, allowed in that page's policy by its exact
-  address, making no requests; every other page keeps the policy without script. **A passkey is bound to the host in
-  `ISSUER`: changing that host makes every passkey stop working.** The update adds the tables `passkeys` and `passkey_challenges`
-  ([the account pages](docs/account.md#passkeys), [security measures](docs/security.md#the-one-script),
+- **Passkeys.** A person can sign in with the check their device has anyway (face, finger or the device's PIN) instead
+  of password and code: one step, through the autofill of the e-mail field or the button *Sign in with a passkey*.
+  Password and code stay as the way in on a device without a passkey. A passkey is offered after a sign-in with a code
+  and at the end of an activation, on devices that can make one ("Not now" is remembered in that browser for 90 days),
+  and is added and removed on the account pages. Every new passkey is announced to the person by e-mail. An
+  administrator sees and removes them on the person's page and with `GET /admin/users/{id}/passkeys` and
+  `DELETE /admin/users/{id}/passkeys/{passkeyId}`; locking or deactivating a person refuses their passkeys too, while a
+  password reset and "sign out everywhere" leave them alone. What to know before you update:
+  - **A passkey is bound to the host in `ISSUER`. If that host changes later, every passkey stops working.**
+  - **Applications receive a new `amr`:** a sign-in with a passkey has `acr` `urn:pforte:acr:mfa` and `amr`
+    `["pop", "mfa"]`. An application that checks `acr` needs no change; one that expects `amr` to contain `pwd` does.
+  - **pforte's pages now run one script**, on the pages that deal with passkeys, the login page among them: one file
+    served by pforte, allowed in those pages' policy by its exact address, making no requests. Every other page keeps
+    the policy without script, and every page works with the script blocked.
+  - **Everybody sees the passkey button and, once per browser, the offer.** There is no setting that turns passkeys off.
+  - **The answer of `GET /admin/users/{id}/sessions` has a new field `amr`** in each session. A client that checks
+    answers against the OpenAPI document of 0.2.0 rejects it, as with `staysSignedIn` below.
+  - New audit events `login.passkey_failed`, `user.passkey.add`, `user.passkey.remove`, and `method: passkey` on
+    `login.succeeded`; a new rate limit of 30 refused passkeys per address in 15 minutes; new cookies
+    `pforte_passkey_step`, `pforte_activation_passkey` and `pforte_passkey_offer`; new tables `passkeys`,
+    `passkey_challenges` and `passkey_offers`.
+  - Try passkeys on the devices your people use before you announce them: pforte's tests use a device in software.
+
+  ([passkeys](docs/passkeys.md), [security measures](docs/security.md#passkeys),
   [#45](https://github.com/progwise/pforte/issues/45)).
 - **Applications are told when somebody else ends a person's sessions** (back-channel logout). Until now a client with a
   back-channel logout address got a logout token only when the person signed out at pforte. Now it also gets one when an
@@ -62,6 +76,13 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
 
 ### Fixed
 
+- **A sign-in that is under way ends with the person's sessions.** Somebody who had typed the password and was at the
+  code step could finish that sign-in after "sign out everywhere", after a lock that was lifted again, and after a
+  password reset, that is with the password that had just been replaced. Now the step between password and code is
+  over when the person's sessions are ended: the code leads back to the login page and is recorded as
+  `login.code_failed` with `reason: sessions_ended`. A person who is in the middle of signing in at that moment starts
+  again. The update adds the column `users.session_epoch`
+  ([security measures](docs/security.md#a-sign-in-under-way-ends-with-the-persons-sessions)).
 - **"Applications that stay signed in" lists only those that do.** A person's page in the administration listed every
   application the person had signed in to, also one that is signed in only as long as its browser session lasts. Now the
   table has the applications that hold a refresh token, such as an app on a phone, as the account pages show them; the

@@ -65,6 +65,7 @@ Login
 - E-mail and password
 - Second factor by SMS code, with a code by e-mail as fallback while no phone number is stored
 - "Remember this device" to skip the second factor on a known device
+- Passkeys: sign in with the device's own check (face, finger, PIN) instead of password and code
 - Password reset by SMS or e-mail code, and an e-mail that tells the person their password was changed
 - Activation link for new users, who set their first password on activation
 - Login pages in several languages, with the organisation's name, colours and logo from configuration
@@ -87,7 +88,7 @@ Operations
 ## Not planned
 
 SAML, LDAP, social logins, federation to other identity providers, multi-tenancy in the UI,
-passkeys, public self-registration. Some of these may come later when an application needs them; none are needed to ship.
+public self-registration. Some of these may come later when an application needs them; none are needed to ship.
 
 ## How an application integrates
 

@@ -30,7 +30,8 @@ in the back office wants to learn. pforte does the small set of things above and
 
 ## What it does
 
-- **Sign-in**: e-mail and password, a second factor by a code sent by SMS or e-mail, "remember this device", activation links for
+- **Sign-in**: e-mail and password, a second factor by a code sent by SMS or e-mail, "remember this device",
+  [passkeys](passkeys.md) for signing in with the device's own check instead of password and code, activation links for
   new users, password reset. Pages in German, English, French and Hungarian, with your name, logo and colours
   ([branding and languages](branding-and-languages.md), [codes by SMS](sms.md)).
 - **Protocol**: authorization code flow with PKCE, refresh tokens with rotation, discovery, JWKS, userinfo, RP-initiated and
@@ -38,7 +39,8 @@ in the back office wants to learn. pforte does the small set of things above and
 - **Administration**: users, clients, claim types, an audit log and CSV import, in the browser and through an admin API
   ([the administration](administration.md), [importing users](import.md)).
 - **Account pages**: every person sees where they are signed in, their remembered devices and recent sign-ins, can sign out
-  everywhere, forget devices and change the password, after a sign-in with a code ([the account pages](account.md)).
+  everywhere, forget devices, add and remove passkeys and change the password, after a sign-in with two factors
+  ([the account pages](account.md)).
 - **Safety**: rate limits on sign-in, an audit of sign-in events, security headers, and a production start that refuses weak
   secrets ([security measures](security.md), [threat model](threat-model.md)).
 - **Operation**: configuration by environment variables, migrations at start, an image that runs unprivileged on a read-only
@@ -82,5 +84,5 @@ ERP ──(hourly)──▶ import job ──(admin API)──▶ pforte
 
 ## Not planned
 
-SAML, LDAP, social logins, federation to other identity providers, multi-tenancy in the administration, passkeys, public
+SAML, LDAP, social logins, federation to other identity providers, multi-tenancy in the administration, public
 self-registration. Some of these may come later when an application needs them.

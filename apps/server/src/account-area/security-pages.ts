@@ -58,7 +58,7 @@ ${rows.join('\n')}
       [t('account.sessions.started'), t('account.sessions.until'), t('account.sessions.how'), t('account.sessions.applications')],
       sessions.map(
         (session) =>
-          `<tr>${cell(formatTime(session.startedAt, language))}${cell(formatTime(session.expiresAt, language))}${cell(t(session.acr === ACR_SECOND_FACTOR ? 'account.sessions.withCode' : 'account.sessions.withoutCode'))}${cell(session.clientIds.length ? session.clientIds.map(nameOf).join(', ') : t('account.sessions.noApplications'))}</tr>`,
+          `<tr>${cell(formatTime(session.startedAt, language))}${cell(formatTime(session.expiresAt, language))}${cell(t(session.amr.includes('pop') ? 'account.sessions.withPasskey' : session.acr === ACR_SECOND_FACTOR ? 'account.sessions.withCode' : 'account.sessions.withoutCode'))}${cell(session.clientIds.length ? session.clientIds.map(nameOf).join(', ') : t('account.sessions.noApplications'))}</tr>`,
       ),
     )
     // Every sign-in in a browser leaves a grant, also for an application that is signed in only as long as that
@@ -162,7 +162,9 @@ ${list}
     const { t, language } = viewFor(request, user)
 
     const what = (action: string, details: unknown): MessageKey => {
-      if (action === 'login.succeeded') return (details as { method?: unknown } | null)?.method === 'remembered_device' ? 'account.signIns.succeededDevice' : 'account.signIns.succeededCode'
+      const method = (details as { method?: unknown } | null)?.method
+      if (action === 'login.succeeded') return method === 'remembered_device' ? 'account.signIns.succeededDevice' : method === 'passkey' ? 'account.signIns.succeededPasskey' : 'account.signIns.succeededCode'
+      if (action === 'login.passkey_failed') return 'account.signIns.passkeyFailed'
       if (action === 'login.password_failed') return 'account.signIns.passwordFailed'
       if (action === 'login.code_failed') return 'account.signIns.codeFailed'
       return 'account.signIns.blocked'

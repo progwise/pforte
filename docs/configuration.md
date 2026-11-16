@@ -14,7 +14,7 @@ Six settings, of which the first four are always required:
 | Variable | Needed | What it is |
 | --- | --- | --- |
 | `DATABASE_URL` (or `DATABASE_URL_FILE`) | always | The Postgres database: `postgres://user:password@host:5432/pforte`. In production the password must not be empty or a well-known default. |
-| `ISSUER` (or `ISSUER_FILE`) | always | The public address of pforte: `https://id.example.com`. It is the `iss` of every token and the base of every link pforte sends. https is required (http only for `localhost`), without query or fragment. **Changing its host makes every [passkey](account.md#passkeys) stop working**: a passkey is bound to the host it was created for. |
+| `ISSUER` (or `ISSUER_FILE`) | always | The public address of pforte: `https://id.example.com`. It is the `iss` of every token and the base of every link pforte sends. https is required (http only for `localhost`), without query or fragment. **Changing its host makes every [passkey](passkeys.md#the-address-of-pforte-binds-every-passkey) stop working**: a passkey is bound to the host it was created for. |
 | `COOKIE_KEYS` (or `COOKIE_KEYS_FILE`) | always | Keys that sign cookies, separated by commas, each at least 32 characters. The first signs, all verify, so a new key can be added in front of the old one. |
 | `JWKS` (or `JWKS_FILE`) | always | A JSON Web Key Set with private signing keys: `{"keys":[…]}`. The first key signs tokens, all are published and verify. RSA from 2048 bits, or EC on P-256, P-384 or P-521. |
 | `SMTP_URL` (or `SMTP_URL_FILE`) | production | The mail server: `smtps://user:password@mail.example.com:465` or `smtp://…`. |

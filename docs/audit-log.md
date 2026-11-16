@@ -14,9 +14,10 @@ outlives the user it is about.
 | --- | --- | --- |
 | `login.password_failed` | A password was not accepted. | `reason`: `wrong_password`, `unknown_user` or `not_allowed` (the account is locked, deactivated or has no password yet). For an address that no user has: `emailHash` instead of a target. |
 | `login.code_sent` | A code went out. | `purpose` (`login`, `password_reset`, `activation`), `channel` (`email` or `sms`), `fellBackToEmail` when an SMS could not be sent. |
-| `login.code_failed` | A code was not accepted. | `purpose`, `reason` (`wrong`, `exhausted`, `expired`, `none`, and for a password reset also `unknown_user`, `not_allowed`, `malformed`). |
-| `login.succeeded` | A sign-in was completed. | `method` (`code` or `remembered_device`), `channel`, and `acr`: `urn:pforte:acr:mfa` after a code, `urn:pforte:acr:pwd` on a remembered device. `deviceRemembered: true` when the person ticked "Remember this device" with the code and the browser was not remembered yet. |
-| `login.blocked` | A rate limit held somebody back. | `scope`: `password`, `code`, `code_resend`, `reset`, `reset_code`, `activation` or `phone_code`. Written **once per 15 minutes** for the same address or IP, not for every refused request, so an attack cannot fill the log. |
+| `login.code_failed` | A code was not accepted. | `purpose`, `reason` (`wrong`, `exhausted`, `expired`, `none`; `sessions_ended` at sign-in when the person's sessions were ended after the password was accepted, so that the sign-in has to start again; and for a password reset also `unknown_user`, `not_allowed`, `malformed`). |
+| `login.passkey_failed` | A sign-in with a [passkey](passkeys.md) was refused. | `reason`: `malformed` (no answer of a device), `expired` (the question was not asked in this sign-in, was answered before or has run out), `unknown_passkey` (pforte does not know it, as after it was removed), `not_allowed` (its person is locked or deactivated), `wrong_person` (the device named another person than the passkey belongs to), `verification_failed` (wrong origin or host, the device did not check the person, the signature or its counter did not hold, or the passkey was removed or used by another sign-in while this one was being checked). The target is the person the passkey belongs to, where pforte knows the passkey. |
+| `login.succeeded` | A sign-in was completed. | `method` (`code`, `passkey` or `remembered_device`), `channel`, and `acr`: `urn:pforte:acr:mfa` after a code or with a passkey, `urn:pforte:acr:pwd` on a remembered device. `deviceRemembered: true` when the person ticked "Remember this device" with the code and the browser was not remembered yet. |
+| `login.blocked` | A rate limit held somebody back. | `scope`: `password`, `code`, `code_resend`, `passkey`, `reset`, `reset_code`, `activation` or `phone_code`. Written **once per 15 minutes** for the same address or IP, not for every refused request, so an attack cannot fill the log. |
 | `user.activate.complete` | A person chose their first password with the activation link. | `email`, and `deviceRemembered: true` when they ticked "Remember this device" on that page. |
 | `user.activation.request` | A person who has no password yet asked for their activation link at `/reset`. The link itself is never recorded. | `self: true`, `expiresAt`. |
 | `user.password_reset.request` | Somebody asked for a password reset at `/reset`, for an address that has an account. | `self: true`. A reset an administrator starts is recorded as `user.password_reset.request` by that client. |
@@ -58,7 +59,7 @@ differences: the actor is the person themselves (`actorType: user`, `actorId` eq
 
 | Action | When | Details |
 | --- | --- | --- |
-| `user.passkey.add` | A person added a passkey on the account pages. Only a person can: nobody creates a passkey for somebody else. | `passkeyId`, `label` (the browser it was created with, such as "Safari, iPhone"), `synced`, `self: true` |
+| `user.passkey.add` | A person added a passkey: on the account pages, in the offer after a sign-in with a code, or at the end of their activation. Only a person can: nobody creates a passkey for somebody else. | `passkeyId`, `label` (the browser it was created with, such as "Safari, iPhone"), `synced`, `self: true` |
 | `user.passkey.remove` | A passkey was removed, by the person or by an administrator. | `passkeyId`, `label`, and `self: true` when the person did it |
 
 Neither event holds the key or the id a device knows the passkey by.

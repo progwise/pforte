@@ -1,5 +1,6 @@
 import { and, eq, gt, sql } from 'drizzle-orm'
 import { activationTokenHash, endUserSessions } from './admin/lifecycle.js'
+import { openPasskeyOffer } from './admin/passkeys.js'
 import { recordAuditEvent } from './audit.js'
 import { rememberDevice } from './devices.js'
 import type { Database } from './index.js'
@@ -30,11 +31,22 @@ export const findPendingActivation = async (db: Database, token: string, now = n
  * statement that checks it, so two requests cannot both succeed. Opening the link proves the mailbox,
  * so the e-mail address counts as verified. For the same reason the browser can be remembered at once
  * (`remember`): the token of the device is returned for its cookie, and the audit event says so.
+ *
+ * With `passkeyOffer` the offer of a passkey is opened in the same transaction and its token returned: there is
+ * no moment at which the account is active and the offer not yet there. Whatever ends the person's sessions
+ * after this finds the offer and ends it.
  * Returns undefined if the link is not valid (any more).
  */
 export const completeActivation = (
   db: Database,
-  { token, passwordHash, remember = false, ip, userAgent }: { token: string; passwordHash: string; remember?: boolean } & Origin,
+  {
+    token,
+    passwordHash,
+    remember = false,
+    passkeyOffer,
+    ip,
+    userAgent,
+  }: { token: string; passwordHash: string; remember?: boolean; passkeyOffer?: { boundTo: string; details: Record<string, unknown>; expiresAt: Date } } & Origin,
   now = new Date(),
 ) =>
   db.transaction(async (tx) => {
@@ -66,7 +78,8 @@ export const completeActivation = (
       target: { type: 'user', id: user.id },
       details: { email: user.email, ...(device ? { deviceRemembered: true } : {}) },
     })
-    return { user, deviceToken: device?.token }
+    const offerToken = passkeyOffer ? await openPasskeyOffer(tx, { userId: user.id, ...passkeyOffer }, passkeyOffer.expiresAt) : undefined
+    return { user, deviceToken: device?.token, offerToken }
   })
 
 /**

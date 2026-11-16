@@ -211,6 +211,7 @@ interface SessionInfo {
   startedAt: string
   expiresAt: string | null
   acr: string | null
+  amr: string[]
   applications: Application[]
 }
 interface Grant extends Application {
@@ -233,11 +234,19 @@ const eventText = (event: AuditEvent, t: (key: MessageKey) => string) => {
   const via = channel === 'sms' ? ` ${t('manage.event.sms')}` : channel === 'email' ? ` ${t('manage.event.email')}` : ''
   switch (event.action) {
     case 'login.succeeded':
-      return method === 'remembered_device' ? t('manage.event.succeeded.device') : method === 'code' ? `${t('manage.event.succeeded.code')}${via}` : t('manage.event.succeeded')
+      return method === 'remembered_device'
+        ? t('manage.event.succeeded.device')
+        : method === 'passkey'
+          ? t('manage.event.succeeded.passkey')
+          : method === 'code'
+            ? `${t('manage.event.succeeded.code')}${via}`
+            : t('manage.event.succeeded')
     case 'login.password_failed':
       return event.details.reason === 'not_allowed' ? t('manage.event.notAllowed') : t('manage.event.passwordFailed')
     case 'login.code_failed':
       return t('manage.event.codeFailed')
+    case 'login.passkey_failed':
+      return t('manage.event.passkeyFailed')
     case 'login.code_sent':
       return `${t('manage.event.codeSent')}${via}`
     case 'login.blocked':
@@ -322,7 +331,7 @@ ${
 ${signedIn.sessions
   .map(
     (info) =>
-      `<tr><td>${info.acr === MFA ? badge('active', t('manage.sessions.code')) : ''}</td><td>${time(info.startedAt)}</td><td>${time(info.expiresAt)}</td><td>${info.applications.length ? info.applications.map((application) => escapeHtml(application.name)).join(', ') : `<span class="muted">${escapeHtml(t('manage.sessions.noApplications'))}</span>`}</td></tr>`,
+      `<tr><td>${info.amr.includes('pop') ? badge('active', t('manage.sessions.passkey')) : info.acr === MFA ? badge('active', t('manage.sessions.code')) : ''}</td><td>${time(info.startedAt)}</td><td>${time(info.expiresAt)}</td><td>${info.applications.length ? info.applications.map((application) => escapeHtml(application.name)).join(', ') : `<span class="muted">${escapeHtml(t('manage.sessions.noApplications'))}</span>`}</td></tr>`,
   )
   .join('\n')}
 </tbody></table></div>`

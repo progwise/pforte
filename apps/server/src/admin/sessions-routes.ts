@@ -35,8 +35,10 @@ export const sessionsRoutes =
                 z.object({
                   startedAt: z.string(),
                   expiresAt: z.string().nullable(),
-                  /** `urn:pforte:acr:mfa` when a code was entered, `urn:pforte:acr:pwd` for the password only. */
+                  /** `urn:pforte:acr:mfa` when a code was entered or a passkey was used, `urn:pforte:acr:pwd` for the password only. */
                   acr: z.string().nullable(),
+                  /** How the person signed in (RFC 8176): `pwd` with `otp` or `sms` for password and code, `pop` for a passkey. */
+                  amr: z.array(z.string()),
                   applications: z.array(application),
                 }),
               ),
@@ -58,6 +60,7 @@ export const sessionsRoutes =
             startedAt: session.startedAt.toISOString(),
             expiresAt: session.expiresAt?.toISOString() ?? null,
             acr: session.acr,
+            amr: session.amr,
             applications: session.clientIds.map(named),
           })),
           grants: grants.map((grant) => ({

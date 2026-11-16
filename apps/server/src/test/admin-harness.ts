@@ -30,6 +30,8 @@ export const createAdminHarness = async ({
   logoutPausesMs = [10, 10],
   /** The address pforte believes it has. A test with a real browser gives the one it listens on. */
   issuer = ISSUER,
+  /** Whether there are account pages; without them the mail about a new passkey has no link. */
+  accountPages = true,
 } = {}) => {
   const database = await createTestDatabase()
   await seed(database.db)
@@ -59,13 +61,13 @@ export const createAdminHarness = async ({
   /** Everything the app asked the notifier to send, and a switch to make sending fail. */
   const { notifier, notifications, lastCode, lastResetCode, lastPhoneCode } = createRecordingNotifier()
   const sendPasswordResetCode = createPasswordResetSender({ db: database.db, notifier, codeSecrets: deriveCodeSecrets(COOKIE_KEYS), issuer })
-  const passkeys = createPasskeys({ issuer, ui, name: 'Example Inc.' })
-  const accountArea = { db: database.db, issuer, cookieKeys: COOKIE_KEYS, ui, timeZone: 'Europe/Berlin', clientLogouts, sendPasswordResetCode, limiter, audit: loginAudit, passkeys, notifier, background }
+  const passkeys = createPasskeys({ issuer, ui, db: database.db, notifier, background, cookieKeys: COOKIE_KEYS, name: 'Example Inc.', accountPages })
+  const accountArea = { db: database.db, issuer, cookieKeys: COOKIE_KEYS, ui, timeZone: 'Europe/Berlin', clientLogouts, sendPasswordResetCode, limiter, audit: loginAudit, passkeys }
   const app = buildApp({
     issuer,
     passkeys,
     getDatabaseTime: () => getDatabaseTime(database.db),
-    oidc: { provider, authenticate: await createAuthenticate(database.db), db: database.db, notifier, cookieKeys: COOKIE_KEYS, ui, limiter, audit: loginAudit },
+    oidc: { provider, authenticate: await createAuthenticate(database.db), db: database.db, notifier, cookieKeys: COOKIE_KEYS, ui, limiter, audit: loginAudit, passkeys },
     manage: { issuer, cookieKeys: COOKIE_KEYS, ui, organisation: 'Example Inc.', timeZone: 'Europe/Berlin' },
     accountArea,
     account: {
@@ -82,6 +84,7 @@ export const createAdminHarness = async ({
       audit: loginAudit,
       background,
       clientLogouts,
+      passkeys,
     },
     admin: {
       db: database.db,

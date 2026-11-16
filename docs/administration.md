@@ -70,11 +70,12 @@ with the other clients as built in and cannot be changed, rotated or deleted. A 
   deleting, resetting the password and signing out everywhere end the person's sessions at pforte and tell the applications
   that have a back-channel logout address to end theirs ([signing out](integrating-a-client.md#signing-out)). The last administrator cannot
   be locked, deactivated, deleted or demoted, and nobody can do these to themselves; the page says so.
-- **Signed in** shows the browsers where the person is signed in (with their applications, and whether a code was entered)
+- **Signed in** shows the browsers where the person is signed in (with their applications, and whether a code was entered
+  or a passkey used)
   and the applications that stay signed in without a browser because they hold a refresh token, such as an app on a phone.
   **Passkeys** lists the person's passkeys with the browser each was created with, whether it is synced to their other
   devices and when it was last used. One can be removed: it cannot sign in any more, and sessions that are open stay
-  open. A person adds passkeys themselves, on [the account pages](account.md#passkeys); nobody can create one for
+  open. A person adds [passkeys](passkeys.md) themselves; nobody can create one for
   somebody else. **Remembered devices** lists where no code is asked for (the person ticked the box with a code, or when
   they activated their account); one or all can be
   revoked, and the next sign-in there asks for a code again. **Recent sign-ins** shows the last ten sign-in events: successes,
