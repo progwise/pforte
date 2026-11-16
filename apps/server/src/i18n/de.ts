@@ -45,8 +45,13 @@ export const de: Catalog = {
   'logout.text': 'Möchten Sie sich von {host} abmelden?',
   'logout.yes': 'Ja, abmelden',
   'logout.no': 'Nein, angemeldet bleiben',
+  'logout.titleFrom': 'Vollständig abmelden?',
+  'logout.textFrom': 'Sie verlassen {client}. Dieser Browser ist bei {host} noch angemeldet und kann {client} ohne erneute Anmeldung wieder öffnen. Möchten Sie sich auch dort abmelden?',
+  'logout.noFrom': 'Nein, nur {client} verlassen',
   'logout.doneTitle': 'Sie sind abgemeldet',
   'logout.done': 'Die Abmeldung war erfolgreich.',
+  'logout.keptTitle': 'Sie sind weiterhin angemeldet',
+  'logout.kept': 'Dieser Browser bleibt bei {host} angemeldet.',
 
   'error.title': 'Etwas ist schiefgelaufen',
   'error.generic': 'Die Anfrage konnte nicht abgeschlossen werden.',

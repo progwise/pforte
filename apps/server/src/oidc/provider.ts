@@ -118,13 +118,18 @@ export const createProvider = async ({ config, db, onError, ui = createUi() }: P
           const view = viewFor(ctx)
           ctx.type = 'html'
           ctx.set('Content-Security-Policy', ui.pages.contentSecurityPolicy)
-          ctx.body = view.logoutConfirm({ host: ctx.host, formHtml: form })
+          ctx.body = view.logoutConfirm({ host: ctx.host, formHtml: form, clientName: ctx.oidc.client?.clientName })
         },
+        // The library comes here after a "no" as well, when there is no address to go back to. The sign-in at
+        // pforte is then still there, and the page must not say that it is gone.
         postLogoutSuccessSource: async (ctx) => {
           const view = viewFor(ctx)
+          const signedIn = Boolean((await ctx.oidc.provider.Session.get(ctx)).accountId)
           ctx.type = 'html'
           ctx.set('Content-Security-Policy', ui.pages.contentSecurityPolicy)
-          ctx.body = view.notice(view.t('logout.doneTitle'), view.t('logout.done'))
+          ctx.body = signedIn
+            ? view.notice(view.t('logout.keptTitle'), view.t('logout.kept', { host: ctx.host }))
+            : view.notice(view.t('logout.doneTitle'), view.t('logout.done'))
         },
       },
       backchannelLogout: { enabled: true },

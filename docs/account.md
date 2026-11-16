@@ -87,7 +87,8 @@ differ:
   they are still signed in at pforte.
 
 *Sign out* ends the session of the account pages and, after the usual question, the sign-in at pforte, so the next
-person at a shared computer cannot walk in.
+person at a shared computer cannot walk in. Somebody who answers the question with "No, only leave Account" is out of the
+account pages, but the browser stays signed in at pforte.
 
 The built-in client `pforte-account-ui`, which the pages sign in with, is created by pforte at every start, like
 `pforte-admin-ui` of the administration. It is listed with the other clients as built in and cannot be changed, rotated

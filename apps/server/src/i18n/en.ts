@@ -48,8 +48,13 @@ export const en = {
   'logout.text': 'Do you want to sign out of {host}?',
   'logout.yes': 'Yes, sign me out',
   'logout.no': 'No, stay signed in',
+  'logout.titleFrom': 'Sign out completely?',
+  'logout.textFrom': 'You are leaving {client}. This browser is still signed in at {host} and can open {client} again without a new sign-in. Do you want to sign out there too?',
+  'logout.noFrom': 'No, only leave {client}',
   'logout.doneTitle': 'You are signed out',
   'logout.done': 'Your sign-out was successful.',
+  'logout.keptTitle': 'You are still signed in',
+  'logout.kept': 'This browser stays signed in at {host}.',
 
   'error.title': 'Something went wrong',
   'error.generic': 'The request could not be completed.',

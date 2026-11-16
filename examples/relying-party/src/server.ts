@@ -192,9 +192,12 @@ const server = createServer(async (request, response) => {
 
     if (request.method === 'POST' && url.pathname === '/logout') {
       const idToken = session?.tokens?.idToken
+      // The application's own session ends here and now: the person comes back from the provider whatever they
+      // answer there, and nothing tells the application what the answer was.
       if (id) sessions.delete(id)
       response.setHeader('Set-Cookie', `sid=; Path=/; Max-Age=0${secure ? '; Secure' : ''}`)
-      // Ending the session at the provider revokes this application's refresh tokens there.
+      // The provider revokes this application's refresh tokens and asks the person whether to end the sign-in
+      // there as well. After a "no" the provider can reuse its session for the next sign-in here.
       const endSession = client.buildEndSessionUrl(config, {
         ...(idToken ? { id_token_hint: idToken } : {}),
         post_logout_redirect_uri: `${baseUrl}/`,

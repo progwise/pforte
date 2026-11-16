@@ -77,7 +77,8 @@ const tokens = await client.authorizationCodeGrant(config, url, {
 endpoint. They are the same ones (except for what is only meaningful in a token).
 
 **5. Refresh and sign-out.** The application refreshes tokens before they expire and keeps the newest refresh token. To sign out
-it redirects to pforte's end-session endpoint, which ends the session and revokes the refresh tokens of it.
+it ends its own session and redirects to pforte's end-session endpoint, which revokes its refresh tokens and asks the person
+whether to end the sign-in at pforte too ([signing out](#signing-out)).
 
 ## Register your application
 
@@ -165,9 +166,20 @@ if (payload.nonce !== expectedNonce) throw new Error('The nonce does not match')
 
 ## Signing out
 
-**Signing out at pforte.** Redirect the browser to the `end_session_endpoint` (`/session/end`) with `id_token_hint` (the ID token)
-and `post_logout_redirect_uri` (registered for the client). pforte asks the person to confirm, ends the browser's session, revokes the
-refresh tokens of it, and sends the browser back.
+**Signing out at pforte.** End your own session first, then redirect the browser to the `end_session_endpoint` (`/session/end`)
+with `id_token_hint` (the ID token) and `post_logout_redirect_uri` (registered for the client). Your application is left
+whatever the person answers: with either answer pforte revokes the refresh tokens your application got in that browser
+session. What pforte asks the person is whether to sign out *completely*, that is to end the sign-in at pforte as well:
+
+- **Yes** ends the browser's session at pforte and revokes the refresh tokens of every application in it. The next sign-in
+  is a fresh one: the person signs in again, with password and code or with a passkey.
+- **No** leaves only your application. The browser's session at pforte stays, and pforte reuses it while it is valid: the
+  next sign-in to your application, or to another one, is single sign-on and shows no page. A request that asks for more
+  than the session has (`prompt=login`, a `max_age` that is exceeded, `acr_values`) still leads to a fresh sign-in
+  ([asking for more](#asking-for-more)).
+
+Either way pforte then sends the browser to `post_logout_redirect_uri`, without saying which answer it was. So do not wait
+for the return to end your session, and do not show "you are signed in" there.
 
 **Back-channel logout.** If the client has a back-channel logout address, pforte sends a `logout_token` (a signed JWT) to it
 with a POST when a session of the person ends. Use it to end your own session of that person. Answer `200` or `204`. The
