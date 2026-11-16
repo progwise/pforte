@@ -10,7 +10,8 @@ You need:
 - a Docker Swarm with caddy-docker-proxy running and its overlay network (here called `caddy`),
 - a host name such as `id.example.com` whose DNS record points to the node of the edge proxy,
 - a mail server (SMTP) to send sign-in codes and activation links,
-- on the machine you deploy from: Docker, a checkout of this repository, and SSH access to the swarm.
+- on the machine you deploy from: Docker, a checkout of this repository, and SSH access to the swarm, as a user who may
+  use Docker there.
 
 Everything is run from that machine. `.env` and `./secrets` stay on it; the secrets reach the swarm as swarm secrets,
 never as files on a server.
@@ -20,7 +21,7 @@ never as files on a server.
 ```bash
 cd examples/swarm
 STACK_NAME=pforte ./setup.sh   # makes ./secrets and a first .env; asks for the address of your mail server
-$EDITOR .env                   # PFORTE_HOST, PFORTE_IMAGE, SWARM_MANAGER, PLACEMENT, DATA_DIR, MAIL_FROM, ...
+$EDITOR .env                   # PFORTE_HOST, PFORTE_IMAGE, SWARM_MANAGER, DATA_NODE, DATA_DIR, MAIL_FROM, ...
 ./deploy.sh --check            # validates and says what would be deployed; touches nothing
 ./deploy.sh
 ```
@@ -31,13 +32,16 @@ $EDITOR .env                   # PFORTE_HOST, PFORTE_IMAGE, SWARM_MANAGER, PLACE
 | `PFORTE_HOST` | The public name of pforte. |
 | `PFORTE_IMAGE` | A released version such as `ghcr.io/progwise/pforte:0.2.0`, or `build` (below). **Pin a version**, so an update is something you decide. |
 | `SWARM_MANAGER` | An SSH host of a manager node. The Docker CLI talks to it as `ssh://<host>`. Empty: the Docker of your shell. |
-| `PLACEMENT` | The constraint that names the node the services run on, such as `node.role == worker` or `node.hostname == node-2`. The database's files are a folder on that node, so the services must not move. |
-| `DATA_DIR`, `DATA_NODE` | The folder on that node, and the SSH host to reach the node by. `deploy.sh` makes the folder. |
+| `DATA_NODE` | The node the services run on, as an SSH host. Empty: the manager above, or this machine. `deploy.sh` makes the data folder there, builds there, and pins the services to that node by its ID: the database's files are a folder on it, so nothing may start anywhere else. |
+| `DATA_DIR` | The folder on that node. |
 | `PROXY_NETWORK` | The overlay network of caddy-docker-proxy. |
 | `TRUST_PROXY` | `1` for the edge proxy alone, `2` with a CDN in front of it ([rate limits](../../docs/rate-limiting.md)). |
 | `MAIL_FROM`, `ORGANISATION_NAME`, `DEFAULT_LANGUAGE`, `TIME_ZONE`, `BOOTSTRAP_ADMIN_EMAIL` | As in the [configuration reference](../../docs/configuration.md). |
 
-`deploy.sh` loads `.env` with the shell, so a value with spaces needs quotes: `PLACEMENT="node.role == worker"`.
+`deploy.sh` loads `.env` with the shell, so a value with spaces needs quotes: `ORGANISATION_NAME="Example Inc."`.
+
+The services stay on `DATA_NODE` also when that node is down: they wait for it. Moving to another node means moving
+the data folder first, then changing `DATA_NODE`.
 
 ## First sign-in
 
@@ -59,9 +63,8 @@ docker service logs -f pforte_pforte
   cannot reach the internet. pforte names it in full (`<stack>_db`), because on the proxy's network another stack may
   have a service called `db`.
 - **Secrets are swarm secrets**: the database password and address, the two keys and the mail server's address are
-  mounted into the containers as files and appear neither in the stack file nor in `docker service inspect`. A swarm
-  secret cannot be changed, only replaced, so each carries a fingerprint of its file in its name. Change a file in
-  `./secrets`, run `./deploy.sh`, and the service restarts with a new secret; the old one is removed.
+  mounted into the containers as files and appear neither in the stack file nor in `docker service inspect`. They are
+  not in an image either: a build leaves out `./secrets` and `.env`.
 - **pforte's container** has a read-only filesystem and no Linux capabilities, runs as an unprivileged user, and is
   restarted when its health check fails.
 - **One instance, stopped before the new one starts**, so the migrations of a new version never run next to an old
@@ -72,6 +75,31 @@ docker service logs -f pforte_pforte
 ```bash
 ssh <DATA_NODE> 'docker exec $(docker ps -q -f name=pforte_db) pg_dump -U pforte pforte' | gzip > pforte-$(date +%F).sql.gz
 ```
+
+## Changing a secret
+
+A swarm secret cannot be changed, only replaced, so each carries a fingerprint of its file in its name.
+
+**The mail server's address and the keys:** change the file in `./secrets` and run `./deploy.sh`. pforte restarts with
+the new secret, and the one it replaces is removed. For `cookie_keys` and `jwks`, add the new key in front of the old
+one instead of replacing it: new keys alone sign everybody out
+([configuration](../../docs/configuration.md#what-a-production-start-needs)).
+
+**The database password is different.** Postgres reads `db_password` only once, when it makes the database in an empty
+folder. Changing the file later changes nothing in the database, and a new password in `database_url` alone locks
+pforte out. Change the password in the database first, then in both files, then deploy:
+
+```bash
+NEW=$(openssl rand -hex 24)
+ssh <DATA_NODE> 'docker exec -i $(docker ps -q -f name=pforte_db) psql -U pforte -d pforte' <<< "ALTER ROLE pforte PASSWORD '${NEW}'"
+printf '%s' "$NEW" > secrets/db_password
+printf 'postgres://pforte:%s@pforte_db:5432/pforte' "$NEW" > secrets/database_url
+./deploy.sh
+```
+
+`pforte_db` is the database of the stack `pforte`; with another stack name it is `<stack>_db`, in both places. From the
+first of these lines until the deploy is through, pforte cannot open new connections to the database, so run them in
+one go.
 
 ## Update
 

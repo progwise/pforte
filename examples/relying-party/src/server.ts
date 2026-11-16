@@ -32,17 +32,21 @@ interface Session {
 
 const sessions = new Map<string, Session>()
 
-const sessionFor = (request: IncomingMessage, response: ServerResponse) => {
-  const cookie = /(?:^|;\s*)sid=([\w-]+)/.exec(request.headers.cookie ?? '')?.[1]
-  if (cookie) {
-    const existing = sessions.get(cookie)
-    if (existing) return { id: cookie, session: existing }
-  }
+/** The session of the request's cookie, if there is one. */
+const sessionOf = (request: IncomingMessage) => {
+  const id = /(?:^|;\s*)sid=([\w-]+)/.exec(request.headers.cookie ?? '')?.[1]
+  const session = id ? sessions.get(id) : undefined
+  return id && session ? { id, session } : undefined
+}
+
+// A session begins when somebody starts to sign in, not with the first request: a health check, a crawler or a
+// visitor who only looks would each leave one behind, and they are never removed.
+const startSession = (response: ServerResponse) => {
   const id = randomBytes(24).toString('base64url')
   const session: Session = {}
   sessions.set(id, session)
   response.setHeader('Set-Cookie', `sid=${id}; Path=/; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`)
-  return { id, session }
+  return session
 }
 
 const escapeHtml = (value: unknown) =>
@@ -95,8 +99,8 @@ const showError = (response: ServerResponse, error: unknown) => {
   html(response, 400, `<p>Something went wrong: ${escapeHtml(message)}</p><p><a href="/">Back</a></p>`)
 }
 
-const home = (response: ServerResponse, session: Session) => {
-  if (!session.tokens || !session.claims) {
+const home = (response: ServerResponse, session: Session | undefined) => {
+  if (!session?.tokens || !session.claims) {
     return html(response, 200, `<p>You are not signed in.</p><p><a class="button" href="/login">Sign in</a></p>`)
   }
   const secondsLeft = Math.max(0, Math.round((session.tokens.expiresAt - Date.now()) / 1000))
@@ -131,7 +135,7 @@ const storeTokens = async (session: Session, tokens: client.TokenEndpointRespons
 
 const server = createServer(async (request, response) => {
   const url = new URL(request.url ?? '/', baseUrl)
-  const { id, session } = sessionFor(request, response)
+  const { id, session } = sessionOf(request) ?? {}
 
   try {
     if (request.method === 'GET' && url.pathname === '/') {
@@ -150,7 +154,8 @@ const server = createServer(async (request, response) => {
       const verifier = client.randomPKCECodeVerifier()
       const state = client.randomState()
       const nonce = client.randomNonce()
-      session.pending = { verifier, state, nonce }
+      const starting = session ?? startSession(response)
+      starting.pending = { verifier, state, nonce }
 
       const authorizationUrl = client.buildAuthorizationUrl(config, {
         redirect_uri: redirectUri,
@@ -164,7 +169,7 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === 'GET' && url.pathname === '/callback') {
-      if (!session.pending) throw new Error('No sign-in is in progress. Start again.')
+      if (!session?.pending) throw new Error('No sign-in is in progress. Start again.')
       const { verifier, state, nonce } = session.pending
       session.pending = undefined
 
@@ -180,14 +185,14 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === 'POST' && url.pathname === '/refresh') {
-      if (!session.tokens?.refreshToken) throw new Error('There is no refresh token.')
+      if (!session?.tokens?.refreshToken) throw new Error('There is no refresh token.')
       await storeTokens(session, await client.refreshTokenGrant(config, session.tokens.refreshToken))
       return redirect(response, '/')
     }
 
     if (request.method === 'POST' && url.pathname === '/logout') {
-      const idToken = session.tokens?.idToken
-      sessions.delete(id)
+      const idToken = session?.tokens?.idToken
+      if (id) sessions.delete(id)
       response.setHeader('Set-Cookie', `sid=; Path=/; Max-Age=0${secure ? '; Secure' : ''}`)
       // Ending the session at the provider revokes this application's refresh tokens there.
       const endSession = client.buildEndSessionUrl(config, {

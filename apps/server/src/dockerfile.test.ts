@@ -39,6 +39,18 @@ describe('the Dockerfile', () => {
   it('keeps secrets and the repository history out of the build', () => {
     const ignored = read('.dockerignore').split('\n')
 
-    for (const entry of ['.git', '.env', '.env.*', '**/node_modules']) expect(ignored).toContain(entry)
+    for (const entry of ['.git', '**/.env', '**/.env.*', '**/node_modules']) expect(ignored).toContain(entry)
+  })
+
+  it('keeps what the setup of an example makes next to it out of the build: a checkout is built with it in place', () => {
+    const ignored = read('.dockerignore').split('\n')
+
+    // Docker matches a pattern from the top of the context: `.env` alone would let examples/swarm/.env through.
+    expect(ignored).not.toContain('.env')
+    expect(ignored).toContain('examples/*/secrets')
+    // Every folder of secrets that Git ignores is one the build ignores.
+    const folders = read('.gitignore').split('\n').filter((line) => line.endsWith('/secrets/'))
+    expect(folders.length).toBeGreaterThan(0)
+    for (const folder of folders) expect(folder).toMatch(/^examples\/[^/]+\/secrets\/$/)
   })
 })

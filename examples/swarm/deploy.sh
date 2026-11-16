@@ -4,7 +4,7 @@
 # SWARM_MANAGER (an SSH host), and nothing secret is copied to a server as a file.
 #
 #   ./deploy.sh --check    # validates .env and the stack files and says what would be deployed; touches nothing
-#   ./deploy.sh            # data folder, images, secrets, docker stack deploy
+#   ./deploy.sh            # data folder, images, secrets, docker stack deploy, pinned to the node of the data
 set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY="$(cd ../.. && pwd)"
@@ -30,9 +30,11 @@ done
 grep -q "@${STACK_NAME}_db:" secrets/database_url || fail "secrets/database_url does not name the database of the stack \"${STACK_NAME}\" (${STACK_NAME}_db). The stack name was changed after ./setup.sh."
 case "${DATA_DIR}" in /*) ;; *) fail "DATA_DIR must be an absolute path on the node that runs the services." ;; esac
 
-# The node the services run on: where the data folder is made and where an image is built.
+# The node the services run on: where the data folder is made and where an image is built. The services are
+# pinned to it (below), because on any other node the database would start next to an empty folder.
 NODE="${DATA_NODE:-${SWARM_MANAGER:-}}"
 on_node() { if [ -n "${NODE}" ]; then ssh "${NODE}" "$@"; else bash -c "$*"; fi; }
+node_docker() { DOCKER_HOST="${NODE:+ssh://${NODE}}" docker "$@"; }
 [ -z "${SWARM_MANAGER:-}" ] || export DOCKER_HOST="ssh://${SWARM_MANAGER}"
 
 # A secret of a swarm cannot be changed, so each is named after what is in it.
@@ -67,13 +69,14 @@ fi
 echo "Stack:      ${STACK_NAME} on ${SWARM_MANAGER:-the Docker of this shell}"
 echo "pforte:     https://${PFORTE_HOST}  (${PFORTE_IMAGE})"
 [ -z "${APP_HOST:-}" ] || echo "Application: https://${APP_HOST}  (${APP_IMAGE}, client ${APP_CLIENT_ID:-example-app})"
-echo "Runs on:    ${PLACEMENT:-node.role == manager}, data in ${DATA_DIR} on ${NODE:-this machine}"
+echo "Runs on:    ${NODE:-this machine}, and only there; data in ${DATA_DIR}"
 echo "Mail from:  ${MAIL_FROM}"
 [ -z "${BOOTSTRAP_ADMIN_EMAIL:-}" ] || echo "First administrator: ${BOOTSTRAP_ADMIN_EMAIL} (gets the activation link while the database has no administrator)"
 
 if ${CHECK}; then
-  # Reads the files as the deploy would, with every variable filled in. The swarm is not asked anything.
-  DOCKER_HOST='' docker stack config "${FILES[@]}" > /dev/null
+  # Reads the files as the deploy would, with every variable filled in. The swarm is not asked anything, so the
+  # node has no ID yet.
+  NODE_ID=known-at-the-deploy DOCKER_HOST='' docker stack config "${FILES[@]}" > /dev/null
   echo "The stack files are valid. Nothing was deployed."
   exit 0
 fi
@@ -81,22 +84,34 @@ fi
 docker node ls --format '{{.Hostname}} {{.Status}} {{.ManagerStatus}}'
 docker network inspect "${PROXY_NETWORK:-caddy}" > /dev/null 2>&1 || fail "The network \"${PROXY_NETWORK:-caddy}\" of the edge proxy does not exist on this swarm."
 
+# The services are pinned to the node whose Docker gets the folder and the images, by its ID: a role or a label
+# can fit a second node tomorrow. That node must belong to the swarm that is deployed to.
+NODE_ID="$(node_docker info --format '{{.Swarm.NodeID}}')"
+[ -n "${NODE_ID}" ] || fail "The Docker of ${NODE:-this machine} is not part of a swarm."
+node_name="$(docker node inspect "${NODE_ID}" --format '{{.Description.Hostname}}' 2> /dev/null)" \
+  || fail "${NODE:-This machine} is not a node of the swarm of ${SWARM_MANAGER:-the Docker of this shell}. DATA_NODE must be a node of that swarm."
+export NODE_ID
+echo "Pinned to the node ${node_name} (${NODE_ID})."
+
 echo "Preparing ${DATA_DIR} on ${NODE:-this machine} ..."
 on_node "mkdir -p '${DATA_DIR}/db'"
 
 for build in "${BUILDS[@]+"${BUILDS[@]}"}"; do
   image="${build%%|*}"
   echo "Building ${image} on ${NODE:-this machine} ..."
-  DOCKER_HOST="${NODE:+ssh://${NODE}}" docker build --quiet -f "${REPOSITORY}/${build##*|}" -t "${image}" \
+  node_docker build --quiet -f "${REPOSITORY}/${build##*|}" -t "${image}" \
     --build-arg "VERSION=0.0.0-${revision}" --build-arg "REVISION=$(git -C "${REPOSITORY}" rev-parse HEAD)" "${REPOSITORY}"
 done
 
 echo "Deploying ${STACK_NAME} ..."
 docker stack deploy --resolve-image "${RESOLVE}" --prune "${FILES[@]}" "${STACK_NAME}"
 
-# Secrets of this stack that no service uses any more (the files changed) are removed. One that is in use cannot
-# be removed, so this cannot take away what runs.
-docker secret ls --filter "name=${STACK_NAME}_" --format '{{.Name}}' | while read -r secret; do
+# The secrets this stack had before a file changed are removed. Only what is certainly one of them: a secret that
+# this stack made (its label; a name that starts the same can belong to the stack "${STACK_NAME}_other") and that
+# is named as the five above are. Nothing else on the swarm is touched.
+replaced="^${STACK_NAME}_(db_password|database_url|cookie_keys|jwks|smtp_url)_[0-9a-f]{12}$"
+docker secret ls --filter "label=com.docker.stack.namespace=${STACK_NAME}" --format '{{.Name}}' | while read -r secret; do
+  [[ "${secret}" =~ ${replaced} ]] || continue
   case "${secret}" in
     "${STACK_NAME}_db_password_${DB_PASSWORD_PRINT}" | "${STACK_NAME}_database_url_${DATABASE_URL_PRINT}" | "${STACK_NAME}_cookie_keys_${COOKIE_KEYS_PRINT}" | "${STACK_NAME}_jwks_${JWKS_PRINT}" | "${STACK_NAME}_smtp_url_${SMTP_URL_PRINT}") ;;
     *) docker secret rm "${secret}" > /dev/null 2>&1 && echo "Removed the old secret ${secret}" || true ;;

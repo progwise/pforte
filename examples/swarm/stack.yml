@@ -29,7 +29,8 @@ services:
     deploy:
       replicas: 1
       placement:
-        constraints: ['${PLACEMENT:-node.role == manager}']
+        # The one node that has the data folder and the images. deploy.sh works out its ID.
+        constraints: ['node.id == ${NODE_ID:?deploy.sh sets NODE_ID}']
       # One instance, and the new one may need the migrations the old one has not seen: stop, then start.
       update_config:
         order: stop-first
@@ -53,7 +54,7 @@ services:
       POSTGRES_PASSWORD_FILE: /run/secrets/db_password
     secrets: [db_password]
     volumes:
-      # A folder on the node the placement names, made by deploy.sh. Back it up (see the README).
+      # A folder on the node the services are pinned to, made by deploy.sh. Back it up (see the README).
       - ${DATA_DIR:?Set DATA_DIR in .env}/db:/var/lib/postgresql
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U pforte -d pforte']
@@ -65,7 +66,7 @@ services:
     deploy:
       replicas: 1
       placement:
-        constraints: ['${PLACEMENT:-node.role == manager}']
+        constraints: ['node.id == ${NODE_ID:?deploy.sh sets NODE_ID}']
       update_config:
         order: stop-first
       restart_policy:
