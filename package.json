@@ -25,7 +25,8 @@
     "build": "pnpm -r build",
     "lint": "oxlint",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test && node --test \"scripts/*.test.mjs\""
+    "test": "pnpm -r test && node --test \"scripts/*.test.mjs\"",
+    "test:browser": "pnpm --filter @progwise/pforte-server test:browser"
   },
   "devDependencies": {
     "@types/node": "22.20.5",

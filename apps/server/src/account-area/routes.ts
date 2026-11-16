@@ -9,14 +9,18 @@ import type { SendPasswordResetCode } from '../auth/password-reset.js'
 import type { RateLimiter } from '../auth/rate-limiter.js'
 import { parseAcceptLanguage } from '../i18n/index.js'
 import type { MessageKey, Values } from '../i18n/index.js'
+import type { Notifier } from '../notifications/notifier.js'
 import type { ClientLogouts } from '../oidc/client-logouts.js'
 import { createFlash, type Flash } from '../own-login/flash.js'
 import { safeNext } from '../own-login/oidc.js'
 import { createOwnSignIn } from '../own-login/sign-in.js'
+import type { Passkeys } from '../passkeys/index.js'
+import type { Background } from '../security/background.js'
 import { refuseForeignPosts } from '../security/origin-check.js'
 import type { Ui } from '../ui/index.js'
 import { escapeHtml } from '../ui/pages.js'
 import { ACCOUNT_PATH, ACCOUNT_UI_CLIENT_ID } from './constants.js'
+import { registerPasskeyPages } from './passkey-pages.js'
 import { registerSecurityPages } from './security-pages.js'
 import { type AccountSession, type AccountUser, createAccountGate } from './session.js'
 
@@ -36,6 +40,12 @@ export interface AccountAreaDependencies {
   /** The limit on asking for a new password, the same one as on the page for a forgotten one. */
   limiter: Pick<RateLimiter, 'resetRequest'>
   audit: Pick<LoginAudit, 'resetRequested' | 'codeSent' | 'blocked'>
+  /** What a device is asked when a passkey is created, and the script that asks. */
+  passkeys: Passkeys
+  /** Tells a person that a passkey was added to their account. */
+  notifier: Pick<Notifier, 'sendPasskeyAdded'>
+  /** Runs what must not delay an answer. */
+  background: Background
 }
 
 const LOGIN_COOKIE = 'pforte_account_login'
@@ -93,6 +103,7 @@ export const accountAreaRoutes =
       { path: `${ACCOUNT_PATH}/sessions`, key: 'sessions', label: 'account.nav.sessions' },
       { path: `${ACCOUNT_PATH}/devices`, key: 'devices', label: 'account.nav.devices' },
       { path: `${ACCOUNT_PATH}/sign-ins`, key: 'sign-ins', label: 'account.nav.signIns' },
+      { path: `${ACCOUNT_PATH}/passkeys`, key: 'passkeys', label: 'account.nav.passkeys' },
       { path: `${ACCOUNT_PATH}/password`, key: 'password', label: 'account.nav.password' },
     ]
 
@@ -219,7 +230,9 @@ ${fact('account.profile.language', languageName)}
       return reply.type('text/html').send(page(request, reply, user, 'start', t('account.title'), content))
     })
 
-    registerSecurityPages(app, { ...dependencies, gate, viewFor, page, redirectWith, requireRecentSignIn, formatTime })
+    const context: AccountContext = { ...dependencies, gate, viewFor, page, redirectWith, requireRecentSignIn, formatTime }
+    registerSecurityPages(app, context)
+    registerPasskeyPages(app, context)
   }
 
 /** What the pages of the area share: who the person is, how a page is drawn, and the step-up before a change. */

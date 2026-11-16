@@ -1,5 +1,5 @@
 import { createDb, deleteExpiredOidcPayloads, getDatabaseTime } from '@progwise/pforte-db'
-import { deleteOldLoginEvents } from '@progwise/pforte-db/admin'
+import { deleteExpiredPasskeyChallenges, deleteOldLoginEvents } from '@progwise/pforte-db/admin'
 import { deleteOldCodes } from '@progwise/pforte-db/codes'
 import { deleteOldDevices } from '@progwise/pforte-db/devices'
 import { deleteOldRateLimits } from '@progwise/pforte-db/rate-limits'
@@ -20,6 +20,7 @@ import { createSmtpMailer } from './notifications/mailer.js'
 import { createHttpSmsSender } from './notifications/sms.js'
 import { createLogNotifier, createMailNotifier } from './notifications/notifier.js'
 import { loadBrand } from './ui/brand.js'
+import { createPasskeys } from './passkeys/index.js'
 import { createUi } from './ui/index.js'
 import { defaultTheme } from './ui/theme.js'
 import { loadLocaleOverrides } from './i18n/overrides.js'
@@ -89,15 +90,17 @@ const sendPasswordResetCode = createPasswordResetSender({
   codeSecrets: deriveCodeSecrets(config.cookieKeys),
   issuer: config.issuer,
 })
+const passkeys = createPasskeys({ issuer: config.issuer, ui, name: organisationName })
 const app = buildApp({
   ui,
+  passkeys,
   trustProxy: config.trustProxy,
   issuer: config.issuer,
   getDatabaseTime: () => getDatabaseTime(db),
   oidc: { provider, authenticate, db, notifier, cookieKeys: config.cookieKeys, ui, limiter, audit },
   manage: { issuer: config.issuer, cookieKeys: config.cookieKeys, ui, organisation: organisationName, timeZone: config.timeZone },
   accountArea: accountPages.available
-    ? { db, issuer: config.issuer, cookieKeys: config.cookieKeys, ui, timeZone: config.timeZone, clientLogouts, sendPasswordResetCode, limiter, audit }
+    ? { db, issuer: config.issuer, cookieKeys: config.cookieKeys, ui, timeZone: config.timeZone, clientLogouts, sendPasswordResetCode, limiter, audit, passkeys, notifier, background }
     : undefined,
   account: {
     db,
@@ -147,6 +150,7 @@ const cleanup = setInterval(() => {
   }
   deleteOldRateLimits(db).catch((error) => app.log.error(error, 'cleanup of old rate limit counters failed'))
   deleteOldDevices(db).catch((error) => app.log.error(error, 'cleanup of old devices failed'))
+  deleteExpiredPasskeyChallenges(db).catch((error) => app.log.error(error, 'cleanup of unanswered passkey questions failed'))
 }, CLEANUP_INTERVAL_MS)
 cleanup.unref()
 

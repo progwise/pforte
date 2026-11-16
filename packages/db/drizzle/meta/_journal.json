@@ -78,6 +78,20 @@
       "when": 1792747753408,
       "tag": "0010_add_client_uri_and_activation_client",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794835705070,
+      "tag": "0011_add_passkeys",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794837364079,
+      "tag": "0012_add_passkey_challenges",
+      "breakpoints": true
     }
   ]
 }

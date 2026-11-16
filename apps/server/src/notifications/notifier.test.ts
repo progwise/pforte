@@ -28,6 +28,13 @@ describe('development notifier', () => {
     expect(lines[0]).toContain('https://id.example.com/reset?email=ada%40example.com')
   })
 
+  it('writes the notice that a passkey was added to the log', async () => {
+    const lines: string[] = []
+    await createLogNotifier({ log: (message) => lines.push(message), production: false }).sendPasskeyAdded(user, { device: 'Safari, iPhone', url: 'https://id.example.com/account/passkeys' })
+    expect(lines).toEqual([expect.stringContaining('ada@example.com: a passkey was added (Safari, iPhone)')])
+    expect(lines[0]).toContain('https://id.example.com/account/passkeys')
+  })
+
   it('refuses in production and keeps secrets out of the log', async () => {
     const lines: string[] = []
     const notifier = createLogNotifier({ log: (message) => lines.push(message), production: true })
@@ -35,6 +42,7 @@ describe('development notifier', () => {
     await expect(notifier.sendActivationLink(user, link)).rejects.toBeInstanceOf(NotifierUnavailableError)
     await expect(notifier.sendResetCode(user, { code: '1', expiresAt: new Date(), url: 'x', channel: 'email' as const })).rejects.toBeInstanceOf(NotifierUnavailableError)
     await expect(notifier.sendPasswordChanged(user, { url: 'x' })).rejects.toBeInstanceOf(NotifierUnavailableError)
+    await expect(notifier.sendPasskeyAdded(user, { device: 'x', url: 'x' })).rejects.toBeInstanceOf(NotifierUnavailableError)
     expect(lines).toEqual([])
   })
 })
@@ -121,6 +129,24 @@ describe('mail notifier', () => {
       expect(mail.text).not.toMatch(/[{}]/)
     }
   })
+
+  it('tells the user that a passkey was added, in their language, with the browser it was made with and the page to remove it', async () => {
+    sent.length = 0
+    const notice = { device: 'Safari, iPhone', url: 'https://id.example.com/account/passkeys' }
+    for (const language of ['en', 'de', 'fr', 'hu']) await notifier.sendPasskeyAdded({ ...user, language }, notice)
+    expect(sent.map((mail) => mail.subject)).toEqual([
+      'A passkey was added to your account at Example Inc.',
+      'Ihrem Konto bei Example Inc. wurde ein Passkey hinzugefügt',
+      "Une clé d'accès a été ajoutée à votre compte chez Example Inc.",
+      'Jelkulcsot adtak a(z) Example Inc. fiókjához',
+    ])
+    for (const mail of sent) {
+      expect(mail.to).toBe('ada@example.com')
+      expect(mail.text).toContain('Safari, iPhone')
+      expect(mail.text).toContain('https://id.example.com/account/passkeys')
+      expect(mail.text).not.toMatch(/\{[a-zA-Z]+\}/)
+    }
+  })
 })
 
 describe('mail notifier with SMS', () => {
@@ -166,6 +192,14 @@ describe('mail notifier with SMS', () => {
     await notifier.sendPasswordChanged(user, { url: 'https://id.example.com/reset' })
     expect(texts).toEqual([])
     expect(mails).toEqual([expect.objectContaining({ to: 'ada@example.com', subject: 'Your password for Example Inc. was changed' })])
+  })
+
+  it('sends the notice that a passkey was added by e-mail, also to a user with a phone', async () => {
+    mails.length = 0
+    texts.length = 0
+    await notifier.sendPasskeyAdded(user, { device: 'Chrome, Android', url: 'https://id.example.com/account/passkeys' })
+    expect(texts).toEqual([])
+    expect(mails).toEqual([expect.objectContaining({ to: 'ada@example.com', subject: 'A passkey was added to your account at Example Inc.' })])
   })
 
   it('cannot send an SMS to a user without a number, or without a configured sender', async () => {

@@ -72,7 +72,10 @@ with the other clients as built in and cannot be changed, rotated or deleted. A 
   be locked, deactivated, deleted or demoted, and nobody can do these to themselves; the page says so.
 - **Signed in** shows the browsers where the person is signed in (with their applications, and whether a code was entered)
   and the applications that stay signed in without a browser because they hold a refresh token, such as an app on a phone.
-  **Remembered devices** lists where no code is asked for (the person ticked the box with a code, or when
+  **Passkeys** lists the person's passkeys with the browser each was created with, whether it is synced to their other
+  devices and when it was last used. One can be removed: it cannot sign in any more, and sessions that are open stay
+  open. A person adds passkeys themselves, on [the account pages](account.md#passkeys); nobody can create one for
+  somebody else. **Remembered devices** lists where no code is asked for (the person ticked the box with a code, or when
   they activated their account); one or all can be
   revoked, and the next sign-in there asks for a code again. **Recent sign-ins** shows the last ten sign-in events: successes,
   wrong passwords and codes, codes sent, and sign-ins held back after too many attempts, with the address they came from.

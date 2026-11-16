@@ -107,6 +107,9 @@ export const fr: Catalog = {
   'mail.passwordChanged.subject': 'Votre mot de passe pour {organisation} a été modifié',
   'mail.passwordChanged.text':
     "Bonjour {firstName},\n\nle mot de passe de votre compte chez {organisation} vient d'être modifié, et vous avez été déconnecté partout.\n\nSi c'était vous, vous n'avez rien à faire.\n\nSi ce n'était pas vous, choisissez maintenant un nouveau mot de passe :\n\n{url}\n\nInformez ensuite votre administration.\n",
+  'mail.passkeyAdded.subject': "Une clé d'accès a été ajoutée à votre compte chez {organisation}",
+  'mail.passkeyAdded.text':
+    "Bonjour {firstName},\n\nune clé d'accès vient d'être ajoutée à votre compte chez {organisation}. Elle a été créée avec : {device}.\n\nAvec une clé d'accès, on se connecte sans mot de passe ni code.\n\nSi c'était vous, vous n'avez rien à faire.\n\nSi ce n'était pas vous, supprimez la clé d'accès maintenant :\n\n{url}\n\nChoisissez ensuite un nouveau mot de passe et prévenez votre administration.\n",
 
   // The account pages, where a person sees how they are signed in.
   'account.title': 'Votre compte',
@@ -130,6 +133,7 @@ export const fr: Catalog = {
   'account.nav.sessions': 'Connexions',
   'account.nav.devices': 'Appareils',
   'account.nav.signIns': 'Historique',
+  'account.nav.passkeys': "Clés d'accès",
   'account.nav.password': 'Mot de passe',
   'account.sessions.title': 'Où vous êtes connecté',
   'account.sessions.browsers': 'Navigateurs',
@@ -179,6 +183,30 @@ export const fr: Catalog = {
   'account.password.wait': 'Un code a été demandé trop souvent. Veuillez réessayer dans {minutes} minutes.',
   'account.password.unavailable': "Le code n'a pas pu être envoyé. Veuillez réessayer plus tard.",
   'account.stepUp.again': 'Pour cela, vous avez dû vous reconnecter. Répétez maintenant ce que vous vouliez faire.',
+  'account.passkeys.title': "Clés d'accès",
+  'account.passkeys.help': "Avec une clé d'accès, vous vous connectez grâce à la vérification que votre appareil possède déjà : votre visage, votre doigt ou son code. Sans mot de passe, sans code. Le mot de passe et le code continuent de fonctionner sur un appareil sans clé d'accès.",
+  'account.passkeys.none': "Vous n'avez aucune clé d'accès.",
+  'account.passkeys.createdWith': 'Créée avec',
+  'account.passkeys.created': 'Créée le',
+  'account.passkeys.lastUsed': 'Dernière utilisation',
+  'account.passkeys.never': 'Pas encore',
+  'account.passkeys.unknown': 'Navigateur inconnu',
+  'account.passkeys.remove': 'Supprimer',
+  'account.passkeys.removed': "La clé d'accès a été supprimée et ne permet plus de se connecter. Votre appareil l'affiche peut-être encore : supprimez-la là aussi.",
+  'account.passkeys.gone': "Cette clé d'accès n'existe plus.",
+  'account.passkeys.add': "Ajouter une clé d'accès",
+  'account.passkeys.added': "La clé d'accès a été créée.",
+  'account.passkeys.expired': 'Cela a pris trop de temps. Recommencez.',
+  'account.passkeys.rejected': "La réponse de votre appareil n'a pas pu être vérifiée, aucune clé d'accès n'a été ajoutée. Recommencez.",
+  'account.passkeys.duplicate': "Cette clé d'accès est déjà connue.",
+  'account.passkeys.tooMany': "Un compte peut avoir {count} clés d'accès. Supprimez-en une d'abord.",
+  'account.passkeys.new.title': "Ajouter une clé d'accès",
+  'account.passkeys.new.text': "Votre appareil va demander votre visage, votre doigt ou son code, puis conserver une clé d'accès pour ce compte. S'il l'enregistre dans votre gestionnaire de mots de passe, vos autres appareils la reçoivent aussi.",
+  'account.passkeys.new.button': "Créer la clé d'accès",
+  'account.passkeys.new.back': 'Retour',
+  'account.passkeys.new.unsupported': "Ce navigateur ne peut pas créer de clé d'accès.",
+  'account.passkeys.new.failed': "Aucune clé d'accès n'a été créée : la demande a été annulée ou l'appareil a abandonné. Réessayez.",
+  'account.passkeys.new.exists': "Cet appareil a déjà une clé d'accès pour votre compte.",
 
   'sms.login': '{code} est votre code de connexion pour {organisation}. Valable {minutes} minutes. Ne le communiquez à personne.',
   'sms.reset':

@@ -161,6 +161,20 @@ ${name === 'delete' ? field({ id: 'confirmEmail', type: 'email', label: t('manag
     return redirectWith(reply, `${BASE}/${id}`, { kind: 'ok', key: 'manage.flash.deviceRevoked' })
   })
 
+  // --- Passkeys: removing one needs no confirmation either, the person signs in with password and code again
+
+  app.post<{ Params: { id: string; passkey: string } }>(`${BASE}/:id/passkeys/:passkey/remove`, async (request, reply) => {
+    const session = requireSession(request, reply)
+    if (!session) return reply
+    const { id, passkey } = request.params
+    if (!UUID.test(id) || !UUID.test(passkey)) return notFound(request, reply, session)
+    const response = await api(request, session, { method: 'DELETE', url: `/users/${id}/passkeys/${passkey}` })
+    if (response.statusCode === 401) return sessionEnded(reply)
+    if (response.statusCode === 404) return notFound(request, reply, session)
+    if (response.statusCode >= 400) return redirectWith(reply, `${BASE}/${id}`, { kind: 'error', text: problemText(response.json()) })
+    return redirectWith(reply, `${BASE}/${id}`, { kind: 'ok', key: 'manage.flash.passkeyRemoved' })
+  })
+
   app.post<{ Params: { id: string } }>(`${BASE}/:id/devices-revoke-all`, async (request, reply) => {
     const session = requireSession(request, reply)
     if (!session) return reply
@@ -181,6 +195,13 @@ interface Device {
   userAgent: string | null
   lastSeenAt: string
   expiresAt: string
+}
+interface Passkey {
+  id: string
+  label: string | null
+  synced: boolean
+  createdAt: string
+  lastUsedAt: string | null
 }
 interface Application {
   clientId: string
@@ -226,12 +247,13 @@ const eventText = (event: AuditEvent, t: (key: MessageKey) => string) => {
   }
 }
 
-/** Remembered devices, where the person is signed in, and the last sign-ins: what an administrator looks at when somebody reports a problem. */
+/** Where the person is signed in, their passkeys and remembered devices, and the last sign-ins: what an administrator looks at when somebody reports a problem. */
 export const userPanels = async (ctx: ManageContext, request: FastifyRequest, session: ManageSession, user: ActionUser) => {
   const { api, viewFor, formatTime } = ctx
   const { t, language } = viewFor(request, session)
-  const [devices, sessions, events] = await Promise.all([
+  const [devices, passkeys, sessions, events] = await Promise.all([
     api(request, session, { method: 'GET', url: `/users/${user.id}/devices` }),
+    api(request, session, { method: 'GET', url: `/users/${user.id}/passkeys` }),
     api(request, session, { method: 'GET', url: `/users/${user.id}/sessions` }),
     api(request, session, { method: 'GET', url: `/audit-events?${new URLSearchParams({ targetType: 'user', targetId: user.id, action: 'login.*', limit: '10' })}` }),
   ])
@@ -256,6 +278,28 @@ ${deviceItems
 </tbody></table></div>
 <form method="post" action="${BASE}/${user.id}/devices-revoke-all"><button type="submit" class="secondary">${escapeHtml(t('manage.devices.revokeAll'))}</button></form>`
     : `<p class="muted">${escapeHtml(t('manage.devices.none'))}</p>`
+}
+</div>`
+    : ''
+
+  const passkeyItems = passkeys.statusCode === 200 ? (passkeys.json().items as Passkey[]) : undefined
+  const passkeyPanel = passkeyItems
+    ? `<h2>${escapeHtml(t('manage.passkeys.title'))}</h2>
+<div class="panel">
+<p class="muted">${escapeHtml(t('manage.passkeys.help'))}</p>
+${
+  passkeyItems.length
+    ? `<div class="scroll"><table class="list">
+<thead><tr><th>${escapeHtml(t('manage.passkeys.createdWith'))}</th><th>${escapeHtml(t('manage.passkeys.created'))}</th><th>${escapeHtml(t('manage.passkeys.lastUsed'))}</th><th></th></tr></thead>
+<tbody>
+${passkeyItems
+  .map(
+    (passkey) => `<tr><td>${escapeHtml(passkey.label ?? t('manage.passkeys.unknown'))}${passkey.synced ? ` ${badge('synced', t('manage.passkeys.synced'))}` : ''}</td><td>${time(passkey.createdAt)}</td><td>${passkey.lastUsedAt ? time(passkey.lastUsedAt) : escapeHtml(t('manage.passkeys.never'))}</td>
+<td><form method="post" action="${BASE}/${user.id}/passkeys/${passkey.id}/remove"><button type="submit" class="secondary">${escapeHtml(t('manage.passkeys.remove'))}</button></form></td></tr>`,
+  )
+  .join('\n')}
+</tbody></table></div>`
+    : `<p class="muted">${escapeHtml(t('manage.passkeys.none'))}</p>`
 }
 </div>`
     : ''
@@ -315,5 +359,5 @@ ${recent.map((event) => `<tr><td>${time(event.createdAt)}</td><td>${escapeHtml(e
 </div>`
     : ''
 
-  return `${sessionPanel}\n${devicePanel}\n${signInPanel}`
+  return `${sessionPanel}\n${passkeyPanel}\n${devicePanel}\n${signInPanel}`
 }

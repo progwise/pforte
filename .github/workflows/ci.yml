@@ -49,3 +49,32 @@ jobs:
           test -z "$(git ls-files --others --exclude-standard -- packages/db/drizzle)"
       - run: pnpm test
       - run: pnpm build
+
+  # The script of the passkey pages, in a real browser: Chrome, which the runner has, with its virtual authenticator.
+  browser:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: pforte
+          POSTGRES_PASSWORD: pforte
+          POSTGRES_DB: pforte
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pforte -d pforte"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://pforte:pforte@localhost:5432/pforte
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:browser

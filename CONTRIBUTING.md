@@ -180,6 +180,10 @@ pnpm test
 pnpm build
 ```
 
+The script of the passkey pages is tested in a real browser, apart from the rest: `pnpm test:browser` starts pforte on a
+free port and drives Chrome with its virtual authenticator. It needs Chrome installed and the database of `pnpm dev:up`,
+downloads nothing, and runs in CI as the job `browser`.
+
 ## Layout
 
 | Path | Contents |

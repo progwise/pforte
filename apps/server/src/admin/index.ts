@@ -20,6 +20,7 @@ import { auditRoutes } from './audit-routes.js'
 import { claimTypesRoutes } from './claim-types-routes.js'
 import { clientsRoutes } from './clients-routes.js'
 import { devicesRoutes } from './devices-routes.js'
+import { passkeysRoutes } from './passkeys-routes.js'
 import { sessionsRoutes } from './sessions-routes.js'
 import { claimsRoutes } from './claims-routes.js'
 import { lifecycleRoutes } from './lifecycle-routes.js'
@@ -65,6 +66,7 @@ export const adminRoutes =
           { name: 'Users', description: 'Create, find, change and delete users; idempotent upsert by e-mail for imports.' },
           { name: 'Lifecycle', description: 'Lock, unlock, activate, deactivate, reset the password and end the sessions of a user.' },
           { name: 'Devices', description: 'The devices a user asked pforte to remember, so they skip the second factor there.' },
+          { name: 'Passkeys', description: 'The passkeys a user signs in with instead of password and code.' },
           { name: 'Claims', description: 'The claim values of a user.' },
           { name: 'Claim types', description: 'The kinds of claims, and which clients receive them.' },
           { name: 'Clients', description: 'The applications and machines that use pforte.' },
@@ -158,6 +160,7 @@ export const adminRoutes =
     await app.register(usersRoutes({ db, auth, clientLogouts }))
     await app.register(claimsRoutes({ db, auth }))
     await app.register(devicesRoutes({ db, auth }))
+    await app.register(passkeysRoutes({ db, auth }))
     await app.register(sessionsRoutes({ db, auth }))
     await app.register(lifecycleRoutes({ db, auth, notifier, sendPasswordResetCode, limiter, issuer: provider.issuer, clientLogouts }))
     await app.register(claimTypesRoutes({ db, auth, reloadProvider }))

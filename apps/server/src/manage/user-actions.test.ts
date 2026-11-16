@@ -246,6 +246,60 @@ describe.skipIf(!hasDatabase)('the administration: actions on a user', () => {
       expect(page).toContain('With a code')
     })
 
+    describe('passkeys', () => {
+      const store = async (label: string | null, { synced = false, lastUsed = false } = {}) =>
+        (
+          await h.database.pool.query(`insert into passkeys (user_id, credential_id, public_key, label, synced, last_used_at) values ($1, $2, 'key', $3, $4, $5) returning id`, [
+            benId,
+            `credential-${label}`,
+            label,
+            synced,
+            lastUsed ? new Date() : null,
+          ])
+        ).rows[0].id as string
+      const panel = async () => {
+        const page = plain((await get(`/manage/users/${benId}`)).body)
+        return page.slice(page.indexOf('<h2>Passkeys</h2>'), page.indexOf('<h2>Remembered devices</h2>'))
+      }
+
+      beforeEach(async () => {
+        await h.database.pool.query('delete from passkeys')
+      })
+
+      it('says so when the person has none', async () => {
+        expect(await panel()).toContain('No passkey.')
+      })
+
+      it('lists them with the browser they were made with, whether they are synced and when they were last used', async () => {
+        await store('Safari, iPhone', { synced: true, lastUsed: true })
+        await store(null)
+
+        const part = await panel()
+
+        expect(part.match(/<tr><td>/g)).toHaveLength(2)
+        expect(part).toContain('<td>Safari, iPhone <span class="badge synced">Synced</span></td>')
+        expect(part).toContain('<td>Unknown browser</td>')
+        expect(part).toContain('<td>Not yet</td>')
+      })
+
+      it('removes one, through the admin API, and says so', async () => {
+        const removed = await store('Safari, iPhone')
+        await store('Chrome, Windows')
+
+        const page = await follow(await post(`/manage/users/${benId}/passkeys/${removed}/remove`))
+
+        expect(page.body).toContain('The passkey was removed.')
+        expect(await panel()).not.toContain('Safari, iPhone')
+        expect(await panel()).toContain('Chrome, Windows')
+        expect((await h.audit('user.passkey.remove', benId)).at(-1).details).toMatchObject({ passkeyId: removed })
+      })
+
+      it('answers "not found" for a passkey that is not this person\'s', async () => {
+        expect((await post(`/manage/users/${benId}/passkeys/018f0000-0000-7000-8000-000000000000/remove`)).statusCode).toBe(404)
+        expect((await post(`/manage/users/${benId}/passkeys/not-an-id/remove`)).statusCode).toBe(404)
+      })
+    })
+
     describe('applications that stay signed in', () => {
       const HEADING = '<h3>Applications that stay signed in</h3>'
       /** Stores a record of the person as the OIDC library would: 1 a browser session, 13 a grant, 4 a refresh token. */

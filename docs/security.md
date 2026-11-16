@@ -18,6 +18,8 @@ Every response, from the pages to the admin API and the OpenID endpoints, carrie
 
 The pages with forms add a strict **Content-Security-Policy**: no scripts at all, styles only from the one stylesheet in
 the page, fonts and the logo only from pforte itself, no framing, no `<base>`. They also send `Cache-Control: no-store`.
+The page that creates a passkey is the exception to "no scripts": its policy allows [one script](#the-one-script), by
+its exact address.
 
 Two headers are left out on purpose:
 
@@ -84,6 +86,55 @@ server that is down does not undo the reset, the failure is in the server log. N
 password, chosen with an activation link, and the mail cannot be turned off; its text can be replaced like every other
 (see [languages and texts](branding-and-languages.md#changing-texts-and-adding-languages)). What the notice is worth
 against each attacker is in the [threat model](threat-model.md).
+
+## A new passkey is announced
+
+When a passkey is added to an account, pforte sends the person an e-mail that says so, with the browser the passkey was
+created with and the page where it can be removed. A passkey signs in without password and code, so one that somebody
+else added must not go unnoticed. As with the changed password, the notice is always an e-mail, is sent after the
+passkey is stored, and cannot be turned off; a mail server that is down does not undo the passkey.
+
+## Passkeys
+
+A passkey is made on the person's device and pforte keeps its public half ([the account pages](account.md#passkeys)).
+What pforte insists on:
+
+- **The device checks the person every time** (user verification is required). An answer from a device that did not is
+  refused.
+- **The passkey is made for pforte's host and on pforte's own page.** The answer of the device names the origin of the
+  page it was on and the host it is for; both must be the ones of `ISSUER`, to the port.
+- **A question is answered once.** The challenge is random and is kept at pforte, not in the browser, for five minutes,
+  for the person and the sign-in it was asked in. The first answer that names it uses it up, right or wrong, in one
+  database statement, so of two answers at the same moment one is too late. An answer cannot be sent a second time,
+  also not after its passkey was removed, and not in another session.
+- **A passkey is known once.** A credential that is stored already, for this person or another, is not stored again.
+- **Twenty per person, also under load.** The person's row is locked while their passkeys are counted and the new one
+  is stored, so passkeys that arrive at the same moment are counted one after the other.
+- **No attestation.** pforte does not ask which make of device it is, and keeps nothing that identifies the device.
+- **Nothing secret is stored.** The table holds the public key, the id of the credential and a label. A copy of the
+  database signs nobody in.
+
+The library that checks the answers is `@simplewebauthn/server`.
+
+## The one script
+
+pforte's pages run no script, with one exception. WebAuthn, the browser interface behind passkeys, can only be reached
+from script, so the page that creates a passkey loads one file.
+
+- **One file, served by pforte**, under an address that contains a hash of its content. No inline script, no other
+  origin, no dependency and no build step: the text in `apps/server/src/passkeys/script.ts` is what the browser gets.
+- **The policy allows that address and nothing else**: `script-src` names the one file. A script that got into the page
+  some other way does not run, nor does any other file of pforte loaded as a script. Pages that need no passkey keep
+  the policy without any script.
+- **It makes no requests.** What the device is to be asked comes with the page; the device's answer goes into a hidden
+  field of a form that is sent like any other. So the policy has no `connect-src`, there is no endpoint that answers
+  JSON to a page, and the check that [forms come from pforte's own pages](#forms-only-from-pfortes-own-pages) covers
+  this form too.
+- **The page works without it.** With the script blocked, or in a browser without passkeys, the button stays disabled
+  and the page says that this browser cannot create a passkey.
+
+Two kinds of test hold this: the server is driven with a device in software (right and wrong answers), and Chrome with
+its virtual authenticator runs the script itself, including an attempt to run a second script, which the policy stops.
 
 ## Weak secrets stop a production start
 

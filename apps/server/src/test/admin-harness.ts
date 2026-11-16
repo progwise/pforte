@@ -15,6 +15,7 @@ import { createPasswordResetSender } from '../auth/password-reset.js'
 import { createUi } from '../ui/index.js'
 import { createClientLogouts } from '../oidc/client-logouts.js'
 import { createProviderHolder } from '../oidc/provider.js'
+import { createPasskeys } from '../passkeys/index.js'
 import { ADMIN_UI_CLIENT_ID } from '../manage/constants.js'
 import { basicAuth, Browser, registerCodeSource, signIn } from './browser.js'
 import { createRecordingNotifier } from './recording-notifier.js'
@@ -23,12 +24,18 @@ export const ISSUER = 'https://localhost:3300'
 const COOKIE_KEYS = ['k'.repeat(40)]
 
 /** A seeded test database with the whole app (provider, login and admin API) on top of it. */
-export const createAdminHarness = async ({ selfServiceActivation = true, allowPrivateAddresses = false, logoutPausesMs = [10, 10] } = {}) => {
+export const createAdminHarness = async ({
+  selfServiceActivation = true,
+  allowPrivateAddresses = false,
+  logoutPausesMs = [10, 10],
+  /** The address pforte believes it has. A test with a real browser gives the one it listens on. */
+  issuer = ISSUER,
+} = {}) => {
   const database = await createTestDatabase()
   await seed(database.db)
 
-  await ensureAdminUiClient(database.db, ISSUER)
-  await ensureAccountUiClient(database.db, ISSUER)
+  await ensureAdminUiClient(database.db, issuer)
+  await ensureAccountUiClient(database.db, issuer)
 
   const jwk = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ format: 'jwk' })
   const ui = createUi()
@@ -38,7 +45,7 @@ export const createAdminHarness = async ({ selfServiceActivation = true, allowPr
   const loginAudit = createLoginAudit({ db: database.db, secret: 'audit-test-secret' })
   const provider = await createProviderHolder({
     config: {
-      issuer: ISSUER,
+      issuer,
       cookieKeys: COOKIE_KEYS,
       jwks: { keys: [{ ...jwk, kty: 'RSA', kid: 'test-key', alg: 'RS256', use: 'sig' }] },
       // As in the server: what lets such an address be registered also lets it be called.
@@ -51,13 +58,15 @@ export const createAdminHarness = async ({ selfServiceActivation = true, allowPr
   const clientLogouts = createClientLogouts({ db: database.db, provider, background, pausesMs: logoutPausesMs, onFailure: (failure) => logoutFailures.push(failure) })
   /** Everything the app asked the notifier to send, and a switch to make sending fail. */
   const { notifier, notifications, lastCode, lastResetCode, lastPhoneCode } = createRecordingNotifier()
-  const sendPasswordResetCode = createPasswordResetSender({ db: database.db, notifier, codeSecrets: deriveCodeSecrets(COOKIE_KEYS), issuer: ISSUER })
-  const accountArea = { db: database.db, issuer: ISSUER, cookieKeys: COOKIE_KEYS, ui, timeZone: 'Europe/Berlin', clientLogouts, sendPasswordResetCode, limiter, audit: loginAudit }
+  const sendPasswordResetCode = createPasswordResetSender({ db: database.db, notifier, codeSecrets: deriveCodeSecrets(COOKIE_KEYS), issuer })
+  const passkeys = createPasskeys({ issuer, ui, name: 'Example Inc.' })
+  const accountArea = { db: database.db, issuer, cookieKeys: COOKIE_KEYS, ui, timeZone: 'Europe/Berlin', clientLogouts, sendPasswordResetCode, limiter, audit: loginAudit, passkeys, notifier, background }
   const app = buildApp({
-    issuer: ISSUER,
+    issuer,
+    passkeys,
     getDatabaseTime: () => getDatabaseTime(database.db),
     oidc: { provider, authenticate: await createAuthenticate(database.db), db: database.db, notifier, cookieKeys: COOKIE_KEYS, ui, limiter, audit: loginAudit },
-    manage: { issuer: ISSUER, cookieKeys: COOKIE_KEYS, ui, organisation: 'Example Inc.', timeZone: 'Europe/Berlin' },
+    manage: { issuer, cookieKeys: COOKIE_KEYS, ui, organisation: 'Example Inc.', timeZone: 'Europe/Berlin' },
     accountArea,
     account: {
       db: database.db,
@@ -66,8 +75,8 @@ export const createAdminHarness = async ({ selfServiceActivation = true, allowPr
       notifier,
       selfServiceActivation,
       cookieKeys: COOKIE_KEYS,
-      secure: true,
-      issuer: ISSUER,
+      secure: issuer.startsWith('https:'),
+      issuer,
       ui,
       limiter,
       audit: loginAudit,
@@ -102,7 +111,7 @@ export const createAdminHarness = async ({ selfServiceActivation = true, allowPr
    * Signs a person in to the administration UI (password, then the code) and returns the access token the UI would
    * get, the way an application does it: authorization code flow with PKCE.
    */
-  const personToken = async (email = 'admin@example.com', { clientId = ADMIN_UI_CLIENT_ID, redirectUri = `${ISSUER}/manage/callback` } = {}) => {
+  const personToken = async (email = 'admin@example.com', { clientId = ADMIN_UI_CLIENT_ID, redirectUri = `${issuer}/manage/callback` } = {}) => {
     const browser = new Browser(app)
     const result = await signIn(browser, { clientId, redirectUri, email })
     expect(result.code, 'the sign-in should end with an authorization code').toBeTruthy()
@@ -159,6 +168,8 @@ export const createAdminHarness = async ({ selfServiceActivation = true, allowPr
     settle: () => background.idle(),
     backgroundErrors,
     logoutFailures,
+    /** What is asked of a device for a passkey, and how its answer is checked. */
+    passkeys,
     /** What the account pages are built with, for a test that builds them once more to look at their routes. */
     accountArea,
     close: async () => {
