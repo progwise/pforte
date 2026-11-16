@@ -18,6 +18,21 @@ case "${1:-}" in
 esac
 fail() { echo "$*" >&2; exit 1; }
 
+# Whether a file holds a JSON object whose values are all strings, as pforte wants the headers for the SMS
+# provider. Written out as a pattern, because this script can count on neither jq nor node. It must never say
+# yes where pforte's JSON.parse says no, so it is the stricter of the two: between the parts only the four
+# characters JSON allows there (not a form feed, which [[:space:]] would let through), and in a string no control
+# character at all. scripts/swarm-deploy.test.mjs holds it against JSON.parse.
+is_json_object_of_strings() {
+  local ws=$'[ \t\n\r]*' string pair
+  # The shell drops NUL bytes when it reads a file, and JSON allows none.
+  [ "$(LC_ALL=C tr -d '\000' < "$1" | wc -c)" -eq "$(wc -c < "$1")" ] || return 1
+  string='"([^"\\[:cntrl:]]|\\(["\\/bfnrt]|u[0-9a-fA-F]{4}))*"'
+  pair="${string}${ws}:${ws}${string}"
+  local object="^${ws}\\{${ws}(${pair}(${ws},${ws}${pair})*)?${ws}\\}${ws}\$"
+  [[ "$(< "$1")" =~ ${object} ]]
+}
+
 [ -f .env ] || fail "There is no .env here. Run ./setup.sh first, then fill in .env."
 set -a && source .env && set +a
 export STACK_NAME="${STACK_NAME:-pforte}"
@@ -36,12 +51,9 @@ if [ -n "${SMS_PROVIDER:-}" ]; then
   [ -z "${SMS_HEADERS:-}" ] || fail "SMS_HEADERS is set in .env. The headers carry the credentials of the SMS provider: put the JSON object into the file secrets/sms_headers and remove the line."
   [ -s secrets/sms_headers ] || fail "SMS_PROVIDER is set, but secrets/sms_headers is missing or empty. It holds the headers for the SMS provider as a JSON object (README.md)."
   # pforte refuses to start with headers that are not a JSON object of strings, and the one instance is stopped
-  # before the new one starts: a typo in the file would take sign-in offline. So the file is read here as pforte
-  # reads it. What is in it is never shown, also not the part that is wrong.
-  json_string='"([^"\\[:cntrl:]]|\\(["\\/bfnrt]|u[0-9a-fA-F]{4}))*"'
-  json_pair="${json_string}[[:space:]]*:[[:space:]]*${json_string}"
-  json_object="^[[:space:]]*\\{[[:space:]]*(${json_pair}([[:space:]]*,[[:space:]]*${json_pair})*)?[[:space:]]*\\}[[:space:]]*\$"
-  [[ "$(< secrets/sms_headers)" =~ ${json_object} ]] \
+  # before the new one starts: a typo in the file would take sign-in offline. What is in the file is never shown,
+  # also not the part that is wrong.
+  is_json_object_of_strings secrets/sms_headers \
     || fail 'secrets/sms_headers is not a JSON object whose values are all strings, such as {"X-Api-Key":"...","Accept":"application/json"}. pforte would not start with it. Look for a missing or doubled quote, comma or brace.'
   [ -n "${SMS_BODY:-}" ] || fail "SMS_BODY is not set in .env."
 fi
@@ -101,14 +113,9 @@ echo "pforte:     https://${PFORTE_HOST}  (${PFORTE_IMAGE})"
 [ -z "${APP_HOST:-}" ] || echo "Application: https://${APP_HOST}  (${APP_IMAGE}, client ${APP_CLIENT_ID:-example-app})"
 echo "Runs on:    ${NODE:-the node of the Docker of this shell}, and only there; data in ${DATA_DIR}"
 echo "Mail from:  ${MAIL_FROM}"
-if [ -n "${SMS_PROVIDER:-}" ]; then
-  # Only the host, and only what is certainly one: with some providers the address carries an account or a key,
-  # and an address that cannot be read is not shown at all.
-  sms_host=''
-  case "${SMS_URL:-}" in *://*) sms_host="${SMS_URL#*://}" && sms_host="${sms_host%%[/?#]*}" && sms_host="${sms_host##*@}" && sms_host="${sms_host%%:*}" ;; esac
-  [[ "${sms_host}" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] || sms_host=''
-  echo "SMS:        on${sms_host:+, through ${sms_host}}"
-fi
+# Nothing of the SMS address: with some providers it carries an account or a key, and no pattern of a shell reads
+# an address exactly as pforte does.
+[ -z "${SMS_PROVIDER:-}" ] || echo "SMS:        on"
 [ -z "${BOOTSTRAP_ADMIN_EMAIL:-}" ] || echo "First administrator: ${BOOTSTRAP_ADMIN_EMAIL} (gets the activation link while the database has no administrator)"
 
 if ${CHECK}; then
