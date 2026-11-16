@@ -36,6 +36,14 @@ describe('pages', () => {
     expect(pages.for('de').login({ uid: 'u' })).toContain('href="/reset?lang=de"')
   })
 
+  it('puts the link for a forgotten password under the button of the password, before the other ways on', () => {
+    const page = pages.for('en').login({ uid: 'u', passkey: { attributes: 'data-passkey="get" hidden', script: '' } })
+    const order = ['>Sign in</button>', '<p class="aside"><a href="/reset?lang=en">Forgot your password?</a></p>', 'data-passkey="get"', '>Cancel</button>'].map((part) => page.indexOf(part))
+
+    expect(order.every((position) => position >= 0)).toBe(true)
+    expect(order).toEqual([...order].sort((a, b) => a - b))
+  })
+
   it('leave "remember this device" unticked unless the installation wants it ticked', () => {
     const code = { uid: 'u', channel: 'email' as const, sentTo: 'a***@b.c' }
     expect(pages.for('en').code(code)).not.toMatch(/name="remember" checked/)

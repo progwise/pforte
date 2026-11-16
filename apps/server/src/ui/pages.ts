@@ -164,6 +164,7 @@ ${alert(error)}
 <input id="password" name="password" type="password" autocomplete="current-password" required>
 <button type="submit">${escapeHtml(t('login.submit'))}</button>
 </form>
+<p class="aside"><a href="/reset?lang=${encodeURIComponent(language)}${clientQuery(clientId)}">${escapeHtml(t('login.forgot'))}</a></p>
 ${
   // Hidden until the script finds that this browser knows passkeys: without it the page is the one above and below.
   passkey
@@ -174,7 +175,6 @@ ${
 </form>`
     : ''
 }
-<p><a href="/reset?lang=${encodeURIComponent(language)}${clientQuery(clientId)}">${escapeHtml(t('login.forgot'))}</a></p>
 <form method="post" action="/interaction/${encodeURIComponent(uid)}/abort">
 <button type="submit" class="secondary">${escapeHtml(t('common.cancel'))}</button>
 </form>${passkey ? `\n${passkey.script}` : ''}`,
