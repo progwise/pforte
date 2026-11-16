@@ -50,9 +50,9 @@ affected either.
 | `pforte_device_new` | The token of a device that an activation remembered, until the next sign-in in that browser moves it into `pforte_device`. | like `pforte_device` |
 | `pforte_manage`, `pforte_manage_login`, `pforte_manage_flash` | The session of a person in the administration, the sign-in on its way there and back, and the message an action leaves for the next page. Signed. | `HttpOnly`, `Secure` (https), `SameSite=Strict`, path `/manage`; 8 hours at most, 10 minutes, 2 minutes |
 | `pforte_account`, `pforte_account_login`, `pforte_account_flash` | The same for [the account pages](account.md). The session holds who the person is, which sign-in it came from and when, no token. Signed. | `HttpOnly`, `Secure` (https), `SameSite=Lax`, path `/account`; 1 hour, 10 minutes, 2 minutes |
-| `pforte_passkey_step` | A sign-in that is complete (password and code were right) while the person is asked whether they want a [passkey](passkeys.md). It says who and how they signed in, so the sign-in can be finished after their answer. Signed. | `HttpOnly`, `Secure` (https), `SameSite=Strict`, 15 minutes, only for that sign-in's path |
-| `pforte_activation_passkey` | The same question at the end of an activation: who has just chosen their password. Signed. | like the above, path `/activate` |
-| `pforte_passkey_offer` | Who has answered the offer of a passkey in this browser, and until when each is left alone: 90 days after "not now", 400 days after a passkey was created or used. A person is a short hash in it, not their id. Signed. | `HttpOnly`, `Secure` (https), `SameSite=Strict`, 400 days, path `/interaction` |
+| `pforte_passkey_step` | A random token for a sign-in that is complete (password and code were right) while the person is asked whether they want a [passkey](passkeys.md). Who signed in and how is kept at pforte, under the hash of the token. | `HttpOnly`, `Secure` (https), `SameSite=Strict`, 15 minutes, only for that sign-in's path |
+| `pforte_activation_passkey` | The same for the question at the end of an activation. | like the above, path `/activate` |
+| `pforte_passkey_offer` | Who has answered the offer of a passkey in this browser, and until when each is left alone: 90 days after "not now", 400 days after a passkey was created or used. A person is a short hash in it, not their id. Signed. | `HttpOnly`, `Secure` (https), `SameSite=Strict`, 400 days, path `/`: the sign-in pages and the activation both read and write it |
 | `_session`, `_interaction`, … | The provider's own: the single sign-on session and the open sign-in. Signed with `COOKIE_KEYS`. | `HttpOnly`, `Secure` (https). `SameSite=None` over https, because OpenID Connect requires the authorization endpoint to accept POST; `Lax` over http |
 
 A test signs in over https and checks that every cookie has `HttpOnly`, `Secure` and a `SameSite` value.
@@ -119,9 +119,18 @@ password and code ([passkeys](passkeys.md)). What pforte insists on, when one is
   one the passkey was made for, and must be able to sign in (not locked, not deactivated). A device that names another
   person than the passkey belongs to is refused, as is a signature counter that goes back, which a copy of a passkey
   that is not synced would show.
+- **A sign-in is noted before it counts.** The time of use and the counter are written only if the passkey is still
+  there and its counter is still the one the signature was checked against. Of two sign-ins checked against the same
+  counter, the second is refused, so a counter never goes back; a passkey that was removed while its sign-in was being
+  checked signs nobody in. A passkey that does not count (synced ones report 0) is not held up.
 - **Who may make one.** Only the person themselves, right after showing who they are: with two factors at most five
   minutes ago on the account pages, with a code a moment ago in the offer after a sign-in, with the activation link and
   their new password at the end of an activation.
+- **An offer is kept at pforte and ends there.** While a person is asked whether they want a passkey, their finished
+  sign-in (or their activation) waits in the database; the browser holds a random token, of which pforte keeps the hash.
+  The offer ends when it is answered, after a quarter of an hour, and **when the person's sessions are ended**: by
+  "sign out everywhere", a password reset, locking or deactivating. From then on the token finishes no sign-in and
+  makes no passkey, whoever holds a copy, and every question about a new passkey that was still open is gone with it.
 - **A passkey is known once.** A credential that is stored already, for this person or another, is not stored again.
 - **Twenty per person, also under load.** The person's row is locked while their passkeys are counted and the new one
   is stored, so passkeys that arrive at the same moment are counted one after the other.

@@ -131,6 +131,8 @@ const SOURCE = String.raw`(function () {
     if (!button || !field) return
     var json = JSON.parse(form.getAttribute('data-options'))
     var waiting = null
+    // True from a click on the button until the device has answered it. The quiet question never starts then.
+    var asked = false
 
     var ask = function (quietly) {
       if (waiting) waiting.abort()
@@ -146,8 +148,10 @@ const SOURCE = String.raw`(function () {
       if (typeof PublicKeyCredential.isConditionalMediationAvailable !== 'function') return
       PublicKeyCredential.isConditionalMediationAvailable()
         .then(function (available) {
-          // Ends without a word when the button takes over, or when the person never picks a passkey.
-          if (available) ask(true).catch(function () {})
+          // The browser may take its time to say whether it has an autofill for passkeys. If the person has
+          // clicked the button meanwhile, their request is under way, and starting the quiet one would cancel it.
+          // Otherwise it ends without a word when the button takes over, or when the person never picks a passkey.
+          if (available && !asked) ask(true).catch(function () {})
         })
         .catch(function () {})
     }
@@ -160,7 +164,9 @@ const SOURCE = String.raw`(function () {
       event.preventDefault()
       button.disabled = true
       show(form, '')
+      asked = true
       ask(false).catch(function () {
+        asked = false
         show(form, 'failed')
         button.disabled = false
         askQuietly()

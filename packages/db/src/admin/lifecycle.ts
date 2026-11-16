@@ -5,6 +5,7 @@ import { MODEL_TYPES } from '../oidc.js'
 import { clients, oidcPayloads, users } from '../schema/index.js'
 import { assertAdminStays } from './admins.js'
 import { revokeUserDevices } from './devices.js'
+import { endPasskeySteps } from './passkeys.js'
 import type { RequestContext } from './users.js'
 
 type UserRow = typeof users.$inferSelect
@@ -109,12 +110,15 @@ const clientsToNotify = (logouts: ClientLogout[]) => new Set(logouts.map(({ clie
 
 /**
  * Deletes every session, grant and token of a user and revokes their remembered devices, so they
- * must sign in again, with the second factor. Returns how many of each went, how many applications are to be
+ * must sign in again, with the second factor. A sign-in that is complete but waits for the answer to the offer
+ * of a passkey ends too, as does every question about a passkey that is still open: neither is a session yet,
+ * and both would otherwise outlive this. Returns how many of each went, how many applications are to be
  * told (for the audit event of the caller) and the logouts to send them once the change is committed.
  */
 export const endUserSessions = async (tx: DatabaseOrTransaction, userId: string) => {
   const logouts = await logoutsFor(tx, userId)
   const deleted = await tx.delete(oidcPayloads).where(eq(oidcPayloads.accountId, userId)).returning({ id: oidcPayloads.id })
+  await endPasskeySteps(tx, userId)
   return { sessionsEnded: deleted.length, devicesRevoked: await revokeUserDevices(tx, userId), clientsToNotify: clientsToNotify(logouts), logouts }
 }
 

@@ -1,4 +1,4 @@
-import { bigint, boolean, index, pgTable, text, uuid } from 'drizzle-orm/pg-core'
+import { bigint, boolean, index, jsonb, pgTable, text, uuid } from 'drizzle-orm/pg-core'
 import { id, timestamps, timestamptz } from './columns.js'
 import { users } from './users.js'
 
@@ -53,4 +53,28 @@ export const passkeyChallenges = pgTable(
     ...timestamps(),
   },
   (table) => [index('passkey_challenges_bound_to').on(table.boundTo), index('passkey_challenges_expires_at').on(table.expiresAt)],
+)
+
+/**
+ * People who have just shown who they are and are being asked whether they want a passkey: after a sign-in with a
+ * code, where the finished sign-in waits for the answer, and at the end of an activation. The browser holds a
+ * token; what it stands for is here, so that it ends when the answer is given and when the person's sessions are
+ * ended, whatever copies of the token exist.
+ */
+export const passkeyOffers = pgTable(
+  'passkey_offers',
+  {
+    /** The SHA-256 of the token in the browser's cookie. The token itself is not stored. */
+    tokenHash: text().primaryKey(),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** Where the offer is made, and the only place it counts: a sign-in in progress (`offer:<interaction>`) or `activation`. */
+    boundTo: text().notNull(),
+    /** What the place needs to go on after the answer: what the sign-in was worth, or where the activation leads. */
+    details: jsonb().$type<Record<string, unknown>>().notNull(),
+    expiresAt: timestamptz().notNull(),
+    ...timestamps(),
+  },
+  (table) => [index('passkey_offers_user_id').on(table.userId), index('passkey_offers_expires_at').on(table.expiresAt)],
 )

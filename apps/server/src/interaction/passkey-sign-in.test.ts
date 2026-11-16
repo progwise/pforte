@@ -283,6 +283,40 @@ describe.skipIf(!hasDatabase)('signing in with a passkey', () => {
     })
   })
 
+  describe('a device that counts', () => {
+    it('signs in once when two sign-ins were checked against the same counter, and the counter does not go back', async () => {
+      const one = new Browser(h.app)
+      const two = new Browser(h.app)
+      const first = await openLogin(one)
+      const second = await openLogin(two)
+
+      const responses = await Promise.all([
+        post(one, `${first.interaction}/passkey`, { credential: JSON.stringify(phone.get(first.question, { counter: 5 })) }),
+        post(two, `${second.interaction}/passkey`, { credential: JSON.stringify(phone.get(second.question, { counter: 6 })) }),
+      ])
+
+      expect(responses.map((response) => response.statusCode).sort()).toEqual([303, 401])
+      const winner = responses[0]!.statusCode === 303 ? '5' : '6'
+      expect((await passkey()).counter).toBe(winner)
+      expect(await events('login.succeeded')).toHaveLength(1)
+      expect((await events('login.passkey_failed')).map((event) => event.details.reason)).toEqual(['verification_failed'])
+    })
+
+    it('signs in side by side with a passkey that does not count', async () => {
+      const one = new Browser(h.app)
+      const two = new Browser(h.app)
+      const first = await openLogin(one)
+      const second = await openLogin(two)
+
+      const responses = await Promise.all([
+        post(one, `${first.interaction}/passkey`, { credential: JSON.stringify(phone.get(first.question)) }),
+        post(two, `${second.interaction}/passkey`, { credential: JSON.stringify(phone.get(second.question)) }),
+      ])
+
+      expect(responses.map((response) => response.statusCode)).toEqual([303, 303])
+    })
+  })
+
   describe('too many refused passkeys from one address', () => {
     it('hold that address back, and the right passkey with it, until the wait is over', async () => {
       const ip = '203.0.113.50'

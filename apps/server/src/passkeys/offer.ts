@@ -46,8 +46,9 @@ export const createPasskeyOffers = ({ cookieKeys, secure }: { cookieKeys: string
       people.set(keyOf(userId), Math.floor(seconds + (answer === 'done' ? OFFER_DONE_SECONDS : OFFER_LATER_SECONDS)))
       const kept = [...people].slice(-MAX_PEOPLE)
       const value: Answers = { purpose: 'passkey-offer-answers', people: Object.fromEntries(kept) }
-      // Read where a sign-in ends; an activation, which lives elsewhere, only ever writes it.
-      return setCookieHeader(ANSWER_COOKIE, sign(cookieKeys, value), { path: '/interaction', maxAgeSeconds: OFFER_DONE_SECONDS, secure })
+      // For all of pforte: a sign-in reads and writes it under /interaction, an activation under /activate. With a
+      // narrower path the one would not be sent the cookie the other wrote, and would overwrite what it could not see.
+      return setCookieHeader(ANSWER_COOKIE, sign(cookieKeys, value), { path: '/', maxAgeSeconds: OFFER_DONE_SECONDS, secure })
     },
   }
 }

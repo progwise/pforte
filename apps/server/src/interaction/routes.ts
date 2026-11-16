@@ -1,6 +1,6 @@
 import formbody from '@fastify/formbody'
 import type { Database } from '@progwise/pforte-db'
-import { findPasskeyByCredentialId, openPasskeyChallenge, recordPasskeyUse, takePasskeyChallenge } from '@progwise/pforte-db/admin'
+import { closePasskeyOffer, findPasskeyByCredentialId, findPasskeyOffer, openPasskeyChallenge, openPasskeyOffer, recordPasskeyUse, takePasskeyChallenge } from '@progwise/pforte-db/admin'
 import { changeCodeChannel, checkCode, CodeLimitError, currentCode, issueCode, markEmailVerified } from '@progwise/pforte-db/codes'
 import { findRememberedDevice, rememberDevice } from '@progwise/pforte-db/devices'
 import { findActiveUserById } from '@progwise/pforte-db/oidc'
@@ -50,17 +50,13 @@ const SIGN_IN_QUESTION_SECONDS = 60 * 60
 const OFFER_COOKIE = 'pforte_passkey_step'
 const OFFER_LIFETIME_SECONDS = 15 * 60
 /**
- * A sign-in that is complete (password and code were right) and waits for the answer to "do you want a passkey?".
- * It says what the sign-in was worth, so that it can be finished after the answer, whatever the answer is.
+ * What is noted about a sign-in that is complete (password and code were right) and waits for the answer to "do
+ * you want a passkey?": what the sign-in was worth, so that it can be finished after the answer, whatever the
+ * answer is. It is kept at pforte, with the person, and ends with their sessions; the browser holds a token.
  */
 interface Offer {
-  /** Tells this cookie from the one between password and code, which is signed with the same keys and must never do as this one. */
-  purpose: 'passkey-offer'
-  uid: string
-  userId: string
   acr: string
   amr: string[]
-  expiresAt: number
   language: string
 }
 
@@ -82,6 +78,8 @@ export const interactionRoutes =
     const secure = provider.issuer.startsWith('https:')
     const codeSecrets = deriveCodeSecrets(cookieKeys)
     const cookiePath = (uid: string) => `/interaction/${encodeURIComponent(uid)}`
+    /** Where the offer of a passkey after a code belongs: to this one sign-in. Its questions to the device are bound to the same place. */
+    const offerOf = (uid: string) => `offer:${uid}`
 
     ui.pages.addHeaders(app)
     app.addHook(
@@ -384,8 +382,9 @@ export const interactionRoutes =
       // A person who has just entered a code is who they say they are: the moment to offer a passkey, if this
       // device can make one and they were not asked here before. The sign-in waits for their answer.
       if (passkeys.offers.wanted(request.headers.cookie, user.id, (request.body as { passkeys?: unknown } | undefined)?.passkeys)) {
-        const offer: Offer = { purpose: 'passkey-offer', uid: details.uid, userId: user.id, ...assurance, expiresAt: Date.now() + OFFER_LIFETIME_SECONDS * 1000, language: current.step.language }
-        cookies.push(setCookieHeader(OFFER_COOKIE, sign(cookieKeys, offer), { path: cookiePath(details.uid), maxAgeSeconds: OFFER_LIFETIME_SECONDS, secure }))
+        const offer: Offer = { ...assurance, language: current.step.language }
+        const token = await openPasskeyOffer(db, { userId: user.id, boundTo: offerOf(details.uid), details: { ...offer } }, new Date(Date.now() + OFFER_LIFETIME_SECONDS * 1000))
+        cookies.push(setCookieHeader(OFFER_COOKIE, token, { path: cookiePath(details.uid), maxAgeSeconds: OFFER_LIFETIME_SECONDS, secure }))
         reply.header('Set-Cookie', cookies)
         return reply.redirect(`${cookiePath(details.uid)}/passkey-offer`, 303)
       }
@@ -433,8 +432,9 @@ export const interactionRoutes =
       if (userHandle && !isHandleOf(userHandle, user.id)) return refuse('wrong_person', user.id)
       const used = await passkeys.ceremonies.verifySignIn(answer, challenge, passkey)
       if (!used) return refuse('verification_failed', user.id)
-
-      await recordPasskeyUse(db, passkey.id, used)
+      // Noted only if the passkey is still as it was checked: not removed meanwhile, its counter not moved on by
+      // another sign-in that was checked against the same one. Otherwise nobody is signed in.
+      if (!(await recordPasskeyUse(db, passkey, used))) return refuse('verification_failed', user.id)
       await recordLogin(db, user.id)
       await audit.succeeded(originOf(request), { userId: user.id, method: 'passkey', acr: passkeyAssurance.acr })
       // This browser has a passkey of this person: nothing to offer them here.
@@ -445,31 +445,43 @@ export const interactionRoutes =
 
     const offerPath = (uid: string) => `${cookiePath(uid)}/passkey-offer`
     const clearOffer = (uid: string) => setCookieHeader(OFFER_COOKIE, '', { path: cookiePath(uid), maxAgeSeconds: 0, secure })
+    const tokenOf = (request: FastifyRequest) => readCookie(request.headers.cookie, OFFER_COOKIE) ?? ''
+    const isOffer = (details: Record<string, unknown>): details is Record<string, unknown> & Offer =>
+      typeof details.acr === 'string' && Array.isArray(details.amr) && details.amr.every((method) => typeof method === 'string') && typeof details.language === 'string'
 
-    /** The sign-in that waits behind the offer, if its cookie is one, belongs to this interaction and the person can still sign in. */
+    /**
+     * The sign-in that waits behind the offer: the token of this browser stands for an offer that is still open,
+     * was made in this interaction, and is to somebody who can still sign in. It is not open any more once it
+     * was answered, once it ran out, and once the person's sessions were ended.
+     */
     const offerFor = async (request: FastifyRequest, uid: string) => {
-      const offer = unsign<Offer>(cookieKeys, readCookie(request.headers.cookie, OFFER_COOKIE))
-      if (offer?.purpose !== 'passkey-offer' || offer.uid !== uid || !(offer.expiresAt >= Date.now())) return undefined
-      if (typeof offer.acr !== 'string' || !Array.isArray(offer.amr) || typeof offer.userId !== 'string') return undefined
-      const user = await findActiveUserById(db, offer.userId)
-      return user ? { offer, user } : undefined
+      const open = await findPasskeyOffer(db, { token: tokenOf(request), boundTo: offerOf(uid) })
+      if (!open || !isOffer(open.details)) return undefined
+      const user = await findActiveUserById(db, open.userId)
+      return user ? { uid, offer: open.details, user } : undefined
     }
     type Waiting = NonNullable<Awaited<ReturnType<typeof offerFor>>>
 
-    /** Ends the sign-in that waited, as the code had ended it without the offer. */
-    const finishOffered = (request: FastifyRequest, reply: FastifyReply, { offer, user }: Waiting, answer: 'later' | 'done') =>
-      finishLogin(request, reply, user.id, { acr: offer.acr, amr: offer.amr }, [clearOffer(offer.uid), passkeys.offers.answered(request.headers.cookie, user.id, answer)])
+    /**
+     * Ends the sign-in that waited, as the code had ended it without the offer. The offer is closed first, and
+     * only the request that closed it goes on: an offer finishes one sign-in, once.
+     */
+    const finishOffered = async (request: FastifyRequest, reply: FastifyReply, { uid, user }: Waiting, answer: 'later' | 'done') => {
+      const closed = await closePasskeyOffer(db, { token: tokenOf(request), boundTo: offerOf(uid) })
+      if (!closed || closed.userId !== user.id || !isOffer(closed.details)) return reply.header('Set-Cookie', clearOffer(uid)).redirect(cookiePath(uid), 303)
+      return finishLogin(request, reply, user.id, { acr: closed.details.acr, amr: closed.details.amr }, [clearOffer(uid), passkeys.offers.answered(request.headers.cookie, user.id, answer)])
+    }
 
-    const offerPage = async (request: FastifyRequest, reply: FastifyReply, { offer, user }: Waiting, error?: string) => {
-      const options = await passkeys.enrolment.ask(user, `offer:${offer.uid}`, OFFER_LIFETIME_SECONDS)
+    const offerPage = async (request: FastifyRequest, reply: FastifyReply, waiting: Waiting, error?: string) => {
+      const options = await passkeys.enrolment.ask(waiting.user, offerOf(waiting.uid), OFFER_LIFETIME_SECONDS)
       // Somebody with as many passkeys as an account may have is not offered another: on they go.
-      if (!options) return finishOffered(request, reply, { offer, user }, 'done')
+      if (!options) return finishOffered(request, reply, waiting, 'done')
       passkeys.script.allow(reply)
-      const view = ui.pages.for(offer.language)
+      const view = ui.pages.for(waiting.offer.language)
       return reply
         .code(error ? 422 : 200)
         .type('text/html')
-        .send(view.passkeyOffer({ action: offerPath(offer.uid), skipAction: `${offerPath(offer.uid)}/skip`, attributes: passkeys.script.createAttributes(options), script: passkeys.script.tag, error }))
+        .send(view.passkeyOffer({ action: offerPath(waiting.uid), skipAction: `${offerPath(waiting.uid)}/skip`, attributes: passkeys.script.createAttributes(options), script: passkeys.script.tag, error }))
     }
 
     app.get<{ Params: { uid: string } }>('/interaction/:uid/passkey-offer', async (request, reply) => {
@@ -486,7 +498,7 @@ export const interactionRoutes =
       const waiting = await offerFor(request, details.uid)
       if (!waiting) return reply.redirect(cookiePath(details.uid), 303)
 
-      const outcome = await passkeys.enrolment.complete(request, waiting.user, `offer:${details.uid}`, request.body?.credential)
+      const outcome = await passkeys.enrolment.complete(request, waiting.user, offerOf(details.uid), request.body?.credential)
       // Made, or there already: either way this browser has nothing more to be offered.
       if (outcome === 'added' || outcome === 'duplicate' || outcome === 'too-many') return finishOffered(request, reply, waiting, 'done')
       // Not made. The person is signed in all the same: they try again, or go on with "not now".

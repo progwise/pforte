@@ -1,7 +1,23 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { createTestDatabase, hasDatabase } from '../test/test-database.js'
-import { addPasskey, deleteExpiredPasskeyChallenges, findPasskeyByCredentialId, listPasskeys, MAX_PASSKEYS, openPasskeyChallenge, recordPasskeyUse, removePasskey, takePasskeyChallenge } from './passkeys.js'
-import { createUser, deleteUser } from './users.js'
+import type { Transaction } from '../audit.js'
+import { endSessions, lockUser, requestPasswordReset } from './lifecycle.js'
+import {
+  addPasskey,
+  closePasskeyOffer,
+  deleteExpiredPasskeyChallenges,
+  deleteExpiredPasskeyOffers,
+  findPasskeyByCredentialId,
+  findPasskeyOffer,
+  listPasskeys,
+  MAX_PASSKEYS,
+  openPasskeyChallenge,
+  openPasskeyOffer,
+  recordPasskeyUse,
+  removePasskey,
+  takePasskeyChallenge,
+} from './passkeys.js'
+import { createUser, deleteUser, findUserById } from './users.js'
 
 const context = { actor: { type: 'client' as const, id: 'tester' }, ip: '203.0.113.7', userAgent: 'vitest' }
 const passkey = (name: string) => ({ credentialId: `credential-${name}`, publicKey: `key-${name}`, counter: 0, transports: ['internal'], synced: true, label: name })
@@ -106,9 +122,119 @@ describe.skipIf(!hasDatabase)('passkeys', () => {
     expect(await findPasskeyByCredentialId(database.db, 'credential-nobody-has')).toBeUndefined()
 
     const when = new Date('2026-11-16T10:00:00Z')
-    await recordPasskeyUse(database.db, added.id, { counter: 5, synced: false }, when)
+    expect(await recordPasskeyUse(database.db, found!, { counter: 5, synced: false }, when)).toBe(true)
     expect(await listPasskeys(database.db, anna.id)).toMatchObject([{ lastUsedAt: when, synced: false }])
     expect((await findPasskeyByCredentialId(database.db, 'credential-one'))!.counter).toBe(5)
+  })
+
+  describe('noting that a passkey was used', () => {
+    const stored = async (name: string) => {
+      await add(context, anna, passkey(name))
+      return (await findPasskeyByCredentialId(database.db, `credential-${name}`))!
+    }
+
+    it('is refused when another sign-in was checked against the same counter and got there first: the counter never goes back', async () => {
+      const checked = await stored('counting')
+
+      // Two sign-ins, both checked against counter 0. The device said 6 to one and 5 to the other.
+      expect(await recordPasskeyUse(database.db, checked, { counter: 6, synced: true })).toBe(true)
+      expect(await recordPasskeyUse(database.db, checked, { counter: 5, synced: true })).toBe(false)
+
+      expect((await findPasskeyByCredentialId(database.db, 'credential-counting'))!.counter).toBe(6)
+    })
+
+    it('lets one of several through when they come at the same moment', async () => {
+      const checked = await stored('at-once')
+      await Promise.all(Array.from({ length: 6 }, () => database.pool.query('select pg_sleep(0.05)')))
+
+      const noted = await Promise.all([3, 4, 5, 6, 7, 8].map((counter) => recordPasskeyUse(database.db, checked, { counter, synced: true })))
+
+      expect(noted.filter(Boolean)).toHaveLength(1)
+    })
+
+    it('is refused for a passkey that was removed after it was checked', async () => {
+      const checked = await stored('removed')
+      await database.pool.query(`delete from passkeys where id = $1`, [checked.id])
+
+      expect(await recordPasskeyUse(database.db, checked, { counter: 0, synced: true })).toBe(false)
+    })
+
+    it('does not hold up a passkey that does not count: its counter stays 0, sign-in after sign-in and side by side', async () => {
+      const checked = await stored('synced')
+
+      expect(await Promise.all([1, 2, 3].map(() => recordPasskeyUse(database.db, checked, { counter: 0, synced: true })))).toEqual([true, true, true])
+      expect(await recordPasskeyUse(database.db, checked, { counter: 0, synced: true })).toBe(true)
+    })
+  })
+
+  describe('the offer of a passkey', () => {
+    const soon = () => new Date(Date.now() + 15 * 60_000)
+    const open = (user = anna, boundTo = 'offer:interaction-1', expiresAt = soon()) => openPasskeyOffer(database.db, { userId: user.id, boundTo, details: { acr: 'x', amr: ['pwd', 'otp'] } }, expiresAt)
+    const offers = async () => Number((await database.pool.query('select count(*) from passkey_offers')).rows[0].count)
+
+    beforeEach(async () => {
+      await database.pool.query('delete from passkey_offers')
+    })
+
+    it('is found by the token of the browser, in its own place, with what was noted about it', async () => {
+      const token = await open()
+
+      expect(await findPasskeyOffer(database.db, { token, boundTo: 'offer:interaction-1' })).toEqual({ userId: anna.id, details: { acr: 'x', amr: ['pwd', 'otp'] } })
+      expect(await findPasskeyOffer(database.db, { token, boundTo: 'offer:interaction-2' })).toBeUndefined()
+      expect(await findPasskeyOffer(database.db, { token, boundTo: 'activation' })).toBeUndefined()
+      expect(await findPasskeyOffer(database.db, { token: 'another token', boundTo: 'offer:interaction-1' })).toBeUndefined()
+      expect(await findPasskeyOffer(database.db, { token: '', boundTo: 'offer:interaction-1' })).toBeUndefined()
+    })
+
+    it('keeps the token itself out of the database', async () => {
+      const token = await open()
+      const { rows } = await database.pool.query('select * from passkey_offers')
+      expect(JSON.stringify(rows)).not.toContain(token)
+    })
+
+    it('is closed once: after that its token stands for nothing, also at the same moment', async () => {
+      const token = await open()
+      const offer = { token, boundTo: 'offer:interaction-1' }
+
+      const closed = await Promise.all(Array.from({ length: 6 }, () => closePasskeyOffer(database.db, offer)))
+
+      expect(closed.filter(Boolean)).toEqual([{ userId: anna.id, details: { acr: 'x', amr: ['pwd', 'otp'] } }])
+      expect(await findPasskeyOffer(database.db, offer)).toBeUndefined()
+      expect(await closePasskeyOffer(database.db, offer)).toBeUndefined()
+    })
+
+    it('runs out', async () => {
+      const token = await open(anna, 'activation', new Date(Date.now() - 1000))
+
+      expect(await findPasskeyOffer(database.db, { token, boundTo: 'activation' })).toBeUndefined()
+      expect(await closePasskeyOffer(database.db, { token, boundTo: 'activation' })).toBeUndefined()
+      await open(ben, 'activation', new Date(Date.now() - 1000))
+      await open(ben)
+      expect(await deleteExpiredPasskeyOffers(database.db)).toBe(1)
+      expect(await offers()).toBe(1)
+    })
+
+    it.each([
+      ['their sessions are ended', (tx: Transaction) => endSessions(tx, context, anna)],
+      ['they are locked', (tx: Transaction) => lockUser(tx, context, anna)],
+      ['an administrator starts a password reset for them', (tx: Transaction) => requestPasswordReset(tx, context, anna)],
+    ])('ends, with every open question about a passkey, when %s; somebody else is not touched', async (_name, change) => {
+      await database.pool.query(`update users set status = 'active', locked_at = null, password_hash = 'x' where id = $1`, [anna.id])
+      anna = (await database.db.transaction((tx) => findUserById(tx, anna.id)))!
+      const annas = await open()
+      const bens = await open(ben, 'activation')
+      await openPasskeyChallenge(database.db, { challenge: 'annas-question', userId: anna.id, boundTo: 'offer:interaction-1' }, soon())
+      await openPasskeyChallenge(database.db, { challenge: 'bens-question', userId: ben.id, boundTo: 'activation:ben' }, soon())
+      await openPasskeyChallenge(database.db, { challenge: 'a-login-page', boundTo: 'sign-in:interaction-9' }, soon())
+
+      await database.db.transaction(change)
+
+      expect(await findPasskeyOffer(database.db, { token: annas, boundTo: 'offer:interaction-1' })).toBeUndefined()
+      expect(await takePasskeyChallenge(database.db, { challenge: 'annas-question', userId: anna.id, boundTo: 'offer:interaction-1' })).toBe(false)
+      expect(await findPasskeyOffer(database.db, { token: bens, boundTo: 'activation' })).toBeDefined()
+      expect(await takePasskeyChallenge(database.db, { challenge: 'bens-question', userId: ben.id, boundTo: 'activation:ben' })).toBe(true)
+      expect(await takePasskeyChallenge(database.db, { challenge: 'a-login-page', boundTo: 'sign-in:interaction-9' })).toBe(true)
+    })
   })
 
   it('keeps a long label short', async () => {

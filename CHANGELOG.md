@@ -49,8 +49,8 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
     answers against the OpenAPI document of 0.2.0 rejects it, as with `staysSignedIn` below.
   - New audit events `login.passkey_failed`, `user.passkey.add`, `user.passkey.remove`, and `method: passkey` on
     `login.succeeded`; a new rate limit of 30 refused passkeys per address in 15 minutes; new cookies
-    `pforte_passkey_step`, `pforte_activation_passkey` and `pforte_passkey_offer`; new tables `passkeys` and
-    `passkey_challenges`.
+    `pforte_passkey_step`, `pforte_activation_passkey` and `pforte_passkey_offer`; new tables `passkeys`,
+    `passkey_challenges` and `passkey_offers`.
   - Try passkeys on the devices your people use before you announce them: pforte's tests use a device in software.
 
   ([passkeys](docs/passkeys.md), [security measures](docs/security.md#passkeys),

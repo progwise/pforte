@@ -1,7 +1,8 @@
+import { createHash, randomBytes } from 'node:crypto'
 import { and, count, desc, eq, isNull, lt } from 'drizzle-orm'
 import { type DatabaseOrTransaction, recordAuditEvent, type Transaction } from '../audit.js'
 import type { Database } from '../index.js'
-import { passkeyChallenges, passkeys, users } from '../schema/index.js'
+import { passkeyChallenges, passkeyOffers, passkeys, users } from '../schema/index.js'
 import type { RequestContext } from './users.js'
 
 type UserRow = typeof users.$inferSelect
@@ -127,7 +128,74 @@ export const findPasskeyByCredentialId = async (db: DatabaseOrTransaction, crede
   return passkey
 }
 
-/** Notes a sign-in with a passkey: when, the counter its device reported, and whether it is synced now. */
-export const recordPasskeyUse = async (db: DatabaseOrTransaction, passkeyId: string, { counter, synced }: { counter: number; synced: boolean }, now = new Date()) => {
-  await db.update(passkeys).set({ counter, synced, lastUsedAt: now }).where(eq(passkeys.id, passkeyId))
+/**
+ * Notes a sign-in with a passkey: when, the counter its device reported, and whether it is synced now. True if it
+ * was noted, and only then may the sign-in go on.
+ *
+ * `passkey` is the passkey as the signature was checked against it. The note is made only if the passkey is still
+ * there and its counter is still the one that was checked: of two sign-ins that were checked against the same
+ * counter, the second finds it changed, so a counter never goes back, and a passkey that was removed meanwhile
+ * signs nobody in. A passkey that does not count (its counter stays 0, as with synced passkeys) is not held up.
+ */
+export const recordPasskeyUse = async (
+  db: DatabaseOrTransaction,
+  passkey: { id: string; counter: number },
+  { counter, synced }: { counter: number; synced: boolean },
+  now = new Date(),
+) => {
+  const noted = await db
+    .update(passkeys)
+    .set({ counter, synced, lastUsedAt: now })
+    .where(and(eq(passkeys.id, passkey.id), eq(passkeys.counter, passkey.counter)))
+    .returning({ id: passkeys.id })
+  return noted.length === 1
+}
+
+const hashOf = (token: string) => createHash('sha256').update(token).digest('hex')
+
+export interface PasskeyOffer {
+  /** What the browser holds. */
+  token: string
+  /** Where the offer is made; see the table. */
+  boundTo: string
+}
+
+/** Notes that this person is being offered a passkey in this place, and returns the token for their browser. */
+export const openPasskeyOffer = async (db: DatabaseOrTransaction, { userId, boundTo, details }: { userId: string; boundTo: string; details: Record<string, unknown> }, expiresAt: Date) => {
+  const token = randomBytes(32).toString('base64url')
+  await db.insert(passkeyOffers).values({ tokenHash: hashOf(token), userId, boundTo, details, expiresAt })
+  return token
+}
+
+const sameOffer = ({ token, boundTo }: PasskeyOffer) => and(eq(passkeyOffers.tokenHash, hashOf(token)), eq(passkeyOffers.boundTo, boundTo))
+
+/** The offer this token stands for in this place, if it is still open: who it is made to, and what the place noted. */
+export const findPasskeyOffer = async (db: DatabaseOrTransaction, offer: PasskeyOffer, now = new Date()) => {
+  const [open] = await db.select({ userId: passkeyOffers.userId, details: passkeyOffers.details, expiresAt: passkeyOffers.expiresAt }).from(passkeyOffers).where(sameOffer(offer))
+  return open && open.expiresAt > now ? { userId: open.userId, details: open.details } : undefined
+}
+
+/**
+ * Ends an offer because it was answered, and returns it if it was still open. The row is deleted in the same
+ * statement: of two answers, also at the same moment, one gets it, and a copy of the token is worth nothing after.
+ */
+export const closePasskeyOffer = async (db: DatabaseOrTransaction, offer: PasskeyOffer, now = new Date()) => {
+  const [closed] = await db.delete(passkeyOffers).where(sameOffer(offer)).returning({ userId: passkeyOffers.userId, details: passkeyOffers.details, expiresAt: passkeyOffers.expiresAt })
+  return closed && closed.expiresAt > now ? { userId: closed.userId, details: closed.details } : undefined
+}
+
+/**
+ * Ends what a person has open about passkeys: offers that wait for an answer (with the sign-in behind them) and
+ * questions their devices have not answered. Part of ending a person's sessions, so that nothing that was begun
+ * before can be finished after.
+ */
+export const endPasskeySteps = async (tx: DatabaseOrTransaction, userId: string) => {
+  await tx.delete(passkeyOffers).where(eq(passkeyOffers.userId, userId))
+  await tx.delete(passkeyChallenges).where(eq(passkeyChallenges.userId, userId))
+}
+
+/** Deletes the offers nobody answered in time. Returns how many. */
+export const deleteExpiredPasskeyOffers = async (db: Database, now = new Date()) => {
+  const deleted = await db.delete(passkeyOffers).where(lt(passkeyOffers.expiresAt, now)).returning({ tokenHash: passkeyOffers.tokenHash })
+  return deleted.length
 }

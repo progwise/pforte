@@ -4,6 +4,7 @@ import { sign, unsign } from './signed-cookie.js'
 import { type AdminHarness, createAdminHarness, ISSUER } from '../test/admin-harness.js'
 import { type AnswerOptions, createAuthenticator, type CreationQuestion } from '../test/authenticator.js'
 import { Browser } from '../test/browser.js'
+import { driveSignIn } from '../test/manage-session.js'
 import { openLogin, post, questionIn, tokensAfter } from '../test/passkey-flows.js'
 
 const COOKIE_KEYS = ['k'.repeat(40)]
@@ -33,6 +34,7 @@ describe.skipIf(!hasDatabase)('the offer of a passkey after a sign-in with a cod
     await h.database.pool.query('delete from otp_codes')
     await h.database.pool.query('delete from passkeys')
     await h.database.pool.query('delete from passkey_challenges')
+    await h.database.pool.query('delete from passkey_offers')
     await h.database.pool.query('delete from devices')
     await h.database.pool.query(`delete from audit_events where action like 'login.%' or action like 'user.passkey.%'`)
     await h.database.pool.query(`delete from oidc_payloads where account_id is not null`)
@@ -224,7 +226,8 @@ describe.skipIf(!hasDatabase)('the offer of a passkey after a sign-in with a cod
 
       const responses = await Promise.all(Array.from({ length: 4 }, () => post(browser, offer, { credential })))
 
-      expect(responses.filter((response) => response.statusCode === 303)).toHaveLength(1)
+      // One makes the passkey and goes on to the application. The others find the question used up, or the offer over.
+      expect(responses.filter((response) => String(response.headers.location).includes('/auth/'))).toHaveLength(1)
       expect(await passkeysOf(A.email)).toHaveLength(1)
     })
   })
@@ -259,14 +262,83 @@ describe.skipIf(!hasDatabase)('the offer of a passkey after a sign-in with a cod
       expect(first.offer).not.toBe(`${login.interaction}/passkey-offer`)
     })
 
+    it('is kept at pforte: the browser holds a token that says nothing, and pforte does not keep the token', async () => {
+      const browser = new Browser(h.app)
+      await offered(browser, A.email)
+
+      const token = browser.cookies.get('pforte_passkey_step')!
+      expect(token).toMatch(/^[\w-]{43}$/)
+      const { rows } = await h.database.pool.query(`select * from passkey_offers`)
+      expect(rows).toHaveLength(1)
+      expect(rows[0]).toMatchObject({ user_id: annaId, details: { acr: 'urn:pforte:acr:mfa', amr: ['pwd', 'otp'], language: 'en' } })
+      expect(JSON.stringify(rows)).not.toContain(token)
+    })
+
     it('runs out after a quarter of an hour', async () => {
       const browser = new Browser(h.app)
       const { offer, interaction } = await offered(browser, A.email)
-      const waiting = unsign<{ expiresAt: number }>(COOKIE_KEYS, browser.cookies.get('pforte_passkey_step'))!
-      expect(waiting.expiresAt - Date.now()).toBeLessThanOrEqual(15 * 60_000)
-      browser.cookies.set('pforte_passkey_step', sign(COOKIE_KEYS, { ...waiting, expiresAt: Date.now() - 1000 }))
+      const { rows } = await h.database.pool.query(`select expires_at from passkey_offers`)
+      expect(rows[0].expires_at.getTime() - Date.now()).toBeLessThanOrEqual(15 * 60_000)
+      expect(rows[0].expires_at.getTime() - Date.now()).toBeGreaterThan(14 * 60_000)
+      await h.database.pool.query(`update passkey_offers set expires_at = now() - interval '1 second'`)
 
       expect((await post(browser, `${offer}/skip`)).headers.location).toBe(interaction)
+    })
+
+    describe('ends with the sessions of the person', () => {
+      /** Somebody else's browser, in which the person is signed in to their account pages. */
+      const accountOf = async (email: string) => {
+        const account = new Browser(h.app)
+        await driveSignIn(h, account, '/account', email)
+        return account
+      }
+
+      it.each([
+        ['an administrator signs them out everywhere', () => h.api('POST', `/users/${annaId}/end-sessions`)],
+        ['an administrator starts a password reset for them', () => h.api('POST', `/users/${annaId}/reset-password`)],
+        ['they sign themselves out everywhere, on their account pages', async () => post(await accountOf(A.email), '/account/sessions/end')],
+      ])('when %s: it finishes no sign-in and makes no passkey any more', async (_name, end) => {
+        const browser = new Browser(h.app)
+        const { offer, interaction, question } = await offered(browser, A.email)
+        const sessionsBefore = (await h.database.pool.query(`select count(*) from oidc_payloads where account_id = $1 and type = 1`, [annaId])).rows[0].count
+
+        const ended = await end()
+        expect(ended.statusCode).toBeLessThan(400)
+
+        // What was begun before cannot be finished after: not with "not now", not with a passkey, not by looking.
+        expect((await browser.request('GET', offer)).headers.location).toBe(interaction)
+        expect((await post(browser, offer, { credential: JSON.stringify(phone.create(question)) })).headers.location).toBe(interaction)
+        expect((await post(browser, `${offer}/skip`)).headers.location).toBe(interaction)
+        expect(await passkeysOf(A.email)).toEqual([])
+        expect(Number((await h.database.pool.query(`select count(*) from oidc_payloads where account_id = $1 and type = 1`, [annaId])).rows[0].count)).toBeLessThanOrEqual(Number(sessionsBefore))
+        // The login page is what is left, and it asks for everything again.
+        expect((await browser.request('GET', interaction)).body).toContain('name="password"')
+      })
+    })
+
+    it('finishes one sign-in, once: a copy of its token is worth nothing after the answer', async () => {
+      const browser = new Browser(h.app)
+      const { offer, interaction, question, verifier } = await offered(browser, A.email)
+      const token = browser.cookies.get('pforte_passkey_step')!
+      await tokensAfter(browser, await post(browser, `${offer}/skip`), verifier)
+
+      browser.cookies.set('pforte_passkey_step', token)
+
+      expect((await browser.request('GET', offer)).statusCode).not.toBe(200)
+      await post(browser, offer, { credential: JSON.stringify(phone.create(question)) })
+      expect(await passkeysOf(A.email)).toEqual([])
+      expect(interaction).toBeTruthy()
+    })
+
+    it('finishes once when "Not now" arrives several times at the same moment', async () => {
+      const browser = new Browser(h.app)
+      const { offer, interaction } = await offered(browser, A.email)
+
+      const responses = await Promise.all(Array.from({ length: 5 }, () => post(browser, `${offer}/skip`)))
+
+      const finished = responses.filter((response) => response.headers.location !== interaction)
+      expect(finished).toHaveLength(1)
+      expect(String(finished[0]!.headers.location)).toContain('/auth/')
     })
 
     it('is not finished for somebody who was locked meanwhile', async () => {

@@ -249,6 +249,45 @@ describe.skipIf(!hasDatabase)('passkeys in a real browser', () => {
       expect(complaints).toEqual([])
     })
 
+    it('lets the button finish when the browser says only later that it has an autofill for passkeys', async () => {
+      await withPasskey()
+      await signedOut()
+      await page.addInitScript(() => {
+        // The browser takes 600 ms to say that it has an autofill for passkeys.
+        const original = PublicKeyCredential.isConditionalMediationAvailable.bind(PublicKeyCredential)
+        PublicKeyCredential.isConditionalMediationAvailable = () => new Promise((resolve) => setTimeout(() => resolve(original()), 600))
+        // And the device takes 1.2 s over the request of the button, so that it is under way when that answer
+        // comes. It gives up at once when the page cancels the request, as a browser does.
+        const get = navigator.credentials.get.bind(navigator.credentials)
+        const asked: string[] = []
+        ;(window as unknown as { asked: string[] }).asked = asked
+        navigator.credentials.get = (options) => {
+          asked.push(options?.mediation ?? 'button')
+          if (options?.mediation === 'conditional') return get(options)
+          return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => get(options).then(resolve, reject), 1200)
+            options?.signal?.addEventListener('abort', () => {
+              clearTimeout(timer)
+              reject(new DOMException('The request was cancelled.', 'AbortError'))
+            })
+          })
+        }
+      })
+      await page.goto(`${origin}/account`)
+      await page.waitForURL(/\/interaction\/[^/]+$/)
+
+      await page.click('form[data-passkey="get"] button')
+      await page.waitForTimeout(900)
+
+      // The late answer started nothing: the one request is the button's, it was not cancelled, and nothing was said.
+      expect(await page.evaluate(() => (window as unknown as { asked: string[] }).asked)).toEqual(['button'])
+      expect(await page.isVisible('form[data-passkey="get"] [data-passkey-message="failed"]')).toBe(false)
+      expect(await page.isDisabled('form[data-passkey="get"] button')).toBe(true)
+
+      await page.waitForURL(`${origin}/account`)
+      expect(complaints).toEqual([])
+    })
+
     it('signs in in a browser that cannot read or write the JSON form itself', async () => {
       await withPasskey()
       await signedOut()

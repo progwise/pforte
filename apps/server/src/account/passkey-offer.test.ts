@@ -1,6 +1,6 @@
 import { hasDatabase } from '@progwise/pforte-db/testing'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import { sign, unsign } from '../interaction/signed-cookie.js'
+import { unsign } from '../interaction/signed-cookie.js'
 import { type AdminHarness, createAdminHarness, ISSUER } from '../test/admin-harness.js'
 import { createAuthenticator, type CreationQuestion } from '../test/authenticator.js'
 import { Browser } from '../test/browser.js'
@@ -123,9 +123,31 @@ describe.skipIf(!hasDatabase)('the offer of a passkey at the end of an activatio
     expect(done.body).toContain('Your account is active')
     expect(await passkeysOf(user.id)).toEqual([])
     const header = [done.headers['set-cookie']].flat().find((cookie) => cookie?.startsWith('pforte_passkey_offer='))!
-    // Kept for the sign-in pages, where the next offer would come from.
-    expect(header).toContain('Path=/interaction')
+    // One cookie for the sign-in pages and for the activation: each must be sent what the other wrote.
+    expect(header).toContain('Path=/;')
     expect(Object.keys(unsign<{ people: object }>(COOKIE_KEYS, header.split(';')[0]!.split('=')[1])!.people)).toHaveLength(1)
+  })
+
+  it('keeps the answers other people gave in this browser when it notes this one', async () => {
+    // Anna signed in here with a code and said "not now". The test browser sends cookies by their path, as a real one does.
+    const browser = new Browser(h.app)
+    await h.database.pool.query(`update users set language = 'en' where email = 'anna.schmidt@example.com'`)
+    const login = await openLogin(browser)
+    await post(browser, `${login.interaction}/login`, { email: 'anna.schmidt@example.com', password: 'dev-password' })
+    const code = h.notifications.findLast((notification) => notification.kind === 'login-code')!.code!
+    const afterCode = await post(browser, `${login.interaction}/code`, { code, passkeys: '1' })
+    await post(browser, `${afterCode.headers.location as string}/skip`)
+    const annas = Object.keys(unsign<{ people: object }>(COOKIE_KEYS, browser.cookies.get('pforte_passkey_offer'))!.people)
+    expect(annas).toHaveLength(1)
+
+    // Somebody new activates their account in the same browser and says "not now" as well.
+    const user = await invited()
+    await offered(browser, await activate(browser, user.token))
+    await post(browser, '/activate/passkey/skip')
+
+    const both = Object.keys(unsign<{ people: object }>(COOKIE_KEYS, browser.cookies.get('pforte_passkey_offer'))!.people)
+    expect(both).toHaveLength(2)
+    expect(both).toContain(annas[0])
   })
 
   it('shows the offer again when the answer of the device does not hold, and the person can still go on', async () => {
@@ -181,20 +203,74 @@ describe.skipIf(!hasDatabase)('the offer of a passkey at the end of an activatio
       expect(page.body).not.toContain('data-passkey')
     })
 
+    it('is kept at pforte: the browser holds a token that says nothing', async () => {
+      const user = await invited({ clientId: 'demo-web' })
+      const browser = new Browser(h.app)
+      await offered(browser, await activate(browser, user.token))
+
+      const token = browser.cookies.get('pforte_activation_passkey')!
+      expect(token).toMatch(/^[\w-]{43}$/)
+      const { rows } = await h.database.pool.query(`select * from passkey_offers where user_id = $1`, [user.id])
+      expect(rows).toMatchObject([{ bound_to: 'activation', details: { clientId: 'demo-web', done: 'account' } }])
+      expect(JSON.stringify(rows)).not.toContain(token)
+    })
+
     it('runs out after a quarter of an hour, and is no use for somebody who was locked', async () => {
       const user = await invited()
       const browser = new Browser(h.app)
       const { question } = await offered(browser, await activate(browser, user.token))
-      const step = unsign<{ expiresAt: number }>(COOKIE_KEYS, browser.cookies.get('pforte_activation_passkey'))!
-      expect(step.expiresAt - Date.now()).toBeLessThanOrEqual(15 * 60_000)
+      const { rows } = await h.database.pool.query(`select expires_at from passkey_offers where user_id = $1`, [user.id])
+      expect(rows[0].expires_at.getTime() - Date.now()).toBeLessThanOrEqual(15 * 60_000)
 
+      // Locking ends the offer with the person's sessions; and were it still there, a locked person gets nothing from it.
       await h.database.pool.query(`update users set status = 'locked', locked_at = now() where id = $1`, [user.id])
       await post(browser, '/activate/passkey', { credential: JSON.stringify(phone.create(question)) })
       expect(await passkeysOf(user.id)).toEqual([])
 
       await h.database.pool.query(`update users set status = 'active', locked_at = null where id = $1`, [user.id])
-      browser.cookies.set('pforte_activation_passkey', sign(COOKIE_KEYS, { ...step, expiresAt: Date.now() - 1000 }))
+      await h.database.pool.query(`update passkey_offers set expires_at = now() - interval '1 second' where user_id = $1`, [user.id])
       expect((await browser.request('GET', '/activate/passkey')).body).not.toContain('data-passkey')
+    })
+
+    it.each([
+      ['an administrator signs the person out everywhere', (id: string) => h.api('POST', `/users/${id}/end-sessions`)],
+      ['an administrator starts a password reset for them', (id: string) => h.api('POST', `/users/${id}/reset-password`)],
+      ['an administrator locks them', (id: string) => h.api('POST', `/users/${id}/lock`)],
+    ])('ends when %s: no passkey can be made with it any more', async (_name, end) => {
+      const user = await invited()
+      const browser = new Browser(h.app)
+      const { question } = await offered(browser, await activate(browser, user.token))
+
+      expect((await end(user.id)).statusCode).toBeLessThan(400)
+
+      expect((await browser.request('GET', '/activate/passkey')).body).not.toContain('data-passkey')
+      const answer = await post(browser, '/activate/passkey', { credential: JSON.stringify(phone.create(question)) })
+      expect(answer.body).not.toContain('data-passkey')
+      expect(await passkeysOf(user.id)).toEqual([])
+    })
+
+    it.each([
+      ['"Not now"', async (browser: Browser) => post(browser, '/activate/passkey/skip')],
+      ['a passkey was made', async (browser: Browser, question: CreationQuestion) => post(browser, '/activate/passkey', { credential: JSON.stringify(phone.create(question)) })],
+    ])('is over after %s: a copy of its token asks no device and makes no passkey', async (_name, answer) => {
+      const user = await invited()
+      const browser = new Browser(h.app)
+      const { question } = await offered(browser, await activate(browser, user.token))
+      const token = browser.cookies.get('pforte_activation_passkey')!
+      await answer(browser, question)
+      const made = (await passkeysOf(user.id)).length
+      const questions = async () => (await h.database.pool.query(`select count(*) from passkey_challenges where user_id = $1`, [user.id])).rows[0].count
+      const asked = await questions()
+
+      browser.cookies.set('pforte_activation_passkey', token)
+
+      const page = await browser.request('GET', '/activate/passkey')
+      expect(page.body).not.toContain('data-passkey')
+      expect(page.body).toContain('Your account is active')
+      // No new question was handed out.
+      expect(await questions()).toBe(asked)
+      await post(browser, '/activate/passkey', { credential: JSON.stringify(phone.create({ ...question, challenge: 'x' })) })
+      expect(await passkeysOf(user.id)).toHaveLength(made)
     })
 
     it('takes its question from its own person only', async () => {

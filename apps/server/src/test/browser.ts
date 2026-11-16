@@ -8,7 +8,11 @@ export const registerCodeSource = (app: FastifyInstance, source: (email: string)
   codeSources.set(app, source)
 }
 
-/** A minimal browser for driving the provider through `app.inject`: it keeps cookies between requests. */
+/**
+ * A minimal browser for driving the provider through `app.inject`: it keeps cookies between requests and, as a
+ * browser does, sends a cookie only to the paths it was set for. One cookie per name: where pforte sets the same
+ * name for several paths (one per sign-in), the newest counts.
+ */
 export interface Multipart {
   fields?: Record<string, string>
   file?: { field?: string; name: string; content: Buffer | string }
@@ -32,8 +36,16 @@ const multipartBody = ({ fields = {}, file }: Multipart) => {
 
 export class Browser {
   readonly cookies = new Map<string, string>()
+  /** The `Path` each cookie was set with. A cookie a test puts into `cookies` itself has none and goes everywhere. */
+  private readonly paths = new Map<string, string>()
 
   constructor(readonly app: FastifyInstance) {}
+
+  /** Whether a browser would send the cookie along with a request for this path (RFC 6265, 5.1.4). */
+  private sends(name: string, requestPath: string) {
+    const path = this.paths.get(name) ?? '/'
+    return requestPath === path || (requestPath.startsWith(path) && (path.endsWith('/') || requestPath[path.length] === '/'))
+  }
 
   private store(setCookie: string | string[] | undefined) {
     for (const header of [setCookie ?? []].flat()) {
@@ -42,8 +54,15 @@ export class Browser {
       const name = pair!.slice(0, separator).trim()
       const value = pair!.slice(separator + 1).trim()
       const expired = attributes.some((attribute) => /^\s*expires=/i.test(attribute) && new Date(attribute.split('=')[1]!) < new Date())
-      if (!value || expired) this.cookies.delete(name)
-      else this.cookies.set(name, value)
+      if (!value || expired) {
+        this.cookies.delete(name)
+        this.paths.delete(name)
+      } else {
+        this.cookies.set(name, value)
+        const path = attributes.map((attribute) => /^\s*path=(.*)$/i.exec(attribute)?.[1]?.trim()).find(Boolean)
+        if (path) this.paths.set(name, path)
+        else this.paths.delete(name)
+      }
     }
   }
 
@@ -54,13 +73,12 @@ export class Browser {
   ) {
     const target = new URL(url, 'http://localhost:3300')
     const upload = multipart && multipartBody(multipart)
+    const sent = [...this.cookies].filter(([name]) => this.sends(name, target.pathname))
     const response = await this.app.inject({
       method,
       url: target.pathname + target.search,
       headers: {
-        ...(this.cookies.size
-          ? { cookie: [...this.cookies].map(([name, value]) => `${name}=${value}`).join('; ') }
-          : {}),
+        ...(sent.length ? { cookie: sent.map(([name, value]) => `${name}=${value}`).join('; ') } : {}),
         ...(form ? { 'content-type': 'application/x-www-form-urlencoded' } : {}),
         ...(upload ? { 'content-type': upload.contentType } : {}),
         ...headers,

@@ -48,6 +48,8 @@ does not look at `amr`.
 - **Lock or deactivate** the person: their passkeys are refused like their password.
 - **A password reset and "sign out everywhere" leave passkeys alone.** A forgotten password says nothing about a
   device. Where an account may have been taken over, remove the passkeys nobody recognises, then reset the password.
+  Both do end an offer that is waiting for its answer, with the sign-in behind it: what was begun before cannot be
+  finished after.
 - **Read the audit log:** `login.succeeded` with `method: passkey`, `login.passkey_failed`, `user.passkey.add`,
   `user.passkey.remove` ([the audit log](audit-log.md)).
 

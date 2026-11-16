@@ -2,7 +2,7 @@ import formbody from '@fastify/formbody'
 import { hash } from '@node-rs/argon2'
 import type { Database } from '@progwise/pforte-db'
 import { checkCode, CodeLimitError, issueCode, markEmailVerified, markPhoneVerified } from '@progwise/pforte-db/codes'
-import { getClient, requestActivationLink } from '@progwise/pforte-db/admin'
+import { closePasskeyOffer, findPasskeyOffer, getClient, openPasskeyOffer, requestActivationLink } from '@progwise/pforte-db/admin'
 import { findActiveUserById } from '@progwise/pforte-db/oidc'
 import { completeActivation, completePasswordReset, findPendingActivation } from '@progwise/pforte-db/credentials'
 import { findUserByEmail } from '@progwise/pforte-db/users'
@@ -66,15 +66,15 @@ interface PhoneStep {
 
 const PASSKEY_COOKIE = 'pforte_activation_passkey'
 const PASSKEY_STEP_SECONDS = 15 * 60
+/** Where the offer of a passkey at the end of an activation belongs. */
+const ACTIVATION_OFFER = 'activation'
 /**
- * Somebody who has just activated their account and is asked whether they want a passkey. Only an activation
- * hands this out; it lets its holder make a passkey for that person for a quarter of an hour.
+ * What is noted about somebody who has just activated their account and is asked whether they want a passkey.
+ * Only an activation opens such an offer. It is kept at pforte, with the person: it lets a passkey be made for
+ * them for a quarter of an hour at most, and ends when they answer and when their sessions are ended. The
+ * browser holds a token.
  */
 interface PasskeyStep {
-  /** Tells this cookie from the others that are signed with the same keys and name a person. */
-  purpose: 'activation-passkey'
-  userId: string
-  expiresAt: number
   clientId?: string
   /** What the last page says: the account is active, or also that the phone number is confirmed. */
   done: 'account' | 'phone'
@@ -139,24 +139,32 @@ export const accountRoutes =
     // --- The offer of a passkey, the last step of an activation on a device that can make one
 
     const passkeyCookie = (value: string, maxAgeSeconds: number) => setCookieHeader(PASSKEY_COOKIE, value, { path: '/activate', maxAgeSeconds, secure })
+    const passkeyToken = (request: FastifyRequest) => readCookie(request.headers.cookie, PASSKEY_COOKIE) ?? ''
     /** Sends the person on to the offer. `cookies` are the ones the step before has to set or remove. */
-    const offerPasskey = (reply: FastifyReply, step: Omit<PasskeyStep, 'purpose' | 'expiresAt'>, cookies: string[] = []) => {
-      const waiting: PasskeyStep = { purpose: 'activation-passkey', ...step, expiresAt: Date.now() + PASSKEY_STEP_SECONDS * 1000 }
-      reply.header('Set-Cookie', [...cookies, passkeyCookie(sign(cookieKeys, waiting), PASSKEY_STEP_SECONDS)])
+    const offerPasskey = async (reply: FastifyReply, userId: string, step: PasskeyStep, cookies: string[] = []) => {
+      const token = await openPasskeyOffer(db, { userId, boundTo: ACTIVATION_OFFER, details: { ...step } }, new Date(Date.now() + PASSKEY_STEP_SECONDS * 1000))
+      reply.header('Set-Cookie', [...cookies, passkeyCookie(token, PASSKEY_STEP_SECONDS)])
       return reply.redirect('/activate/passkey', 303)
     }
+    const isStep = (details: Record<string, unknown>): details is Record<string, unknown> & PasskeyStep =>
+      (details.done === 'account' || details.done === 'phone') && (details.clientId === undefined || typeof details.clientId === 'string')
+    /** The person who is being offered a passkey: the token of this browser stands for an offer that is still open, to somebody who can sign in. */
     const passkeyStep = async (request: FastifyRequest) => {
-      const step = unsign<PasskeyStep>(cookieKeys, readCookie(request.headers.cookie, PASSKEY_COOKIE))
-      if (step?.purpose !== 'activation-passkey' || typeof step.userId !== 'string' || !(step.expiresAt >= Date.now())) return undefined
-      const user = await findActiveUserById(db, step.userId)
-      return user ? { step, user } : undefined
+      const open = await findPasskeyOffer(db, { token: passkeyToken(request), boundTo: ACTIVATION_OFFER })
+      if (!open || !isStep(open.details)) return undefined
+      const user = await findActiveUserById(db, open.userId)
+      return user ? { step: open.details, user } : undefined
     }
     type PasskeyWaiting = NonNullable<Awaited<ReturnType<typeof passkeyStep>>>
     const viewOf = (request: FastifyRequest, waiting?: PasskeyWaiting) => ui.pages.for(languageOf(request, undefined, waiting?.user.language))
 
-    /** The page an activation ends with, after the offer was answered one way or the other. */
+    /**
+     * The page an activation ends with, after the offer was answered one way or the other. The offer is closed
+     * here: from now on its token opens nothing, whoever kept a copy.
+     */
     const afterOffer = async (request: FastifyRequest, reply: FastifyReply, { step, user }: PasskeyWaiting, answer: 'later' | 'done') => {
-      reply.header('Set-Cookie', [passkeyCookie('', 0), passkeys.offers.answered(request.headers.cookie, user.id, answer)])
+      const closed = await closePasskeyOffer(db, { token: passkeyToken(request), boundTo: ACTIVATION_OFFER })
+      reply.header('Set-Cookie', closed ? [passkeyCookie('', 0), passkeys.offers.answered(request.headers.cookie, user.id, answer)] : [passkeyCookie('', 0)])
       const view = viewOf(request, { step, user })
       return html(reply, 200, step.done === 'phone' ? await confirmedPhone(view, step.clientId) : await activeAccount(view, step.clientId))
     }
@@ -252,7 +260,7 @@ export const accountRoutes =
       }
       // The link showed that the person reads the mailbox, and they have just chosen their password: they are
       // who the account is for, as much as after a sign-in with a code.
-      if (capable) return offerPasskey(reply, { userId: user.id, clientId, done: 'account' }, cookies)
+      if (capable) return offerPasskey(reply, user.id, { clientId, done: 'account' }, cookies)
       if (cookies.length > 0) reply.header('Set-Cookie', cookies)
       return html(reply, 200, await activeAccount(view, clientId))
     })
@@ -302,7 +310,7 @@ export const accountRoutes =
         return html(reply, 401, view.phoneConfirm({ sentTo: maskPhone(user.phone!), error: view.t('code.badOrExpired') }))
       }
       await markPhoneVerified(db, user.id)
-      if (user.passkeys) return offerPasskey(reply, { userId: user.id, clientId: user.clientId, done: 'phone' }, [endOfPhoneStep])
+      if (user.passkeys) return offerPasskey(reply, user.id, { clientId: user.clientId, done: 'phone' }, [endOfPhoneStep])
       return finishedPhoneStep(reply, await confirmedPhone(view, user.clientId))
     })
 
@@ -332,7 +340,7 @@ export const accountRoutes =
 
     app.post('/activate/phone/skip', async (request, reply) => {
       const user = await phoneStep(request)
-      if (user?.passkeys) return offerPasskey(reply, { userId: user.id, clientId: user.clientId, done: 'account' }, [endOfPhoneStep])
+      if (user?.passkeys) return offerPasskey(reply, user.id, { clientId: user.clientId, done: 'account' }, [endOfPhoneStep])
       return finishedPhoneStep(reply, await activeAccount(ui.pages.for(languageOf(request, undefined, user?.language)), user?.clientId))
     })
 
