@@ -212,6 +212,17 @@ describe.skipIf(!hasDatabase)('one-time codes', () => {
     })
   })
 
+  it('says of the valid code whether it can still be entered: not once its attempts are used up', async () => {
+    const userId = await newUser()
+    const { code } = await issue(userId)
+    const wrong = code === '000000' ? '111111' : '000000'
+    expect(await currentCode(database.db, { userId, purpose: 'login' }, start)).toMatchObject({ usable: true })
+    for (let attempt = 0; attempt < 4; attempt++) await check(userId, wrong)
+    expect(await currentCode(database.db, { userId, purpose: 'login' }, start)).toMatchObject({ usable: true })
+    await check(userId, wrong)
+    expect(await currentCode(database.db, { userId, purpose: 'login' }, start)).toMatchObject({ usable: false })
+  })
+
   it('withdraws the code that is valid: it is gone at once, stays unused and still counts towards the limits', async () => {
     const userId = await newUser()
     const { code } = await issue(userId)

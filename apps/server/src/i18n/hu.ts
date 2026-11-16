@@ -139,7 +139,7 @@ export const hu: Catalog = {
   'account.profile.phoneUnconfirmed': 'Nincs megerősítve, ezért a bejelentkezési kódok e-mailben érkeznek.',
   'account.phone.send': 'Megerősítés SMS-ben küldött kóddal',
   'account.phone.introSend': 'A {to} szám megerősítéséhez 6 számjegyű kódot küldünk rá SMS-ben. Miután megadta, a bejelentkezési kódok SMS-ben érkeznek.',
-  'account.phone.intro': 'A {to} szám megerősítéséhez adja meg az arra SMS-ben küldött 6 számjegyű kódot. Ezután a bejelentkezési kódok SMS-ben érkeznek.',
+  'account.phone.intro': 'Adja meg az SMS-ben kapott 6 számjegyű kódot. A szám megerősítése után a bejelentkezési kódok SMS-ben érkeznek.',
   'account.phone.unavailable': 'A kódot nem sikerült elküldeni. Kérjük, próbálja újra később.',
   'account.loginFailed.title': 'A bejelentkezés nem sikerült',
   'account.loginFailed.text': 'A bejelentkezést nem sikerült befejezni. Kérjük, próbálja újra.',

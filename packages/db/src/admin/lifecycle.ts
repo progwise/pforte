@@ -6,7 +6,7 @@ import { clients, oidcPayloads, users } from '../schema/index.js'
 import { assertAdminStays } from './admins.js'
 import { revokeUserDevices } from './devices.js'
 import { endPasskeySteps } from './passkeys.js'
-import { lockUserRow, whileUserHeld } from '../users.js'
+import { lockUserRow } from '../users.js'
 import { checkCode, type CodeCheck, type CodeOptions } from '../codes.js'
 import type { Database } from '../index.js'
 import type { RequestContext } from './users.js'
@@ -252,10 +252,15 @@ export const requestPasswordReset = async (tx: DatabaseOrTransaction, context: R
  * moment (it was issued bound to its destination), the confirmation is written and recorded, all or nothing. A
  * change of the number by the back office happens wholly before, and the code is then a wrong one, or wholly
  * after, and takes the confirmation away again. A wrong code still counts as an attempt.
+ *
+ * The row is held `for no key update`, which is what a change of the number waits for, and not `for update`: a
+ * new code that is issued at the same moment ends the old one and then refers to this row (the foreign key of
+ * the new code takes `for key share`). Under `for update` that one would wait for this, and this for the old
+ * code it holds: a deadlock, and one of the two requests would fail.
  */
 export const confirmPhone = (db: Database, context: RequestContext, { userId, code }: { userId: string; code: string }, options: CodeOptions): Promise<CodeCheck> =>
-  whileUserHeld(db, userId, async (tx) => {
-    const [user] = await tx.select().from(users).where(eq(users.id, userId))
+  db.transaction(async (tx) => {
+    const [user] = await tx.select().from(users).where(eq(users.id, userId)).for('no key update')
     if (!user?.phone || user.phoneVerifiedAt) return { ok: false, reason: 'none' }
     const result = await checkCode(tx, { userId, purpose: 'activation', code, boundTo: user.phone }, options)
     if (!result.ok) return result

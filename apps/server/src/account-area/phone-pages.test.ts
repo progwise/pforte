@@ -99,7 +99,7 @@ describe.skipIf(!hasDatabase)('the account pages: confirming the phone number', 
       const page = await follow(browser, sent)
       expect(page.body).toContain('<h1>Confirm your phone number</h1>')
       expect(page.body).toContain('A new code is on its way.')
-      expect(page.body).toContain('To confirm +49')
+      expect(page.body).toContain('Enter the 6-digit code from the SMS.')
       expect(page.body).not.toContain(NUMBER)
       expect(page.body).toContain('<form method="post" action="/account/phone/confirm">')
       expect(page.body).toContain('Send a new code')
@@ -293,9 +293,40 @@ describe.skipIf(!hasDatabase)('the account pages: confirming the phone number', 
       const changed = await h.api('PATCH', `/users/${id}`, { body: { phone: '+4915187654321' } })
       expect(changed.statusCode, changed.body).toBe(200)
 
+      // The page still asks for the code that is on its way, and does not say that it went to the new number:
+      // it names no number at all.
+      const waiting = await browser.request('GET', '/account/phone')
+      expect(waiting.body).toContain('Enter the 6-digit code from the SMS.')
+      expect(waiting.body).toContain('<form method="post" action="/account/phone/confirm">')
+      expect(waiting.body).not.toContain('•')
+      expect(waiting.body).not.toContain('+49')
+
       const refused = await post(browser, '/account/phone/confirm', { code })
 
       expect(refused.headers.location).toBe('/account/phone')
+      expect((await follow(browser, refused)).body).toContain('The code is not correct or has expired. You can ask for a new one below.')
+      expect(await confirmed(A.email)).toBe(false)
+
+      // The new code goes to the number that is stored now, and confirms it.
+      await h.database.pool.query(`update otp_codes set created_at = created_at - interval '2 minutes' where user_id = $1`, [id])
+      await post(browser, '/account/phone/send')
+      expect(phoneCodes().at(-1)!.user.phone).toBe('+4915187654321')
+      expect((await post(browser, '/account/phone/confirm', { code: h.lastPhoneCode(A.email)! })).headers.location).toBe('/account')
+      expect(await confirmed(A.email)).toBe(true)
+    })
+
+    it('offers to send a code again once the one that was sent has no attempts left', async () => {
+      const browser = await signedIn(A.email)
+      await post(browser, '/account/phone/send')
+      const code = h.lastPhoneCode(A.email)!
+      const wrong = code === '000000' ? '111111' : '000000'
+      for (let attempt = 0; attempt < 5; attempt++) await post(browser, '/account/phone/confirm', { code: wrong })
+
+      const page = await browser.request('GET', '/account/phone')
+
+      expect(page.body).toContain(FIRST_SEND)
+      expect(page.body).not.toContain('/account/phone/confirm')
+      expect((await post(browser, '/account/phone/confirm', { code })).headers.location).toBe('/account/phone')
       expect(await confirmed(A.email)).toBe(false)
     })
   })
