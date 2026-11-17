@@ -57,7 +57,9 @@ services:
       # A folder on the node the services are pinned to, made by deploy.sh. Back it up (see the README).
       - ${DATA_DIR:?Set DATA_DIR in .env}/db:/var/lib/postgresql
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U pforte -d pforte']
+      # Asked over the network, as pforte connects: on its first start Postgres runs a server for its own set-up
+      # that answers on the socket only and is shut down again.
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U pforte -d pforte']
       interval: 10s
       timeout: 5s
       retries: 5
