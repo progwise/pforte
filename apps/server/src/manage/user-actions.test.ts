@@ -99,6 +99,32 @@ describe.skipIf(!hasDatabase)('the administration: actions on a user', () => {
     expect(h.notifications.length).toBeGreaterThan(0)
   })
 
+  it('invites an administrator to the administration, which the page after choosing the password leads on to', async () => {
+    const invite = async () => {
+      h.notifications.length = 0
+      await h.database.pool.query(`update users set status = 'created', password_hash = null where id = $1`, [benId])
+      await follow(await post(`/manage/users/${benId}/activate`))
+      const { url, applicationName } = h.notifications.findLast((n) => n.kind === 'activation')!
+      const chosen = await new Browser(h.app).request('POST', '/activate', {
+        form: { token: new URL(url!).searchParams.get('token')!, password: 'a long enough passphrase', confirm: 'a long enough passphrase' },
+      })
+      expect(chosen.statusCode, chosen.body).toBe(200)
+      expect(chosen.body).toContain('Your account is active')
+      return { page: chosen.body, applicationName }
+    }
+
+    // somebody who is no administrator: the administration does not know which application they are going to
+    const person = await invite()
+    expect(person.applicationName).toBeUndefined()
+    expect(person.page).not.toContain('Continue to')
+
+    await h.database.pool.query(`update users set is_admin = true where id = $1`, [benId])
+    const administrator = await invite()
+    expect(administrator.applicationName).toBe('Administration')
+    expect(administrator.page).toContain('<a class="button" href="https://localhost:3300/manage">Continue to Administration</a>')
+    expect((await h.database.pool.query(`select details from audit_events where action = 'user.activate' and target_id = $1 order by created_at desc limit 1`, [benId])).rows[0].details).toMatchObject({ clientId: 'pforte-admin-ui' })
+  })
+
   it('resets a password and signs the person out everywhere', async () => {
     await h.database.pool.query(`insert into oidc_payloads (id, type, payload, account_id) values ('ua-1', 1, '{}', $1)`, [benId])
 
