@@ -8,6 +8,8 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
 
 ## Unreleased
 
+## 0.3.1 (2026-11-18)
+
 ### Added
 
 - **pforte has a signet:** an arched doorway with a keyhole, which is also a person standing in it. Every page now has an
