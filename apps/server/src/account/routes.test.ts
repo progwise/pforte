@@ -144,6 +144,31 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
       expect((await form('POST', '/activate', { token, password: GOOD, confirm: GOOD })).statusCode).toBe(200)
     })
 
+    it('shows whose password it is as the user name, for a password manager to save it under', async () => {
+      const { email, token } = await invited()
+      const field = `autocomplete="username" required readonly value="${email}"`
+      expect((await form('GET', `/activate?token=${token}`)).body).toContain(field)
+      // Also when the page comes again after a mistake.
+      expect((await form('POST', '/activate', { token, password: 'short', confirm: 'short' })).body).toContain(field)
+      // Nobody without the link learns an address.
+      expect((await form('GET', '/activate?token=nonsense')).body).not.toContain('autocomplete="username"')
+    })
+
+    it('goes by the link alone, whatever address the form posts', async () => {
+      const { email, token } = await invited()
+      const other = await invited()
+      const done = await form('POST', '/activate', { token, email: other.email, password: GOOD, confirm: GOOD })
+
+      expect(done.statusCode).toBe(200)
+      expect(await row(email)).toMatchObject({ status: 'active', email })
+      expect(await row(other.email)).toMatchObject({ status: 'created', password_hash: null })
+      // The policy is checked against the address of the link as well, not the posted one.
+      const third = await invited()
+      const likeEmail = await form('POST', '/activate', { token: third.token, email: other.email, password: third.email, confirm: third.email })
+      expect(likeEmail.statusCode).toBe(422)
+      expect(likeEmail.body).toContain(`readonly value="${third.email}"`)
+    })
+
     it('works once', async () => {
       const { token } = await invited()
       await form('POST', '/activate', { token, password: GOOD, confirm: GOOD })
@@ -791,7 +816,7 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
       const mail = h.notifications.findLast((n) => n.kind === 'reset-code')!
       expect(mail.url).toBe(`https://localhost:3300/reset/code?email=${encodeURIComponent(user.email)}&lang=en`)
       const page = await form('GET', `/reset/code?email=${encodeURIComponent(user.email)}`)
-      expect(page.body).toContain(`name="email" value="${user.email}"`)
+      expect(page.body).toContain(`name="email" type="email" autocomplete="username" required readonly value="${user.email}"`)
       expect((await submitReset(user.email, mail.code!)).statusCode).toBe(200)
 
       const again = await h.api('POST', `/users/${user.id}/reset-password`)
