@@ -16,6 +16,17 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   name stays above the pages and the tab shows the signet in the colours of your main button. The documentation site
   carries the signet too.
 
+### Fixed
+
+- **Password managers save a new password under the e-mail address.** After a password reset a password manager (Apple
+  Passwords, Bitwarden and others) saved the new password under the code as the user name, and after an activation
+  under no user name, so the next sign-in offered an entry that could not work. The pages where a person chooses a
+  password now show the e-mail address of the account in a read-only field directly above the new password, marked as
+  the user name: on the reset page below the code, on the activation page as the first field. Nothing else changes: an
+  activation still goes by its link alone, whatever the page posts. **An entry that was saved before, under a code,
+  stays wrong until the person corrects or deletes it in their password manager**
+  ([#82](https://github.com/progwise/pforte/issues/82)).
+
 ## 0.3.0 (2026-11-17)
 
 **Before you update:** back up the database. This release has five migrations (the tables for passkeys, and a counter on

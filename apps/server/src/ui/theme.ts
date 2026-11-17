@@ -170,6 +170,8 @@ h1 { margin: 0 0 1.5rem; font: 600 1.4rem/1.3 var(--font-heading); }
 label { display: block; margin-bottom: 0.25rem; font-weight: 600; font-family: var(--font-heading); }
 input { width: 100%; padding: 0.7rem; margin-bottom: 1rem; font: inherit; color: inherit; background: var(--surface);
   border: 1px solid var(--input-border); border-radius: var(--radius-small); }
+/* A field that shows something and cannot be changed. */
+input[readonly] { background: var(--background); }
 input:focus-visible, button:focus-visible, a:focus-visible { outline: 3px solid color-mix(in srgb, var(--link) 60%, transparent); outline-offset: 2px; }
 input#code { text-align: center; font-size: 1.6rem; letter-spacing: 0.5em; padding-left: 0.5em; font-variant-numeric: tabular-nums; }
 button { width: 100%; padding: 0.75rem; font: 600 1rem var(--font-heading); color: var(--primary-text); background: var(--primary);

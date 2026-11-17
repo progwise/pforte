@@ -130,8 +130,11 @@ export const accountRoutes =
       view.notice(view.t('activate.doneTitle'), view.t('activate.done'), await continueTo(view, clientId))
     const confirmedPhone = async (view: PageSet, clientId?: string) => view.notice(view.t('phone.doneTitle'), view.t('phone.done'), await continueTo(view, clientId))
 
-    /** The activation page. Its script only finds out whether this device can make a passkey, for the offer that may follow. */
-    const activationPage = (reply: FastifyReply, view: PageSet, status: number, options: { token: string; error?: string; remember?: boolean }) => {
+    /**
+     * The activation page. Its script only finds out whether this device can make a passkey, for the offer that may follow.
+     * `email` is the address of the person the link is for: the page shows it, and nothing is ever read back from it.
+     */
+    const activationPage = (reply: FastifyReply, view: PageSet, status: number, options: { token: string; email: string; error?: string; remember?: boolean }) => {
       passkeys.script.allow(reply)
       return html(reply, status, view.activation({ ...options, passkeyProbe: { field: passkeys.script.capableField, script: passkeys.script.tag } }))
     }
@@ -222,7 +225,7 @@ export const accountRoutes =
         await limiter.activationFailed(request.ip)
         return invalidLink(reply, view)
       }
-      return activationPage(reply, view, 200, { token })
+      return activationPage(reply, view, 200, { token, email: user.email })
     })
 
     app.post<{ Body: Record<string, unknown> }>('/activate', async (request, reply) => {
@@ -244,7 +247,7 @@ export const accountRoutes =
       // So the browser can be remembered here as it can be with a code: only with the box ticked.
       const remember = request.body?.remember === 'on'
       const problem = passwordProblem(view, request.body, pending.email)
-      if (problem) return activationPage(reply, view, 422, { token, error: problem, remember })
+      if (problem) return activationPage(reply, view, 422, { token, email: pending.email, error: problem, remember })
 
       const clientId = pending.activationClientId ?? undefined
       // The script of the page says whether this device can make a passkey. If so, one is offered at the end. The

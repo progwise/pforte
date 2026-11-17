@@ -47,8 +47,11 @@ export interface PageSet {
     /** Finds out whether this device can make a passkey: a hidden field of the form, and the script that fills it. */
     passkeyProbe?: PasskeyProbe
   }): string
-  /** `remember` is the box as the person left it, when the page is shown again; without it the configured default. */
-  activation(options: { token: string; error?: string; remember?: boolean; passkeyProbe?: PasskeyProbe }): string
+  /**
+   * `email` is whose password is being chosen, shown so that a password manager saves it under that address.
+   * `remember` is the box as the person left it, when the page is shown again; without it the configured default.
+   */
+  activation(options: { token: string; email: string; error?: string; remember?: boolean; passkeyProbe?: PasskeyProbe }): string
   /**
    * Offers to make a passkey, to somebody who has just shown who they are: after a sign-in with a code, after an
    * activation. `action` takes the device's answer, `skipAction` is "not now".
@@ -153,6 +156,14 @@ ${footer}</body>
 <p><small>${escapeHtml(t('password.hint'))}</small></p>
 <label for="confirm">${escapeHtml(t('password.confirm'))}</label>
 <input id="confirm" name="confirm" type="password" autocomplete="new-password" minlength="10" maxlength="128" required>`
+    /**
+     * The address a new password belongs to, directly above the fields for it. A password manager saves a password
+     * under the nearest field in front of it that it takes for a user name: without this one that is the code of a
+     * reset, or nothing. It has to be visible, a hidden field is not read. It cannot be changed where the address is
+     * known; a page opened without one asks for it.
+     */
+    const accountField = (email: string) => `<label for="email">${escapeHtml(t('common.email'))}</label>
+<input id="email" name="email" type="email" autocomplete="username" required ${email ? 'readonly ' : ''}value="${escapeHtml(email)}">`
     const hiddenLanguage = `<input type="hidden" name="lang" value="${escapeHtml(language)}">`
     const hiddenClient = (clientId?: string) => (clientId ? `<input type="hidden" name="client_id" value="${escapeHtml(clientId)}">` : '')
     const clientQuery = (clientId?: string) => (clientId ? `&amp;client_id=${encodeURIComponent(clientId)}` : '')
@@ -218,13 +229,14 @@ ${
 ${phoneHint ? `<p><small>${escapeHtml(t('code.phoneHint'))}</small></p>` : ''}${passkeyProbe ? `\n${passkeyProbe.script}` : ''}`,
         ),
 
-      activation: ({ token, error, remember = rememberDeviceDefault, passkeyProbe }) =>
+      activation: ({ token, email, error, remember = rememberDeviceDefault, passkeyProbe }) =>
         page(
           t('activate.title'),
           `<h1>${escapeHtml(t('activate.title'))}</h1>
 ${alert(error)}
 <form method="post" action="/activate">
 <input type="hidden" name="token" value="${escapeHtml(token)}">${passkeyProbe ? `\n${passkeyProbe.field}` : ''}
+${accountField(email)}
 ${passwordFields}
 <label class="check"><input type="checkbox" name="remember"${remember ? ' checked' : ''}> ${escapeHtml(t('code.remember'))}</label>
 <button type="submit">${escapeHtml(t('activate.submit'))}</button>
@@ -275,8 +287,8 @@ ${alert(error)}
 <form method="post" action="/reset/code">
 ${hiddenLanguage}
 ${hiddenClient(clientId)}
-<input type="hidden" name="email" value="${escapeHtml(email)}">
 ${codeField}
+${accountField(email)}
 ${passwordFields}
 <button type="submit">${escapeHtml(t('reset.codeSubmit'))}</button>
 </form>

@@ -55,10 +55,43 @@ describe('pages', () => {
 
   it('offer the same box on the activation page, and keep it as the person left it when the page comes again', () => {
     const ticked = createUi({ rememberDeviceDefault: true }).pages.for('en')
-    expect(pages.for('en').activation({ token: 't' })).toContain('name="remember"> Remember this device for 90 days')
-    expect(ticked.activation({ token: 't' })).toContain('name="remember" checked>')
-    expect(pages.for('en').activation({ token: 't', error: 'x', remember: true })).toContain('name="remember" checked>')
-    expect(ticked.activation({ token: 't', error: 'x', remember: false })).toContain('name="remember">')
+    const link = { token: 't', email: 'ada@example.com' }
+    expect(pages.for('en').activation(link)).toContain('name="remember"> Remember this device for 90 days')
+    expect(ticked.activation(link)).toContain('name="remember" checked>')
+    expect(pages.for('en').activation({ ...link, error: 'x', remember: true })).toContain('name="remember" checked>')
+    expect(ticked.activation({ ...link, error: 'x', remember: false })).toContain('name="remember">')
+  })
+
+  describe('where a person chooses a password', () => {
+    const USERNAME = '<input id="email" name="email" type="email" autocomplete="username" required readonly value="ada@example.com">'
+    /** The fields of the page that a person sees, in their order: what a password manager goes by. */
+    const visibleFields = (html: string) => [...html.matchAll(/<input [^>]*>/g)].map(([field]) => field).filter((field) => !/type="(hidden|checkbox)"/.test(field))
+    const autocompleteOf = (html: string) => visibleFields(html).map((field) => /autocomplete="([^"]*)"/.exec(field)?.[1])
+
+    it('shows the address as the user name directly above the new password, after a reset below the code', () => {
+      const reset = pages.for('en').resetCode({ email: 'ada@example.com' })
+      expect(autocompleteOf(reset)).toEqual(['one-time-code', 'username', 'new-password', 'new-password'])
+      expect(reset).toContain(`<label for="email">E-mail</label>\n${USERNAME}`)
+      // The address is posted by the field a person sees, and by no second one.
+      expect(reset.match(/name="email"/g)).toHaveLength(1)
+
+      const activation = pages.for('en').activation({ token: 't', email: 'ada@example.com' })
+      expect(autocompleteOf(activation)).toEqual(['username', 'new-password', 'new-password'])
+      expect(activation).toContain(`<label for="email">E-mail</label>\n${USERNAME}`)
+    })
+
+    it('asks for the address where the page was opened without one', () => {
+      const reset = pages.for('en').resetCode({ email: '' })
+      expect(reset).toContain('<input id="email" name="email" type="email" autocomplete="username" required value="">')
+      expect(reset).not.toContain(' readonly ')
+    })
+
+    it('escapes the address', () => {
+      for (const page of [pages.for('en').resetCode({ email: '"><img src=x>' }), pages.for('en').activation({ token: 't', email: '"><img src=x>' })]) {
+        expect(page).not.toContain('<img src=x')
+        expect(page).toContain('value="&quot;&gt;&lt;img src=x&gt;"')
+      }
+    })
   })
 
   it('show where the code went in the right words', () => {
