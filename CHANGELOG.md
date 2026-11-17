@@ -25,6 +25,10 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   button that forgets a device or removes a passkey no longer sits beside the screen. No script is needed for it. On a
   wide screen the pages are as before. The administration gets the same bar on a narrow screen and is otherwise
   unchanged ([the account pages](docs/account.md), [#83](https://github.com/progwise/pforte/issues/83)).
+- **The account pages name a browser as a person knows it.** The remembered devices and the recent sign-ins showed
+  the line a browser sends about itself (`Mozilla/5.0 (iPhone; CPU iPhone OS …`). They now say "Safari, iPhone", as the
+  list of passkeys already did. A browser that pforte cannot name is still shown by its own line. The administration
+  and the audit log keep the full line.
 
 ### Fixed
 

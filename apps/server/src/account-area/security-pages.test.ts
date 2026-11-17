@@ -347,6 +347,15 @@ describe.skipIf(!hasDatabase)('the account pages: sessions, devices, sign-ins an
       expect(page.body).not.toContain(theirs)
     })
 
+    it('names a browser as a person knows it, not by the line it sends about itself', async () => {
+      await remember(A.email, 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1')
+
+      const page = await (await signedIn(A.email)).request('GET', '/account/devices')
+
+      expect(page.body).toContain('<td data-label="Browser">Safari, iPhone</td>')
+      expect(page.body).not.toContain('Mozilla')
+    })
+
     it('forgets one device, and records it as the person’s own doing', async () => {
       const laptop = await remember(A.email, 'A-Laptop/1.0')
       await remember(A.email, 'A-Phone/1.0')
@@ -436,6 +445,17 @@ describe.skipIf(!hasDatabase)('the account pages: sessions, devices, sign-ins an
       expect(page.body).toContain('>Signed in with a code</td>')
       expect(page.body.indexOf('Signed in with a code')).toBeLessThan(page.body.indexOf('Wrong password'))
       expect(page.body).not.toContain('Other-Stranger')
+    })
+
+    it('names the browser of each as a person knows it, and one it does not know as that browser names itself', async () => {
+      await wrongPassword(A.email, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0')
+      await wrongPassword(A.email, 'curl/8.9.0')
+
+      const page = await (await signedIn(A.email)).request('GET', '/account/sign-ins')
+
+      expect(page.body).toContain('<td data-label="Browser">Edge, Windows</td>')
+      expect(page.body).toContain('<td data-label="Browser">curl/8.9.0</td>')
+      expect(page.body).not.toContain('Mozilla')
     })
 
     it('shows the last ten, newest first, with what each of them was', async () => {

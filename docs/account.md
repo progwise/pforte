@@ -17,8 +17,10 @@ are for the people who sign in, not for those who run pforte: that is [the admin
 | **Password** | What happens next. | *Send me a code* starts the password reset pforte already has: a code by SMS to a confirmed phone, otherwise by e-mail, and then the page where the code and the new password are entered. As after every reset, all sessions end and the person is told by mail. |
 
 The lists cannot mark "this browser" or "this device": pforte stores neither a browser nor an address with a session, and
-the cookie of a remembered device is not sent to these pages. A passkey is listed with the browser it was created with,
-such as "Safari, iPhone"; a synced one also works on the person's other devices.
+the cookie of a remembered device is not sent to these pages. A browser is named as a person knows it, such as
+"Safari, iPhone", in all three lists that name one: the devices, the sign-ins and the passkeys. One that pforte cannot
+name is shown by the line it sends about itself. A passkey is listed with the browser it was created with; a synced one
+also works on the person's other devices.
 
 **The overview is read-only.** Your back office or the system you [sync users](syncing-users.md) from owns the name, the
 e-mail address and the phone number and would overwrite whatever a person typed here, so the page says that changes go
