@@ -5,10 +5,10 @@ by a back office rather than by self-registration.
 
 **Documentation: <https://pforte.dev>**
 
-**Status: early release, 0.2.0.** Sign-in with e-mail and password and a second factor by code, remembered devices, password
-reset and activation links, the authorization code flow with PKCE, refresh tokens, logout, an admin API, an administration
-(users, clients, claim types, audit log, CSV import), a login audit with rate limits, your own name, colours and languages,
-and a Docker image all work and are tested. The image is `ghcr.io/progwise/pforte`; what changed in each release is in the
+**Status: early release, 0.3.0.** Sign-in with e-mail and password and a second factor by code (by e-mail or SMS), passkeys,
+remembered devices, password reset and activation links, the authorization code flow with PKCE, refresh tokens, logout and
+back-channel logout, an admin API, an administration (users, clients, claim types, audit log, CSV import), account pages for
+every person, a login audit with rate limits, your own name, colours and languages, and a Docker image all work and are tested. The image is `ghcr.io/progwise/pforte`; what changed in each release is in the
 [changelog](CHANGELOG.md). While the version starts with 0, a release can break things: read the changelog before you update.
 
 ## Why another identity service
@@ -144,10 +144,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details, and [docs/configuration.md](
 
 Done: the OpenID Connect provider, the admin API, CSV import, the administration, the second factor, remembered devices and
 password reset, the audit log and rate limits, branding and languages, the Docker image and a production example, and the
-releases 0.1.0 and 0.2.0.
-
-On `main` and waiting for the next release (the [changelog](CHANGELOG.md) has them under "Unreleased"): the account pages,
-passkeys ([#45](https://github.com/progwise/pforte/issues/45)), telling applications when somebody else ends a person's
+releases 0.1.0 and 0.2.0. With 0.3.0: the account pages, passkeys, telling applications when somebody else ends a person's
 sessions, confirming a phone number later (on the account pages, at a sign-in or in an application's own pages), and an
 example for Docker Swarm.
 
