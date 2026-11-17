@@ -16,6 +16,16 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   name stays above the pages and the tab shows the signet in the colours of your main button. The documentation site
   carries the signet too.
 
+### Changed
+
+- **The account pages fit a phone.** On a screen narrower than 640 pixels the bar took a third of the first screen: the
+  logo, three rows of menu, then the name and the button to sign out. Now it is one line: the logo, the sections as a
+  menu that opens and names the current page, and the button to sign out; who is signed in is said in the opened menu.
+  The lists of browsers, devices, sign-ins and passkeys show one entry below the other there, each value named, so the
+  button that forgets a device or removes a passkey no longer sits beside the screen. No script is needed for it. On a
+  wide screen the pages are as before. The administration gets the same bar on a narrow screen and is otherwise
+  unchanged ([the account pages](docs/account.md), [#83](https://github.com/progwise/pforte/issues/83)).
+
 ### Fixed
 
 - **Password managers save a new password under the e-mail address.** After a password reset a password manager (Apple

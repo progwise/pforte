@@ -265,6 +265,42 @@ dl.facts { display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 1.
 dl.facts dt { color: var(--muted); }
 dl.facts dd { margin: 0; }
 @media (max-width: 40rem) { dl.facts { grid-template-columns: 1fr; } dl.facts dt { margin-top: 0.5rem; } }
+form.below { margin-top: 1rem; }
+
+/* On a phone the bar is one line: the logo, the sections as a menu that opens, and the button to sign out. */
+details.menu { display: none; }
+@media (max-width: 40rem) {
+  .bar { position: relative; flex-wrap: nowrap; gap: 0.5rem; padding: 0.5rem 1rem; }
+  .bar .logo, .bar .brand { flex: none; max-width: 35%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar .who { flex: none; }
+  .bar .who span, nav.sections { display: none; }
+  .bar button { min-height: 2.75rem; padding: 0.5rem 0.4rem; }
+  details.menu { display: block; flex: 1 1 0; min-width: 0; }
+  details.menu summary { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; min-height: 2.75rem; padding: 0 0.7rem;
+    border: 1px solid var(--input-border); border-radius: var(--radius-small); font: 600 1rem var(--font-heading); cursor: pointer; list-style: none; }
+  details.menu summary::-webkit-details-marker { display: none; }
+  details.menu summary:focus-visible { outline: 3px solid color-mix(in srgb, var(--link) 60%, transparent); outline-offset: 2px; }
+  details.menu summary span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  details.menu summary::after { content: ""; flex: none; width: 0.5rem; height: 0.5rem; margin: -0.25rem 0.15rem 0; border: solid var(--link); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+  details.menu[open] summary::after { margin-top: 0.25rem; transform: rotate(-135deg); }
+  details.menu nav { position: absolute; z-index: 1; top: 100%; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border); box-shadow: 0 8px 12px rgb(0 0 0 / 18%); }
+  details.menu nav a { display: flex; align-items: center; min-height: 3rem; padding: 0 1rem; border-bottom: 1px solid var(--border);
+    color: var(--text); font: 600 1rem var(--font-heading); text-decoration: none; }
+  details.menu nav a[aria-current="page"] { box-shadow: inset 3px 0 var(--link); color: var(--link); }
+  details.menu nav p { margin: 0; padding: 0.75rem 1rem; font-size: 0.9rem; color: var(--muted); }
+  .page { margin-top: 1rem; }
+  .page > h1 { margin-bottom: 1rem; font-size: 1.45rem; }
+  .panel { padding: 1rem; }
+  /* A list whose columns do not fit: the cells of a row are stacked, each named by the heading of its column. */
+  table.stack, table.stack tbody, table.stack tr, table.stack td { display: block; }
+  table.stack { border-radius: 0; box-shadow: none; }
+  table.stack thead, table.stack td:empty { display: none; }
+  table.stack tr { padding: 0.6rem 0; border-top: 1px solid var(--border); }
+  table.stack td { padding: 0.2rem 0; border: 0; overflow-wrap: anywhere; }
+  table.stack td[data-label] { display: grid; grid-template-columns: 7rem 1fr; gap: 0 0.75rem; }
+  table.stack td[data-label]::before { content: attr(data-label); color: var(--muted); font-size: 0.9rem; line-height: 1.65; }
+  table.stack td:not([data-label]) { padding-top: 0.5rem; }
+}
 `
 }
 

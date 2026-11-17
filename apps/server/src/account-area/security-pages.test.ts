@@ -65,7 +65,7 @@ describe.skipIf(!hasDatabase)('the account pages: sessions, devices, sign-ins an
   const post = (browser: Browser, url: string, form: Record<string, string> = {}) => browser.request('POST', url, { form, headers: { 'sec-fetch-site': 'same-origin' } })
   /** The page the browser lands on after an answer that sent it elsewhere. */
   const follow = async (browser: Browser, response: { headers: Record<string, unknown> }) => browser.request('GET', response.headers.location as string)
-  const rowsOf = (body: string) => body.match(/<tr><td>/g)?.length ?? 0
+  const rowsOf = (body: string) => body.match(/<tr><td[ >]/g)?.length ?? 0
   /** The part of the sessions page about applications that stay signed in. */
   const staying = (body: string) => body.slice(body.indexOf('<h2>Applications that stay signed in</h2>'), body.indexOf('<h2>Sign out everywhere</h2>'))
   /** Signs the person in to the web application and takes the tokens, as the application does: now it holds a refresh token. */
@@ -215,9 +215,9 @@ describe.skipIf(!hasDatabase)('the account pages: sessions, devices, sign-ins an
 
       // Two browsers: the one of the account pages and the one of the web application.
       expect(page.body).toContain('<h2>Browsers</h2>')
-      expect(page.body.match(/<td>With a code<\/td>/g)).toHaveLength(2)
-      expect(page.body).toContain('<td>Account</td>')
-      expect(page.body).toContain('<td>Demo web app (public client)</td>')
+      expect(page.body.match(/>With a code<\/td>/g)).toHaveLength(2)
+      expect(page.body).toContain('>Account</td>')
+      expect(page.body).toContain('>Demo web app (public client)</td>')
       expect(page.body).not.toContain('Demo backend')
       expect(page.body).toContain('action="/account/sessions/end"')
       // Both are signed in only as long as their browser session lasts: neither holds a refresh token.
@@ -236,9 +236,9 @@ describe.skipIf(!hasDatabase)('the account pages: sessions, devices, sign-ins an
       const part = staying((await account.request('GET', '/account/sessions')).body)
 
       expect(rowsOf(part)).toBe(1)
-      expect(part).toContain('<td>Demo web app (public client)</td>')
+      expect(part).toContain('>Demo web app (public client)</td>')
       // The account pages themselves hold no refresh token: they are a browser sign-in, listed above.
-      expect(part).not.toContain('<td>Account</td>')
+      expect(part).not.toContain('>Account</td>')
     })
 
     it('says so when a browser signed in without a code, on a remembered device', async () => {
@@ -250,7 +250,7 @@ describe.skipIf(!hasDatabase)('the account pages: sessions, devices, sign-ins an
       expect((await signIn(other, { ...WEB, email: A.email })).code).toBeTruthy()
 
       const page = await account.request('GET', '/account/sessions')
-      expect(page.body).toContain('<td>Password only, on a remembered device</td>')
+      expect(page.body).toContain('>Password only, on a remembered device</td>')
     })
 
     it('signs the person out everywhere: all sessions and devices end, here too, and it is recorded as their own doing', async () => {
@@ -334,8 +334,13 @@ describe.skipIf(!hasDatabase)('the account pages: sessions, devices, sign-ins an
       const page = await (await signedIn(A.email)).request('GET', '/account/devices')
 
       expect(rowsOf(page.body)).toBe(2)
-      expect(page.body).toContain('<td>A-Laptop/1.0</td>')
-      expect(page.body).toContain('<td>Unknown browser</td>')
+      expect(page.body).toContain('>A-Laptop/1.0</td>')
+      expect(page.body).toContain('>Unknown browser</td>')
+      // For a phone, where the rows are stacked: every cell is named by its column, and the button of the row by none.
+      expect(page.body).toContain('<table class="list stack">')
+      expect(page.body).toContain('<tr><td data-label="Browser">A-Laptop/1.0</td><td data-label="Last used">')
+      expect(page.body.match(/<td data-label="Remembered until">/g)).toHaveLength(2)
+      expect(page.body.match(/<td><form method="post" action="\/account\/devices\/forget">/g)).toHaveLength(2)
       expect(page.body).toContain(`name="device" value="${first}"`)
       expect(page.body).toContain(`name="device" value="${second}"`)
       expect(page.body).not.toContain('B-Phone')
@@ -426,9 +431,9 @@ describe.skipIf(!hasDatabase)('the account pages: sessions, devices, sign-ins an
 
       // The wrong password and the sign-in of a moment ago. The code that was sent on the way is not a line.
       expect(rowsOf(page.body)).toBe(2)
-      expect(page.body).toContain('<td>Wrong password</td>')
-      expect(page.body).toContain('<td>Stranger-Browser/1.0</td>')
-      expect(page.body).toContain('<td>Signed in with a code</td>')
+      expect(page.body).toContain('>Wrong password</td>')
+      expect(page.body).toContain('>Stranger-Browser/1.0</td>')
+      expect(page.body).toContain('>Signed in with a code</td>')
       expect(page.body.indexOf('Signed in with a code')).toBeLessThan(page.body.indexOf('Wrong password'))
       expect(page.body).not.toContain('Other-Stranger')
     })
@@ -456,9 +461,9 @@ describe.skipIf(!hasDatabase)('the account pages: sessions, devices, sign-ins an
       const page = await browser.request('GET', '/account/sign-ins')
 
       expect(rowsOf(page.body)).toBe(10)
-      for (const label of ['Signed in with a code', 'Signed in on a remembered device', 'Wrong password', 'Wrong code', 'Held back after too many attempts']) expect(page.body).toContain(`<td>${label}</td>`)
+      for (const label of ['Signed in with a code', 'Signed in on a remembered device', 'Wrong password', 'Wrong code', 'Held back after too many attempts']) expect(page.body).toContain(`>${label}</td>`)
       // Index 17 is a code that was sent and is left out; 16 is the newest line, 5 and 11 are left out as well.
-      expect(page.body).toContain('<td>203.0.113.16</td>')
+      expect(page.body).toContain('>203.0.113.16</td>')
       expect(page.body).not.toContain('203.0.113.17<')
       expect(page.body).not.toContain('203.0.113.11<')
       expect(page.body.indexOf('203.0.113.16<')).toBeLessThan(page.body.indexOf('203.0.113.15<'))
@@ -495,7 +500,7 @@ describe.skipIf(!hasDatabase)('the account pages: sessions, devices, sign-ins an
 
       // The sign-ins are all there, not pushed out of the ten, and nothing else is.
       expect(rowsOf(page.body)).toBe(3)
-      for (const address of ['198.51.100.1', '198.51.100.2', '198.51.100.3']) expect(page.body).toContain(`<td>${address}</td>`)
+      for (const address of ['198.51.100.1', '198.51.100.2', '198.51.100.3']) expect(page.body).toContain(`>${address}</td>`)
       expect(page.body).not.toContain('203.0.113.')
     })
 

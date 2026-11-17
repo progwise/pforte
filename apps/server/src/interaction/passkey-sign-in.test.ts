@@ -145,7 +145,7 @@ describe.skipIf(!hasDatabase)('signing in with a passkey', () => {
           url = (await post(browser, `${url}/passkey`, { credential: JSON.stringify(phone.get(question)) })).headers.location as string
         }
       }
-      expect((await browser.request('GET', '/account/sessions')).body).toContain('<td>With a passkey</td>')
+      expect((await browser.request('GET', '/account/sessions')).body).toContain('>With a passkey</td>')
     })
 
     it('is listed for the person and for the administrator as a sign-in with a passkey', async () => {
@@ -154,7 +154,7 @@ describe.skipIf(!hasDatabase)('signing in with a passkey', () => {
       const account = new Browser(h.app)
       await driveSignIn(h, account, '/account', A.email)
 
-      expect((await account.request('GET', '/account/sign-ins')).body).toContain('<td>Signed in with a passkey</td>')
+      expect((await account.request('GET', '/account/sign-ins')).body).toContain('>Signed in with a passkey</td>')
       const sessions = (await h.api('GET', `/users/${annaId}/sessions`)).json().sessions as { amr: string[]; acr: string }[]
       expect(sessions.map((session) => session.amr)).toContainEqual(['pop', 'mfa'])
     })

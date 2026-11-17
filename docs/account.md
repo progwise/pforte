@@ -40,6 +40,12 @@ The pages come in English, German, French and Hungarian and are shown in the lan
 start with `account.` and can be replaced like every other
 ([changing texts](branding-and-languages.md#changing-texts-and-adding-languages)).
 
+**The pages are made for a phone as well**, because that is where an application's people usually open them. On a
+screen narrower than 640 pixels the bar is one line: the logo, the sections as a menu that opens and names the current
+page, and the button to sign out. The lists (browsers, devices, sign-ins, passkeys) show one entry below the other
+there, each value named, instead of a table that has to be pushed sideways. None of this needs script. The
+administration gets the same bar on a narrow screen; its tables stay made for a desk.
+
 ## A change needs a recent sign-in
 
 Looking needs a session. A change (signing out everywhere, forgetting a device, adding or removing a passkey, asking for
