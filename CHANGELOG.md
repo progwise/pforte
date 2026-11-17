@@ -147,6 +147,13 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   to the first administrator (`BOOTSTRAP_ADMIN_EMAIL`) now says that the account is for the administration. The list of
   clients and `GET /admin/clients` show the start address of the two built-in clients
   ([the first administrator](docs/administration.md#the-first-administrator)).
+- **The way to the administration for every new administrator.** Only the first administrator got the button
+  "Continue to Administration" after choosing a password. An administrator who was created later and sent the activation
+  link from the administration ended on "You can now sign in from the application you came from", with no application
+  to go back to. Now the administration says where it invites an administrator to: the mail names the administration,
+  and the page after choosing the password has the button. Somebody without the admin right is invited as before,
+  without an application. An activation through the API is unchanged; pass `clientId: "pforte-admin-ui"` there for
+  the same ([the first administrator](docs/administration.md#the-first-administrator)).
 - **The examples wait for the Postgres that pforte connects to.** On its first start, with an empty data folder,
   Postgres runs a server for its own set-up that answers on the socket only, and shuts it down before the real one
   starts. The health check of the database in `examples/production` and `examples/swarm` asked over the socket, so it

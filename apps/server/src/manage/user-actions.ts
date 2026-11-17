@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import type { MessageKey } from '../i18n/index.js'
 import { escapeHtml } from '../ui/pages.js'
-import { MANAGE_PATH } from './constants.js'
+import { ADMIN_UI_CLIENT_ID, MANAGE_PATH } from './constants.js'
 import type { ManageContext, ManageSession } from './context.js'
 import { badge, field, link } from './html.js'
 
@@ -16,6 +16,7 @@ export interface ActionUser {
   firstName: string
   lastName: string
   status: Status
+  isAdmin: boolean
 }
 
 /** The actions on a user: what the API calls them, when they are possible, and the texts of their pages. */
@@ -116,7 +117,13 @@ ${name === 'delete' ? field({ id: 'confirmEmail', type: 'email', label: t('manag
     const response =
       action === 'delete'
         ? await api(request, session, { method: 'DELETE', url: `/users/${user.id}` })
-        : await api(request, session, { method: 'POST', url: `/users/${user.id}/${ACTIONS[action].api}` })
+        : await api(request, session, {
+            method: 'POST',
+            url: `/users/${user.id}/${ACTIONS[action].api}`,
+            // An administrator is invited to the administration: the mail names it, and the page after choosing the
+            // password leads on to it. For everybody else the administration does not know where they are going.
+            ...(ACTIONS[action].api === 'activate' && user.isAdmin ? { body: { clientId: ADMIN_UI_CLIENT_ID } } : {}),
+          })
     if (response.statusCode === 401) return sessionEnded(reply)
     if (response.statusCode >= 400) {
       let body: unknown

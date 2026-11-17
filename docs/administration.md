@@ -24,7 +24,9 @@ If the address already belongs to a user, that user is made an administrator, an
 choose a password. In development the seed already has `admin@example.com` (password `dev-password`).
 
 Afterwards administrators are made like any other change: set the admin right of a user, in the administration or through the
-API (`isAdmin`).
+API (`isAdmin`). When the administration sends the activation link to somebody who has the admin right, the mail and the
+page after choosing the password lead on to the administration, as they do for the first administrator. Through the API
+that is the `clientId` of the [activation](syncing-users.md#a-new-person-must-be-activated): `pforte-admin-ui`.
 
 ## Signing in
 
