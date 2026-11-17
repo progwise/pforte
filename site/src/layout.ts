@@ -94,7 +94,7 @@ ${notFound ? '<meta name="robots" content="noindex">' : `<link rel="canonical" h
 <body>
 <a class="skip" href="#content">Skip to the content</a>
 <header class="top">
-<a class="brand" href="/">pforte</a>
+<a class="brand" href="/"><img src="/favicon.svg" alt="" width="28" height="28">pforte</a>
 <nav aria-label="Project">
 <a href="/quick-start/">Quick start</a>
 <a href="${context.repository}">GitHub</a>

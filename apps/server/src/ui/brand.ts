@@ -9,7 +9,9 @@ import {
   type Font,
   type FontFile,
   type FooterLink,
+  plainTheme,
   type Theme,
+  withSignet,
 } from './theme.js'
 
 const MAX_LOGO_BYTES = 512 * 1024
@@ -167,12 +169,13 @@ const parseLinks = (value: unknown): FooterLink[] => {
 
 /**
  * Reads `<dir>/brand.json` and the files it names. A folder without `brand.json` has no branding and
- * gets the neutral look. Any mistake stops the start with a message that says what to change.
+ * gets the neutral look. A brand without a logo keeps pforte's signet as the icon of the browser tab.
+ * Any mistake stops the start with a message that says what to change.
  */
 export const loadBrand = (dir: string): Brand => {
   const file = join(dir, 'brand.json')
-  const theme = defaultTheme()
-  if (!existsSync(file)) return { theme, warnings: [] }
+  if (!existsSync(file)) return { theme: defaultTheme(), warnings: [] }
+  const theme = plainTheme()
 
   let parsed: unknown
   try {
@@ -213,5 +216,5 @@ export const loadBrand = (dir: string): Brand => {
 
   if (parsed.links !== undefined) theme.links = parseLinks(parsed.links)
 
-  return { theme, name, warnings: contrastWarnings(theme) }
+  return { theme: withSignet(theme), name, warnings: contrastWarnings(theme) }
 }

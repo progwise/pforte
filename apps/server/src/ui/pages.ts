@@ -92,7 +92,7 @@ export interface Pages {
   /** The policy of the pages, for the pages that the OpenID library renders and pforte supplies the text of. */
   readonly contentSecurityPolicy: string
   for(language: string): PageSet
-  /** Headers for every page with a form: nothing is cached or sent along as referrer, and only our own styles, fonts and logo load. */
+  /** Headers for every page with a form: nothing is cached or sent along as referrer, and only our own styles, fonts, logo and icon load. */
   addHeaders(app: FastifyInstance): void
 }
 
@@ -124,6 +124,7 @@ export const createPages = (i18n: I18n, { rememberDeviceDefault = false, theme =
       : theme.name
         ? `<p class="brand">${escapeHtml(theme.name)}</p>\n`
         : ''
+    const icon = theme.iconUrl ? `<link rel="icon" href="${escapeHtml(theme.iconUrl)}">\n` : ''
     const footer = theme.links.length
       ? `<nav class="links">\n${theme.links.map((link) => `<a href="${escapeHtml(link.url)}">${escapeHtml(labelOf(link, language))}</a>`).join('\n')}\n</nav>\n`
       : ''
@@ -134,7 +135,7 @@ export const createPages = (i18n: I18n, { rememberDeviceDefault = false, theme =
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
-<style>${css}</style>
+${icon}<style>${css}</style>
 </head>
 <body>
 <main>
@@ -347,7 +348,7 @@ ${formHtml}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}${theme.name ? ` · ${escapeHtml(theme.name)}` : ''}</title>
-<style>${css}</style>
+${icon}<style>${css}</style>
 </head>
 <body class="manage">
 <header class="bar">

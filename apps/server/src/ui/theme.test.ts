@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { buildContentSecurityPolicy, buildCss, contrastRatio, contrastWarnings, DEFAULT_COLORS, defaultTheme } from './theme.js'
+import { buildContentSecurityPolicy, buildCss, contrastRatio, contrastWarnings, DEFAULT_COLORS, defaultTheme, signetSvg } from './theme.js'
 
 describe('contrast', () => {
   it('is 21 for black on white, 1 for the same colour, and reads short hex', () => {
@@ -21,6 +22,26 @@ describe('contrast', () => {
       'Low contrast for the main button (primary and primaryText)',
       'Low contrast for error messages (danger)',
     ])
+  })
+})
+
+describe('the signet', () => {
+  it('is drawn in the colours of the main button', () => {
+    const svg = signetSvg({ primary: '#e6e448', primaryText: '#162438' })
+    expect(svg).toContain('<rect width="32" height="32" rx="6" fill="#e6e448"/>')
+    expect(svg).toContain('<path fill="#162438"')
+  })
+
+  it('is the icon and the logo of the neutral look, under an address that names its content', () => {
+    const theme = defaultTheme()
+    expect(theme.iconUrl).toMatch(/^\/brand\/[0-9a-f]{10}\/pforte\.svg$/)
+    expect(theme.logoUrl).toBe(theme.iconUrl)
+    expect(theme.assets).toEqual([{ path: theme.iconUrl!.replace('/brand/', ''), type: 'image/svg+xml', bytes: Buffer.from(signetSvg(DEFAULT_COLORS)) }])
+  })
+
+  it('is the icon of the documentation site as well: site/src/favicon.svg is the same drawing', () => {
+    const favicon = readFileSync(new URL('../../../../site/src/favicon.svg', import.meta.url), 'utf8')
+    expect(favicon, 'write the output of signetSvg(DEFAULT_COLORS) to site/src/favicon.svg').toBe(`${signetSvg(DEFAULT_COLORS)}\n`)
   })
 })
 
@@ -74,6 +95,7 @@ describe('the content security policy', () => {
     const font = { family: 'A', files: [] }
     expect(buildContentSecurityPolicy(css, { fonts: { body: font } })).toContain("font-src 'self'")
     expect(buildContentSecurityPolicy(css, { fonts: {}, logoUrl: '/brand/x/logo.svg' })).toContain("img-src 'self'")
+    expect(buildContentSecurityPolicy(css, { fonts: {}, iconUrl: '/brand/x/pforte.svg' })).toContain("img-src 'self'")
   })
 
   it('has no form-action, which browsers also apply to the redirect that ends a sign-in', () => {

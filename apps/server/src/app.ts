@@ -19,7 +19,7 @@ export interface AppDependencies {
   admin?: AdminDependencies
   /** The administration UI under /manage. */
   manage?: ManageDependencies
-  /** Serves the logo and the fonts of the branding folder. */
+  /** Serves the logo and the fonts of the branding folder, and pforte's signet. */
   ui?: Pick<Ui, 'theme'>
   /** The pages for choosing the first password and for a forgotten one. */
   account?: AccountDependencies

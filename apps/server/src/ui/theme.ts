@@ -35,7 +35,7 @@ export interface FooterLink {
   url: string
 }
 
-/** A file pforte serves for the pages: the logo or a font. */
+/** A file pforte serves for the pages: the logo, the signet or a font. */
 export interface Asset {
   /** Path below `/brand/`. */
   path: string
@@ -47,8 +47,10 @@ export interface Theme {
   colors: Colors
   radius: string
   fonts: { body?: Font; heading?: Font }
-  /** The logo, as a URL under `/brand/`. */
+  /** The logo above the pages, as a URL under `/brand/`. */
   logoUrl?: string
+  /** The icon of the browser tab, as a URL under `/brand/`. */
+  iconUrl?: string
   links: FooterLink[]
   assets: Asset[]
   /** The name shown with (or instead of) the logo. */
@@ -71,7 +73,31 @@ export const DEFAULT_COLORS: Colors = {
 
 export const DEFAULT_RADIUS = '8px'
 
-export const defaultTheme = (): Theme => ({ colors: { ...DEFAULT_COLORS }, radius: DEFAULT_RADIUS, fonts: {}, links: [], assets: [] })
+/**
+ * pforte's signet: an arched doorway with a keyhole, which is also a person standing in it. It is drawn on a tile in
+ * the colours of the main button, so it can be read on every background, the dark tab of a browser included.
+ * `site/src/favicon.svg` is this drawing in the neutral colours; a test keeps the two the same.
+ */
+export const signetSvg = ({ primary, primaryText }: Pick<Colors, 'primary' | 'primaryText'>) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="48" height="48"><rect width="32" height="32" rx="6" fill="${primary}"/><path fill="${primaryText}" fill-rule="evenodd" d="M8 28V12a8 8 0 0 1 16 0v16zM12 28h8l-2.5-10.45a3.4 3.4 0 1 0-3 0z"/></svg>`
+
+/** A theme before it has an icon: the neutral look, for a brand to change. */
+export const plainTheme = (): Theme => ({ colors: { ...DEFAULT_COLORS }, radius: DEFAULT_RADIUS, fonts: {}, links: [], assets: [] })
+
+/**
+ * Gives the theme the icon of the browser tab: its own logo, or else the signet in its colours. The signet is also
+ * the logo above the pages of a theme that has neither a logo nor a name to show there.
+ */
+export const withSignet = (theme: Theme): Theme => {
+  if (theme.logoUrl) return { ...theme, iconUrl: theme.logoUrl }
+  const bytes = Buffer.from(signetSvg(theme.colors))
+  const path = `${createHash('sha256').update(bytes).digest('hex').slice(0, 10)}/pforte.svg`
+  const url = `/brand/${path}`
+  return { ...theme, assets: [...theme.assets, { path, type: 'image/svg+xml', bytes }], iconUrl: url, logoUrl: theme.name ? undefined : url }
+}
+
+/** The look pforte has without a branding folder: neutral colours and its own signet. */
+export const defaultTheme = (): Theme => withSignet(plainTheme())
 
 // --- contrast, so a theme that cannot be read is noticed at startup
 
@@ -241,16 +267,16 @@ dl.facts dd { margin: 0; }
 }
 
 /**
- * Content-Security-Policy of the pages: no scripts, our own fonts and logo, and only this exact stylesheet.
+ * Content-Security-Policy of the pages: no scripts, our own fonts, logo and icon, and only this exact stylesheet.
  * There is no `form-action`: browsers apply it to the redirects after a form too, and the sign-in ends with
  * one to the application.
  */
-export const buildContentSecurityPolicy = (css: string, theme: Pick<Theme, 'fonts' | 'logoUrl'>) =>
+export const buildContentSecurityPolicy = (css: string, theme: Pick<Theme, 'fonts' | 'logoUrl' | 'iconUrl'>) =>
   [
     "default-src 'none'",
     `style-src 'sha256-${createHash('sha256').update(css).digest('base64')}'`,
     ...(Object.keys(theme.fonts).length > 0 ? ["font-src 'self'"] : []),
-    ...(theme.logoUrl ? ["img-src 'self'"] : []),
+    ...(theme.logoUrl || theme.iconUrl ? ["img-src 'self'"] : []),
     "frame-ancestors 'none'",
     "base-uri 'none'",
   ].join('; ')

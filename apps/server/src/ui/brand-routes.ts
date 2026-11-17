@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import type { Asset } from './theme.js'
 
 /**
- * Serves the logo and the fonts of the branding folder. The paths contain a hash of the file, so the
+ * Serves the logo and the fonts of the branding folder, and pforte's signet. The paths contain a hash of the file, so the
  * answer for a path never changes and browsers may keep it for a year. Only files that were read at
  * startup are served: nothing is looked up on disk per request, so no path can reach anything else.
  */

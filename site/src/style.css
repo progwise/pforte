@@ -20,7 +20,7 @@ a:focus-visible, summary:focus-visible, pre:focus-visible { outline: 3px solid v
 .skip:focus { left: 0; }
 
 header.top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.75rem 1.25rem; border-bottom: 1px solid var(--border); }
-header.top .brand { font: 700 1.35rem var(--font); color: var(--text); text-decoration: none; letter-spacing: -0.01em; }
+header.top .brand { display: flex; align-items: center; gap: 0.55rem; font: 700 1.35rem var(--font); color: var(--text); text-decoration: none; letter-spacing: -0.01em; }
 header.top nav { display: flex; gap: 1.25rem; }
 header.top nav a { color: var(--muted); text-decoration: none; }
 header.top nav a:hover { color: var(--link); text-decoration: underline; }

@@ -47,7 +47,7 @@ describe('the branding folder', () => {
   it('has the neutral look without a brand.json', () => {
     const brand = loadBrand(folder(undefined))
     expect(brand.theme.colors).toEqual(DEFAULT_COLORS)
-    expect(brand.theme.assets).toEqual([])
+    expect(brand.theme.assets.map((asset) => asset.path)).toEqual([expect.stringMatching(/^[0-9a-f]{10}\/pforte\.svg$/)])
     expect(brand.name).toBeUndefined()
     expect(brand.warnings).toEqual([])
   })
@@ -78,6 +78,27 @@ describe('the branding folder', () => {
 
     const changed = loadBrand(folder(full, { 'logo.svg': SVG.replace('10"', '12"') }))
     expect(changed.theme.logoUrl).not.toBe(theme.logoUrl)
+  })
+
+  it('shows its logo in the browser tab as well', () => {
+    const { theme } = loadBrand(folder(full))
+    expect(theme.iconUrl).toBe(theme.logoUrl)
+    expect(theme.assets.some((asset) => asset.path.endsWith('pforte.svg'))).toBe(false)
+  })
+
+  it('keeps the signet for the browser tab without a logo, in its own colours, and shows the name above the pages', () => {
+    const { theme } = loadBrand(folder({ name: 'Example Inc.', colors: { primary: '#e6e448', primaryText: '#162438' } }))
+    expect(theme.logoUrl).toBeUndefined()
+    expect(theme.iconUrl).toMatch(/^\/brand\/[0-9a-f]{10}\/pforte\.svg$/)
+    const signet = Buffer.from(theme.assets.find((asset) => `/brand/${asset.path}` === theme.iconUrl)!.bytes).toString()
+    expect(signet).toContain('fill="#e6e448"')
+    expect(signet).toContain('fill="#162438"')
+  })
+
+  it('shows the signet above the pages too when there is neither a logo nor a name', () => {
+    const { theme } = loadBrand(folder({ radius: '4px' }))
+    expect(theme.logoUrl).toBe(theme.iconUrl)
+    expect(theme.logoUrl).toMatch(/pforte\.svg$/)
   })
 
   it('accepts a raster logo', () => {

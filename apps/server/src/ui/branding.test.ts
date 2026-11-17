@@ -8,6 +8,7 @@ import { buildApp } from '../app.js'
 import { loadBrand } from './brand.js'
 import { brandRoutes } from './brand-routes.js'
 import { createUi } from './index.js'
+import { DEFAULT_COLORS, signetSvg } from './theme.js'
 
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10"/></svg>'
 const WOFF2 = Buffer.concat([Buffer.from('wOF2'), Buffer.alloc(40, 7)])
@@ -43,15 +44,24 @@ describe('pages with a theme', () => {
     expect(html).not.toContain('<Inc.>')
   })
 
+  it('show the logo in the browser tab too, on the pages of the administration as well', () => {
+    const icon = `<link rel="icon" href="${theme.logoUrl}">`
+    expect(html).toContain(icon)
+    expect(ui.pages.for('en').manage({ title: 'Users', nav: [], sectionsLabel: 'Sections', content: '' })).toContain(icon)
+  })
+
   it('show only the name where there is no logo', () => {
     const nameOnly = createUi({ theme: { ...theme, logoUrl: undefined } }).pages.for('en').login({ uid: 'u1' })
     expect(nameOnly).toContain('<p class="brand">Example &lt;Inc.&gt;</p>')
     expect(nameOnly).not.toContain('<img')
   })
 
-  it('show nothing of the kind without branding', () => {
-    const plain = createUi().pages.for('en').login({ uid: 'u1' })
-    expect(plain).not.toContain('class="logo"')
+  it('show the signet of pforte without branding, above the page and in the browser tab, and no name or links', () => {
+    const { theme: neutral, pages } = createUi()
+    const plain = pages.for('en').login({ uid: 'u1' })
+    expect(neutral.logoUrl).toMatch(/^\/brand\/[0-9a-f]{10}\/pforte\.svg$/)
+    expect(plain).toContain(`<img class="logo" src="${neutral.logoUrl}" alt="">`)
+    expect(plain).toContain(`<link rel="icon" href="${neutral.logoUrl}">`)
     expect(plain).not.toContain('class="brand"')
     expect(plain).not.toContain('class="links"')
   })
@@ -117,8 +127,13 @@ describe('serving the logo and the fonts', () => {
     },
   )
 
-  it('adds no route without branding files', async () => {
-    const plain = buildApp({ getDatabaseTime: async () => new Date(), ui: createUi() })
+  it('serves the signet without branding files, and nothing else', async () => {
+    const neutral = createUi()
+    const plain = buildApp({ getDatabaseTime: async () => new Date(), ui: neutral })
+    const signet = await plain.inject({ url: neutral.theme.iconUrl! })
+    expect(signet.statusCode).toBe(200)
+    expect(signet.headers['content-type']).toContain('image/svg+xml')
+    expect(signet.body).toBe(signetSvg(DEFAULT_COLORS))
     expect((await plain.inject({ url: '/brand/x/y.svg' })).statusCode).toBe(404)
   })
 

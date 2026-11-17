@@ -27,6 +27,13 @@ describe('the site of this repository', () => {
     for (const page of pageFiles()) expect(existsSync(join(outDir, page.file)), page.file).toBe(true)
   })
 
+  it('shows the signet in the browser tab and beside the name at the top of every page', () => {
+    for (const page of pageFiles()) {
+      expect(html(page.file), page.file).toContain('<link rel="icon" href="/favicon.svg" type="image/svg+xml">')
+      expect(html(page.file), page.file).toContain('<a class="brand" href="/"><img src="/favicon.svg" alt="" width="28" height="28">pforte</a>')
+    }
+  })
+
   it('has every document of docs/ in the navigation, unless it is listed as not published', () => {
     const documents = readdirSync(join(defaultRepositoryRoot, 'docs')).filter((name) => name.endsWith('.md')).map((name) => `docs/${name}`)
     const published = result.pages.map((page) => page.source)
