@@ -11,7 +11,8 @@ branding/
   locales/          texts: replace some, or add a language (see "Languages and texts" below)
 ```
 
-In a container the folder is a mounted volume. Without it pforte looks neutral and is in English and German.
+In a container the folder is a mounted volume. Without it pforte looks neutral, with its own signet as
+the logo, and is in English and German.
 This is deliberately small: the pages keep their layout, one card per step. Branding changes how they look,
 not what they do.
 
@@ -59,7 +60,7 @@ Every entry is optional. This one shows them all:
 | Entry | Meaning |
 | --- | --- |
 | `name` | Shown above the pages as text, or as the description of the logo. Also named in e-mails and SMS (instead of `ORGANISATION_NAME`). |
-| `logo` | `.svg`, `.png`, `.jpg` or `.webp`, up to 512 KB. Shown at most 12 rem wide and 4 rem high. |
+| `logo` | `.svg`, `.png`, `.jpg` or `.webp`, up to 512 KB. Shown at most 12 rem wide and 4 rem high, and as the icon of the browser tab. Without a logo that icon is pforte's signet, in the colours of your main button; with neither a logo nor a `name`, the signet is shown above the pages as well. |
 | `radius` | Corner radius of the card, like `16px` or `1rem`, up to 32px. Fields and buttons are two thirds of it. |
 | `colors` | Hex colours. `primary` and `primaryText` are the main button, `link` the links and secondary buttons, `muted` hints and footer links. What you leave out stays neutral. |
 | `fonts.body` | Text, fields and hints. |

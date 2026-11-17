@@ -22,7 +22,9 @@ describe('pages', () => {
       const view = pages.for(language)
       const html = view.login({ uid: 'u"1', clientName: '<script>x</script>', email: '"><img src=x>', error: '<b>' })
       expect(html).not.toContain('<script>')
-      expect(html).not.toContain('<img')
+      // The page has an image of its own, the logo; the one from outside must not become a second.
+      expect(html).not.toContain('<img src=x')
+      expect(html.match(/<img/g)).toHaveLength(1)
       expect(html).not.toContain('<b>')
       expect(view.notice('<i>', '<u>')).not.toMatch(/<[iu]>/)
       expect(view.code({ uid: 'u', channel: 'email', sentTo: '<a***@x>' })).not.toContain('<a***')

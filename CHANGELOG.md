@@ -8,6 +8,14 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
 
 ## Unreleased
 
+### Added
+
+- **pforte has a signet:** an arched doorway with a keyhole, which is also a person standing in it. Every page now has an
+  icon in the browser tab, and an installation without branding shows the signet above its pages. **If you have a
+  branding folder:** with a `logo`, that logo is now the icon of the browser tab as well; with a `name` and no logo, the
+  name stays above the pages and the tab shows the signet in the colours of your main button. The documentation site
+  carries the signet too.
+
 ## 0.3.0 (2026-11-17)
 
 **Before you update:** back up the database. This release has five migrations (the tables for passkeys, and a counter on

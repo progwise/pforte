@@ -64,6 +64,7 @@ export const createAdminHarness = async ({
   const passkeys = createPasskeys({ issuer, ui, db: database.db, notifier, background, cookieKeys: COOKIE_KEYS, name: 'Example Inc.', accountPages })
   const accountArea = { db: database.db, issuer, cookieKeys: COOKIE_KEYS, ui, timeZone: 'Europe/Berlin', clientLogouts, sendPasswordResetCode, limiter, audit: loginAudit, passkeys, notifier, codeSecrets: deriveCodeSecrets(COOKIE_KEYS) }
   const app = buildApp({
+    ui,
     issuer,
     passkeys,
     getDatabaseTime: () => getDatabaseTime(database.db),
