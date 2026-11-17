@@ -79,6 +79,8 @@ export interface PageSet {
   /**
    * A page of one of pforte's own areas (the administration, the account pages): a bar with the sections and the
    * person, a message from the last action, and the content, which is HTML the caller has already escaped.
+   * The sections are on the page twice, and the stylesheet shows one of the two: the row of a wide screen, or for a
+   * phone a menu that opens (`<details>`, so without script) and is one line high while it is closed.
    */
   manage(options: {
     title: string
@@ -354,7 +356,9 @@ ${formHtml}
         )
       },
 
-      manage: ({ title, nav, person, flash, sectionsLabel, content }) => `<!doctype html>
+      manage: ({ title, nav, person, flash, sectionsLabel, content }) => {
+        const links = nav.map((item) => `<a href="${escapeHtml(item.href)}"${item.current ? ' aria-current="page"' : ''}>${escapeHtml(item.label)}</a>`).join('\n')
+        return `<!doctype html>
 <html lang="${escapeHtml(language)}">
 <head>
 <meta charset="utf-8">
@@ -366,8 +370,14 @@ ${icon}<style>${css}</style>
 <header class="bar">
 ${theme.logoUrl ? `<img class="logo" src="${escapeHtml(theme.logoUrl)}" alt="${escapeHtml(theme.name ?? '')}">` : theme.name ? `<span class="brand">${escapeHtml(theme.name)}</span>` : ''}
 <nav class="sections" aria-label="${escapeHtml(sectionsLabel)}">
-${nav.map((item) => `<a href="${escapeHtml(item.href)}"${item.current ? ' aria-current="page"' : ''}>${escapeHtml(item.label)}</a>`).join('\n')}
+${links}
 </nav>
+<details class="menu">
+<summary><span>${escapeHtml(nav.find((item) => item.current)?.label ?? sectionsLabel)}</span></summary>
+<nav aria-label="${escapeHtml(sectionsLabel)}">
+${links}${person ? `\n<p>${escapeHtml(person.signedInAs)}</p>` : ''}
+</nav>
+</details>
 ${
   person
     ? `<div class="who"><span>${escapeHtml(person.signedInAs)}</span>
@@ -380,7 +390,8 @@ ${flash ? `<p class="flash ${flash.kind}" role="${flash.kind === 'error' ? 'aler
 ${content}
 </main>
 ${footer}</body>
-</html>`,
+</html>`
+      },
     }
   },
   }

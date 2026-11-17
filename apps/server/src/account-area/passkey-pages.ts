@@ -2,6 +2,7 @@ import { isGrantLive, listPasskeys, MAX_PASSKEYS, type RequestContext, removePas
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { escapeHtml } from '../ui/pages.js'
 import { ACCOUNT_PATH, ACCOUNT_UI_CLIENT_ID } from './constants.js'
+import { listTable } from './list.js'
 import type { AccountContext } from './routes.js'
 import { STEP_UP_SECONDS } from './routes.js'
 import type { AccountSession, AccountUser } from './session.js'
@@ -42,20 +43,15 @@ export const registerPasskeyPages = (app: FastifyInstance, ctx: AccountContext) 
     const { user } = signedIn
     const { t, language } = viewFor(request, user)
 
-    const cell = (text: string) => `<td>${escapeHtml(text)}</td>`
     const own = await listPasskeys(db, user.id)
     const list = own.length
-      ? `<div class="scroll"><table class="list">
-<thead><tr><th>${escapeHtml(t('account.passkeys.createdWith'))}</th><th>${escapeHtml(t('account.passkeys.created'))}</th><th>${escapeHtml(t('account.passkeys.lastUsed'))}</th><th></th></tr></thead>
-<tbody>
-${own
-  .map(
-    (passkey) =>
-      `<tr>${cell(passkey.label ?? t('account.passkeys.unknown'))}${cell(formatTime(passkey.createdAt, language))}${cell(passkey.lastUsedAt ? formatTime(passkey.lastUsedAt, language) : t('account.passkeys.never'))}
-<td><form method="post" action="${PASSKEYS}/remove"><input type="hidden" name="passkey" value="${escapeHtml(passkey.id)}"><button type="submit" class="secondary">${escapeHtml(t('account.passkeys.remove'))}</button></form></td></tr>`,
-  )
-  .join('\n')}
-</tbody></table></div>`
+      ? listTable(
+          [t('account.passkeys.createdWith'), t('account.passkeys.created'), t('account.passkeys.lastUsed'), ''],
+          own.map((passkey) => [
+            ...[passkey.label ?? t('account.passkeys.unknown'), formatTime(passkey.createdAt, language), passkey.lastUsedAt ? formatTime(passkey.lastUsedAt, language) : t('account.passkeys.never')].map(escapeHtml),
+            `<form method="post" action="${PASSKEYS}/remove"><input type="hidden" name="passkey" value="${escapeHtml(passkey.id)}"><button type="submit" class="secondary">${escapeHtml(t('account.passkeys.remove'))}</button></form>`,
+          ]),
+        )
       : `<p class="muted">${escapeHtml(t('account.passkeys.none'))}</p>`
     const content = `<h1>${escapeHtml(t('account.passkeys.title'))}</h1>
 <div class="panel">

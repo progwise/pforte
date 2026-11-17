@@ -6,6 +6,7 @@ import type { MessageKey } from '../i18n/index.js'
 import { NotifierUnavailableError } from '../notifications/notifier.js'
 import { escapeHtml } from '../ui/pages.js'
 import { ACCOUNT_PATH } from './constants.js'
+import { listTable } from './list.js'
 import type { AccountContext } from './routes.js'
 import type { AccountUser } from './session.js'
 
@@ -34,14 +35,6 @@ export const registerSecurityPages = (app: FastifyInstance, ctx: AccountContext)
     self: true,
   })
 
-  const heading = (text: string) => `<th>${escapeHtml(text)}</th>`
-  const cell = (text: string) => `<td>${escapeHtml(text)}</td>`
-  const table = (headings: string[], rows: string[]) => `<div class="scroll"><table class="list">
-<thead><tr>${headings.map(heading).join('')}</tr></thead>
-<tbody>
-${rows.join('\n')}
-</tbody></table></div>`
-
   // --- Where I am signed in
 
   app.get(SESSIONS, async (request, reply) => {
@@ -54,20 +47,24 @@ ${rows.join('\n')}
     const nameOf = (clientId: string) => names.get(clientId) ?? clientId
     const { sessions, grants } = await listUserSessions(db, user.id)
 
-    const browsers = table(
+    const browsers = listTable(
       [t('account.sessions.started'), t('account.sessions.until'), t('account.sessions.how'), t('account.sessions.applications')],
-      sessions.map(
-        (session) =>
-          `<tr>${cell(formatTime(session.startedAt, language))}${cell(formatTime(session.expiresAt, language))}${cell(t(session.amr.includes('pop') ? 'account.sessions.withPasskey' : session.acr === ACR_SECOND_FACTOR ? 'account.sessions.withCode' : 'account.sessions.withoutCode'))}${cell(session.clientIds.length ? session.clientIds.map(nameOf).join(', ') : t('account.sessions.noApplications'))}</tr>`,
+      sessions.map((session) =>
+        [
+          formatTime(session.startedAt, language),
+          formatTime(session.expiresAt, language),
+          t(session.amr.includes('pop') ? 'account.sessions.withPasskey' : session.acr === ACR_SECOND_FACTOR ? 'account.sessions.withCode' : 'account.sessions.withoutCode'),
+          session.clientIds.length ? session.clientIds.map(nameOf).join(', ') : t('account.sessions.noApplications'),
+        ].map(escapeHtml),
       ),
     )
     // Every sign-in in a browser leaves a grant, also for an application that is signed in only as long as that
     // browser session lasts. Those are in the table above. Here are the ones that hold a refresh token.
     const staying = grants.filter((grant) => grant.staysSignedIn)
     const applications = staying.length
-      ? table(
+      ? listTable(
           [t('account.sessions.applications'), t('account.sessions.since'), t('account.sessions.until')],
-          staying.map((grant) => `<tr>${cell(nameOf(grant.clientId))}${cell(formatTime(grant.since, language))}${cell(formatTime(grant.expiresAt, language))}</tr>`),
+          staying.map((grant) => [nameOf(grant.clientId), formatTime(grant.since, language), formatTime(grant.expiresAt, language)].map(escapeHtml)),
         )
       : `<p class="muted">${escapeHtml(t('account.sessions.noGrants'))}</p>`
     const content = `<h1>${escapeHtml(t('account.sessions.title'))}</h1>
@@ -112,15 +109,14 @@ ${applications}
 
     const devices = await listDevices(db, user.id)
     const list = devices.length
-      ? `${table(
+      ? `${listTable(
           [t('account.devices.browser'), t('account.devices.lastSeen'), t('account.devices.until'), ''],
-          devices.map(
-            (device) =>
-              `<tr>${cell(device.userAgent ?? t('account.devices.unknown'))}${cell(formatTime(device.lastSeenAt, language))}${cell(formatTime(device.expiresAt, language))}
-<td><form method="post" action="${DEVICES}/forget"><input type="hidden" name="device" value="${escapeHtml(device.id)}"><button type="submit" class="secondary">${escapeHtml(t('account.devices.forget'))}</button></form></td></tr>`,
-          ),
+          devices.map((device) => [
+            ...[device.userAgent ?? t('account.devices.unknown'), formatTime(device.lastSeenAt, language), formatTime(device.expiresAt, language)].map(escapeHtml),
+            `<form method="post" action="${DEVICES}/forget"><input type="hidden" name="device" value="${escapeHtml(device.id)}"><button type="submit" class="secondary">${escapeHtml(t('account.devices.forget'))}</button></form>`,
+          ]),
         )}
-<form method="post" action="${DEVICES}/forget-all"><button type="submit" class="secondary">${escapeHtml(t('account.devices.forgetAll'))}</button></form>`
+<form class="below" method="post" action="${DEVICES}/forget-all"><button type="submit" class="secondary">${escapeHtml(t('account.devices.forgetAll'))}</button></form>`
       : `<p class="muted">${escapeHtml(t('account.devices.none'))}</p>`
     const content = `<h1>${escapeHtml(t('account.devices.title'))}</h1>
 <div class="panel">
@@ -171,9 +167,9 @@ ${list}
     }
     const events = await listSignInEvents(db, user.id, SHOWN_SIGN_INS)
     const list = events.length
-      ? table(
+      ? listTable(
           [t('account.signIns.when'), t('account.signIns.what'), t('account.signIns.from'), t('account.signIns.browser')],
-          events.map((event) => `<tr>${cell(formatTime(event.createdAt, language))}${cell(t(what(event.action, event.details)))}${cell(event.ip ?? '')}${cell(event.userAgent ?? '')}</tr>`),
+          events.map((event) => [formatTime(event.createdAt, language), t(what(event.action, event.details)), event.ip ?? '', event.userAgent ?? ''].map(escapeHtml)),
         )
       : `<p class="muted">${escapeHtml(t('account.signIns.none'))}</p>`
     const content = `<h1>${escapeHtml(t('account.signIns.title'))}</h1>

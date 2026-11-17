@@ -79,7 +79,7 @@ describe.skipIf(!hasDatabase)('the account pages: passkeys', () => {
     const asked = await question(browser)
     return follow(browser, await post(browser, '/account/passkeys/new', { credential: JSON.stringify(device.create(asked, answer)) }))
   }
-  const rowsOf = (body: string) => body.match(/<tr><td>/g)?.length ?? 0
+  const rowsOf = (body: string) => body.match(/<tr><td[ >]/g)?.length ?? 0
 
   describe('the list', () => {
     it('is a section of the account pages, says so when there is no passkey, and runs no script', async () => {
@@ -215,8 +215,8 @@ describe.skipIf(!hasDatabase)('the account pages: passkeys', () => {
 
       expect(page.body).toContain('The passkey was created.')
       expect(rowsOf(page.body)).toBe(1)
-      expect(page.body).toContain('<td>Safari, iPhone</td>')
-      expect(page.body).toContain('<td>Not yet</td>')
+      expect(page.body).toContain('>Safari, iPhone</td>')
+      expect(page.body).toContain('>Not yet</td>')
       const stored = await passkeysOf(A.email)
       expect(stored).toHaveLength(1)
       expect(stored[0]).toMatchObject({ label: 'Safari, iPhone', synced: true, counter: '0', transports: ['internal', 'hybrid'], last_used_at: null })
