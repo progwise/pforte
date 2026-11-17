@@ -48,6 +48,10 @@ $EDITOR .env             # the host name, the sender address, the name of your o
 docker compose up -d
 ```
 
+On a Docker Swarm whose edge proxy is [caddy-docker-proxy](https://github.com/lucaslorentz/caddy-docker-proxy),
+[pforte on a Docker Swarm](../examples/swarm/README.md) deploys the same as a stack. The stack publishes no ports and is routed by
+that proxy's labels; with another proxy it needs that proxy's routing instead.
+
 The image is `ghcr.io/progwise/pforte`. Pin a version in `.env` (`PFORTE_IMAGE=ghcr.io/progwise/pforte:0.2.0`); the changes of each
 version are in the [changelog](../CHANGELOG.md). Every setting is described in the [configuration reference](configuration.md).
 
