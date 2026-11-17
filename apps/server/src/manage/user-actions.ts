@@ -34,6 +34,8 @@ const ACTIONS = {
 type ActionName = keyof typeof ACTIONS
 const isAction = (name: string): name is ActionName => Object.hasOwn(ACTIONS, name)
 const DANGEROUS: readonly ActionName[] = ['deactivate', 'delete', 'lock']
+/** The calls of the API that end on a page of pforte, which can lead on to an application (`clientId`). */
+const LEADS_ON: ReadonlySet<string> = new Set(['activate', 'reset-password'])
 
 /** `camelCase` of an action name, for the text keys: `reset-password` is `resetPassword`. */
 const textKey = (name: ActionName) => name.replace(/-(\w)/g, (_, letter: string) => letter.toUpperCase())
@@ -120,9 +122,10 @@ ${name === 'delete' ? field({ id: 'confirmEmail', type: 'email', label: t('manag
         : await api(request, session, {
             method: 'POST',
             url: `/users/${user.id}/${ACTIONS[action].api}`,
-            // An administrator is invited to the administration: the mail names it, and the page after choosing the
-            // password leads on to it. For everybody else the administration does not know where they are going.
-            ...(ACTIONS[action].api === 'activate' && user.isAdmin ? { body: { clientId: ADMIN_UI_CLIENT_ID } } : {}),
+            // An administrator is on their way to the administration: the page after choosing the password leads
+            // on to it, the first one or a new one, and the mail with the activation link names it. For everybody
+            // else the administration does not know where they are going.
+            ...(LEADS_ON.has(ACTIONS[action].api) && user.isAdmin ? { body: { clientId: ADMIN_UI_CLIENT_ID } } : {}),
           })
     if (response.statusCode === 401) return sessionEnded(reply)
     if (response.statusCode >= 400) {

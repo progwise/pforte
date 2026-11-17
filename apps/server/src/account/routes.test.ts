@@ -418,6 +418,26 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
       expect(done.body).toContain('href="http://localhost:3400/"')
     })
 
+    it('puts the client into the link of the mail, so that the page it opens ends with the button too', async () => {
+      const user = await activated()
+      await form('POST', '/reset', { email: user.email, client_id: 'demo-web' })
+      await h.settle()
+
+      // Opened from the mail, on another device than the one that asked.
+      const link = new URL(h.notifications.findLast((n) => n.kind === 'reset-code')!.url!)
+      expect(link.searchParams.get('client_id')).toBe('demo-web')
+      const page = await form('GET', `${link.pathname}${link.search}`)
+      expect(page.body).toContain('name="client_id" value="demo-web"')
+
+      // A client that is not registered is not passed on, and without one the link is as it was.
+      for (const client_id of ['nobody', undefined]) {
+        const other = await activated()
+        await form('POST', '/reset', { email: other.email, ...(client_id ? { client_id } : {}) })
+        await h.settle()
+        expect(new URL(h.notifications.findLast((n) => n.kind === 'reset-code')!.url!).searchParams.has('client_id')).toBe(false)
+      }
+    })
+
     it('shows no button after a reset without a client, or for a client that does not exist', async () => {
       for (const client_id of [undefined, 'nobody', 'https://evil.example/']) {
         const user = await activated()

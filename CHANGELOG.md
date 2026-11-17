@@ -167,6 +167,15 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   and the page after choosing the password has the button. Somebody without the admin right is invited as before,
   without an application. An activation through the API is unchanged; pass `clientId: "pforte-admin-ui"` there for
   the same ([the first administrator](docs/administration.md#the-first-administrator)).
+- **A password reset from the mail leads on to the application.** The page after choosing a new password has the
+  button "Continue to …" when it knows the application, and it knew it only in the browser that had asked on that
+  application's sign-in page. The link in the mail with the code did not carry it, so a reset that an administrator
+  started, or one finished on another device, ended on "Sign in again from your application" alone. Now the link
+  carries the client. The administration names itself when it resets the password of an administrator, who then gets
+  "Continue to Administration"; for everybody else it names nothing, as before. `POST /admin/users/{id}/reset-password`
+  takes an optional `clientId` (a registered client; an unknown one is a 400), as `activate` does, and "Forgot your
+  password?" puts the application it was opened from into the mail's link. Only the address registered for the
+  client is ever linked ([activating people](docs/syncing-users.md#a-new-person-must-be-activated)).
 - **The examples wait for the Postgres that pforte connects to.** On its first start, with an empty data folder,
   Postgres runs a server for its own set-up that answers on the socket only, and shuts it down before the real one
   starts. The health check of the database in `examples/production` and `examples/swarm` asked over the socket, so it

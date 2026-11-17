@@ -115,6 +115,20 @@ describe.skipIf(!hasDatabase)('admin API: OpenAPI document', () => {
     }
   })
 
+  it('requires a body exactly where the API refuses a call without one', async () => {
+    const withBody = operations().filter(({ operation }) => operation.requestBody)
+    const optional = withBody.filter(({ operation }) => operation.requestBody.required === false).map(({ id }) => id)
+    // The two calls that take the application the person is on their way to, and work without naming one.
+    expect(optional.sort()).toEqual(['POST /admin/users/{id}/activate', 'POST /admin/users/{id}/reset-password'])
+    for (const { id, operation } of withBody) expect(typeof operation.requestBody.required, `${id} says whether its body is required`).toBe('boolean')
+
+    // A call without a body gets past the schema where the document says it may: it is refused for the user, who does not exist.
+    const nobody = '0190f6a8-0000-7000-8000-000000000000'
+    for (const action of ['activate', 'reset-password']) expect((await h.api('POST', `/users/${nobody}/${action}`)).statusCode, action).toBe(404)
+    // And not where the document requires one.
+    expect((await h.api('POST', `/users/${nobody}/confirm-phone`)).statusCode).toBe(400)
+  })
+
   it('is the document in docs/openapi.json, from which the documentation site makes its reference (run pnpm openapi to update it)', () => {
     const file = fileURLToPath(new URL('../../../../docs/openapi.json', import.meta.url))
     const text = `${JSON.stringify(document, null, 2)}\n`

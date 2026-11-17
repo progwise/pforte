@@ -96,8 +96,9 @@ curl -X POST "$PFORTE/admin/users/$ID/activate" -H "authorization: Bearer $TOKEN
 
 `clientId` is optional. It must be a registered client (otherwise the answer is a 400), and the button on the page appears if that
 client has a *start address* (see [integrating an application](integrating-a-client.md)). The same button ends a password reset
-that began on the sign-in page of that application. Without a `clientId` nothing changes: the page only says to sign in from the
-application you came from.
+that began on the sign-in page of that application, and one that you start: `POST /admin/users/{id}/reset-password` takes the same
+optional `clientId`, and the link in the mail with the code then leads to a page that ends with the button. Without a `clientId`
+nothing changes: the page only says to sign in from the application you came from.
 
 **Rolling out to many people.** Sending thousands of links at once is rarely what you want. There are two ways, and you can mix them:
 
