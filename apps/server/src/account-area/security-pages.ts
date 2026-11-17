@@ -4,6 +4,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { ACR_SECOND_FACTOR } from '../auth/assurance.js'
 import type { MessageKey } from '../i18n/index.js'
 import { NotifierUnavailableError } from '../notifications/notifier.js'
+import { browserLabel } from '../ui/browser-label.js'
 import { escapeHtml } from '../ui/pages.js'
 import { ACCOUNT_PATH } from './constants.js'
 import { listTable } from './list.js'
@@ -34,6 +35,12 @@ export const registerSecurityPages = (app: FastifyInstance, ctx: AccountContext)
     userAgent: request.headers['user-agent'],
     self: true,
   })
+
+  /**
+   * A browser as a person knows it, "Safari, iPhone", instead of the long line it sends about itself. One that says
+   * nothing we know is shown as it names itself.
+   */
+  const browserName = (userAgent: string | null | undefined) => browserLabel(userAgent ?? undefined) ?? userAgent ?? ''
 
   // --- Where I am signed in
 
@@ -112,7 +119,7 @@ ${applications}
       ? `${listTable(
           [t('account.devices.browser'), t('account.devices.lastSeen'), t('account.devices.until'), ''],
           devices.map((device) => [
-            ...[device.userAgent ?? t('account.devices.unknown'), formatTime(device.lastSeenAt, language), formatTime(device.expiresAt, language)].map(escapeHtml),
+            ...[browserName(device.userAgent) || t('account.devices.unknown'), formatTime(device.lastSeenAt, language), formatTime(device.expiresAt, language)].map(escapeHtml),
             `<form method="post" action="${DEVICES}/forget"><input type="hidden" name="device" value="${escapeHtml(device.id)}"><button type="submit" class="secondary">${escapeHtml(t('account.devices.forget'))}</button></form>`,
           ]),
         )}
@@ -169,7 +176,7 @@ ${list}
     const list = events.length
       ? listTable(
           [t('account.signIns.when'), t('account.signIns.what'), t('account.signIns.from'), t('account.signIns.browser')],
-          events.map((event) => [formatTime(event.createdAt, language), t(what(event.action, event.details)), event.ip ?? '', event.userAgent ?? ''].map(escapeHtml)),
+          events.map((event) => [formatTime(event.createdAt, language), t(what(event.action, event.details)), event.ip ?? '', browserName(event.userAgent)].map(escapeHtml)),
         )
       : `<p class="muted">${escapeHtml(t('account.signIns.none'))}</p>`
     const content = `<h1>${escapeHtml(t('account.signIns.title'))}</h1>

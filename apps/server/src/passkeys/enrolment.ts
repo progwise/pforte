@@ -6,7 +6,7 @@ import { type Notifier, NotifierUnavailableError } from '../notifications/notifi
 import type { Background } from '../security/background.js'
 import type { Ui } from '../ui/index.js'
 import { namedBy, type PasskeyCeremonies } from './ceremonies.js'
-import { passkeyLabel } from './label.js'
+import { browserLabel } from '../ui/browser-label.js'
 
 type ActiveUser = NonNullable<Awaited<ReturnType<typeof findActiveUserById>>>
 
@@ -75,7 +75,7 @@ export const createPasskeyEnrolment = ({ db, ceremonies, ui, notifier, backgroun
     const created = await ceremonies.verifyCreation(answer, challenge)
     if (!created) return 'rejected'
 
-    const label = passkeyLabel(request.headers['user-agent'])
+    const label = browserLabel(request.headers['user-agent'])
     // The person themselves, wherever they are asked: nobody makes a passkey for somebody else.
     const context: RequestContext = { actor: { type: 'user', id: user.id }, ip: request.ip, userAgent: request.headers['user-agent'], self: true }
     // Checking the answer took a moment, and the person's sessions may have been ended in it. So what entitles

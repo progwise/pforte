@@ -1,9 +1,9 @@
 /**
- * A short name for the lists, made from the browser a passkey was created with: "Safari, iPhone". It says where
- * the passkey was made, which is how a person tells theirs apart; a synced passkey also works elsewhere.
- * Undefined for a browser that says nothing we know.
+ * A short name for a browser, made from what it says about itself: "Safari, iPhone". It is how a person tells
+ * their browsers apart in a list: the one a passkey was created with (a synced passkey also works elsewhere), a
+ * remembered device, where a sign-in came from. Undefined for a browser that says nothing we know.
  */
-export const passkeyLabel = (userAgent: string | undefined) => {
+export const browserLabel = (userAgent: string | undefined) => {
   if (!userAgent) return undefined
   const system = /iPhone/.test(userAgent)
     ? 'iPhone'

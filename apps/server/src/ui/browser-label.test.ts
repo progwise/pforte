@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { passkeyLabel } from './label.js'
+import { browserLabel } from './browser-label.js'
 
-describe('the label of a passkey', () => {
+describe('the short name of a browser', () => {
   it.each([
     ['Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1', 'Safari, iPhone'],
     ['Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/140.0.0.0 Mobile/15E148 Safari/604.1', 'Chrome, iPhone'],
@@ -14,13 +14,13 @@ describe('the label of a passkey', () => {
     ['Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/120.0.0.0', 'Opera, Linux'],
     ['Mozilla/5.0 (X11; CrOS x86_64 16000.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36', 'Chrome, ChromeOS'],
   ])('names browser and system of %s', (userAgent, label) => {
-    expect(passkeyLabel(userAgent)).toBe(label)
+    expect(browserLabel(userAgent)).toBe(label)
   })
 
   it('names what it knows, and nothing when it knows nothing', () => {
-    expect(passkeyLabel('SomeApp/1.0 (iPhone)')).toBe('iPhone')
-    expect(passkeyLabel('curl/8.9.0')).toBeUndefined()
-    expect(passkeyLabel('')).toBeUndefined()
-    expect(passkeyLabel(undefined)).toBeUndefined()
+    expect(browserLabel('SomeApp/1.0 (iPhone)')).toBe('iPhone')
+    expect(browserLabel('curl/8.9.0')).toBeUndefined()
+    expect(browserLabel('')).toBeUndefined()
+    expect(browserLabel(undefined)).toBeUndefined()
   })
 })
