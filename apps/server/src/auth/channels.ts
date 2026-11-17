@@ -12,6 +12,13 @@ export interface Reachable {
 export const channelFor = (user: Reachable, notifier: Pick<Notifier, 'smsAvailable'>): Channel =>
   notifier.smsAvailable && user.phone && user.phoneVerifiedAt ? 'sms' : 'email'
 
+/**
+ * Whether the person has a phone number that codes could go to, if only it were confirmed. Without SMS in this
+ * installation there is nothing to confirm a number for.
+ */
+export const canConfirmPhone = <User extends Reachable>(user: User, notifier: Pick<Notifier, 'smsAvailable'>): user is User & { phone: string } =>
+  notifier.smsAvailable && Boolean(user.phone) && !user.phoneVerifiedAt
+
 /** `+4915112345678` → `+49••••••••78`: enough to recognise the number, not to read it. */
 export const maskPhone = (phone: string) => `${phone.slice(0, 3)}${'•'.repeat(Math.max(phone.length - 5, 3))}${phone.slice(-2)}`
 

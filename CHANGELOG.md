@@ -92,6 +92,18 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   `account.profile.phoneUnconfirmed`, `account.phone.send`, `account.phone.intro`, `account.phone.introSend` and
   `account.phone.unavailable`; **if you added a language in your `locales` folder**, add them there, or they appear in
   English ([the account pages](docs/account.md#what-a-person-can-do), [SMS](docs/sms.md#phone-numbers)).
+- **A sign-in asks for a phone number that is not confirmed.** When the back office entered or changed a person's
+  number, nothing told the person, and their codes came by e-mail until they found the account pages by themselves. Now
+  the next sign-in asks: after the password and the code, with a remembered device or with a passkey, one page says
+  that the number is not confirmed, with the buttons "Confirm with a code by SMS" and "Not now". No SMS goes out before
+  the person asks for it. With the code the number is confirmed and the sign-in goes on; with "Not now" it goes on as
+  well, and that browser is not asked again for 30 days unless the number changes. Skipping the step at the end of an
+  activation counts as the same answer. The page comes before the offer of a passkey, only where this pforte sends
+  SMS, and never without a sign-in page. The sign-in is complete before it is shown and waits at pforte as it does
+  behind the offer of a passkey, so it ends with the person's sessions. **Every application gets this without a
+  change.** New: the cookie `pforte_phone_later`, the texts `phone.signIn` and `phone.later` (**add them if you
+  replaced texts in your `locales` folder or added a language**, or they appear as built in), and `login.code_sent`
+  with `purpose: activation` for a code sent at a sign-in ([phone numbers](docs/sms.md#phone-numbers)).
 - **An application can let a person confirm their phone number in its own pages.** For applications whose people never
   see pforte's account pages: `POST /admin/users/{id}/send-phone-code` has pforte send the code by SMS to the stored
   number, `POST /admin/users/{id}/confirm-phone` checks the code the person typed into the application and confirms the

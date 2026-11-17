@@ -3,7 +3,8 @@ import type { Browser } from './browser.js'
 
 /**
  * What a browser does from a first address: follows redirects, and where pforte asks for the password and the code,
- * enters them. Stops at the first page that is not a redirect and returns it.
+ * enters them. Asked to confirm a phone number, it says "not now". Stops at the first page that is not a redirect
+ * and returns it.
  */
 export const driveSignIn = async (
   h: AdminHarness,
@@ -29,6 +30,8 @@ export const driveSignIn = async (
         const done = await browser.request('POST', `${path}/code`, { form: { code, ...(remember ? { remember: 'on' } : {}) } })
         next = done.headers.location as string
       }
+      // Asked to confirm the phone number first: "not now", as somebody does who wants to get on.
+      if (next.endsWith('/phone')) next = (await browser.request('POST', `${path}/phone/skip`, { headers: { 'sec-fetch-site': 'same-origin' } })).headers.location as string
       url = next
       continue
     }

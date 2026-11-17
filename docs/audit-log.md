@@ -56,9 +56,10 @@ differences: the actor is the person themselves (`actorType: user`, `actorId` eq
 `self: true`.
 
 A person can also confirm their phone number, which only they can do: `user.phone.confirm`, with `self: true`, on the
-account pages and at the step right after an activation. A wrong code is a `login.code_failed` with
-`purpose: activation` in both places; the code sent from the account pages is a `login.code_sent` with that purpose and
-`channel: sms`.
+account pages, at the step right after an activation and at the step after a sign-in. A wrong code is a
+`login.code_failed` with `purpose: activation` in all three places; the code sent from the account pages or at a
+sign-in is a `login.code_sent` with that purpose and `channel: sms`. At a sign-in the `login.succeeded` comes first:
+the sign-in is complete when the person is asked.
 
 An application can show that step in its own pages ([SMS](sms.md#confirming-a-number-in-your-own-application)). Then the
 actor is its client: `user.phone.confirm.request` when it had the code sent (with `expiresAt`, never the code), and

@@ -60,6 +60,9 @@ export const passkeyChallenges = pgTable(
  * code, where the finished sign-in waits for the answer, and at the end of an activation. The browser holds a
  * token; what it stands for is here, so that it ends when the answer is given and when the person's sessions are
  * ended, whatever copies of the token exist.
+ *
+ * A finished sign-in waits here as well while the person is asked to confirm their phone number, which comes
+ * before the offer and also where no passkey is offered: what is noted about it says which questions are open.
  */
 export const passkeyOffers = pgTable(
   'passkey_offers',

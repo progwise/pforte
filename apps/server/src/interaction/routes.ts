@@ -1,13 +1,24 @@
 import formbody from '@fastify/formbody'
 import type { Database } from '@progwise/pforte-db'
-import { closePasskeyOffer, findPasskeyByCredentialId, findPasskeyOffer, openPasskeyChallenge, openPasskeyOffer, recordPasskeyUse, takePasskeyChallenge } from '@progwise/pforte-db/admin'
-import { changeCodeChannel, checkCode, CodeLimitError, currentCode, issueCode, markEmailVerified } from '@progwise/pforte-db/codes'
+import {
+  closePasskeyOffer,
+  confirmPhone,
+  continuePasskeyOffer,
+  findPasskeyByCredentialId,
+  findPasskeyOffer,
+  LifecycleError,
+  openPasskeyChallenge,
+  openPasskeyOffer,
+  recordPasskeyUse,
+  takePasskeyChallenge,
+} from '@progwise/pforte-db/admin'
+import { changeCodeChannel, checkCode, CodeLimitError, currentCode, issueCode, markEmailVerified, withdrawCode } from '@progwise/pforte-db/codes'
 import { findRememberedDevice, rememberDevice } from '@progwise/pforte-db/devices'
 import { findActiveUserById } from '@progwise/pforte-db/oidc'
 import { recordLogin, sessionEpochOf, whileUserHeld } from '@progwise/pforte-db/users'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { ACR_PASSWORD, ACR_SECOND_FACTOR, passkeyAssurance, secondFactorAssurance } from '../auth/assurance.js'
-import { channelFor, maskEmail, maskPhone } from '../auth/channels.js'
+import { canConfirmPhone, channelFor, maskEmail, maskPhone } from '../auth/channels.js'
 import { deriveCodeSecrets } from '../auth/code-secrets.js'
 import type { Authenticate, AuthResult } from '../auth/authenticate.js'
 import type { LoginAudit, Origin, PasskeyFailure } from '../auth/login-audit.js'
@@ -22,6 +33,7 @@ import type { PageSet } from '../ui/pages.js'
 import { tooManyRequests } from '../ui/too-many.js'
 import { refuseForeignPosts } from '../security/origin-check.js'
 import { adoptNewDevice, deviceCookie, deviceTokens } from './device-cookie.js'
+import { createPhoneReminder } from './phone-reminder.js'
 import { readCookie, setCookieHeader, sign, unsign } from './signed-cookie.js'
 
 export interface InteractionDependencies {
@@ -50,14 +62,19 @@ const SIGN_IN_QUESTION_SECONDS = 60 * 60
 const OFFER_COOKIE = 'pforte_passkey_step'
 const OFFER_LIFETIME_SECONDS = 15 * 60
 /**
- * What is noted about a sign-in that is complete (password and code were right) and waits for the answer to "do
- * you want a passkey?": what the sign-in was worth, so that it can be finished after the answer, whatever the
- * answer is. It is kept at pforte, with the person, and ends with their sessions; the browser holds a token.
+ * What is noted about a sign-in that is complete and waits for what the person is asked before they go back to
+ * the application: to confirm a phone number that is not confirmed, and whether they want a passkey. It says what
+ * the sign-in was worth, so that it can be finished after the answers, whatever they are. It is kept at pforte,
+ * with the person, and ends with their sessions; the browser holds a token.
  */
 interface Offer {
   acr: string
   amr: string[]
   language: string
+  /** The question about the phone number is still open. It comes first. */
+  phone?: boolean
+  /** Whether a passkey is offered. Only `false` says no: a sign-in that waited before there was a phone step did not note it. */
+  passkey?: boolean
 }
 
 interface Step {
@@ -84,8 +101,15 @@ export const interactionRoutes =
     const secure = provider.issuer.startsWith('https:')
     const codeSecrets = deriveCodeSecrets(cookieKeys)
     const cookiePath = (uid: string) => `/interaction/${encodeURIComponent(uid)}`
-    /** Where the offer of a passkey after a code belongs: to this one sign-in. Its questions to the device are bound to the same place. */
+    /** Where a sign-in that waits belongs: to this one interaction. The questions to the device about a passkey are bound to the same place. */
     const offerOf = (uid: string) => `offer:${uid}`
+    const phoneReminder = createPhoneReminder({ cookieKeys, secure })
+    /**
+     * Whether to ask this person to confirm their phone number before they go on: it is stored and not confirmed,
+     * codes can go by SMS here, and they have not said "not now" in this browser lately.
+     */
+    const phoneStepWanted = (request: FastifyRequest, user: { id: string; phone: string | null; phoneVerifiedAt: Date | null }) =>
+      canConfirmPhone(user, notifier) && phoneReminder.due(request.headers.cookie, user)
 
     ui.pages.addHeaders(app)
     app.addHook(
@@ -324,7 +348,7 @@ export const interactionRoutes =
       if (!requested.includes(ACR_SECOND_FACTOR) && (await isRemembered(request, user.id))) {
         await recordLogin(db, user.id)
         await audit.succeeded(originOf(request), { userId: user.id, method: 'remembered_device', acr: ACR_PASSWORD })
-        return finishLogin(request, reply, user.id, { acr: ACR_PASSWORD, amr: ['pwd'] }, adopted)
+        return finishOrAskPhone(request, reply, uid, user, { acr: ACR_PASSWORD, amr: ['pwd'] }, language, adopted, sessionEpoch)
       }
 
       // The first code needs no limit per IP: it only goes out after the right password, and per user
@@ -375,6 +399,8 @@ export const interactionRoutes =
       // A person who enters the right code is who they say they are: the moment to offer a passkey, if this device
       // can make one and they were not asked here before.
       const offerWanted = passkeys.offers.wanted(request.headers.cookie, user.id, (request.body as { passkeys?: unknown } | undefined)?.passkeys)
+      // It is also the moment to ask for a phone number that is not confirmed. That question comes first.
+      const phoneWanted = phoneStepWanted(request, user)
       // The code is accepted and the offer opened in one transaction that holds the person's row, as ending their
       // sessions does. So there is no moment at which the code is used up and the offer not yet there to be ended:
       // an offer never rests on a code that was accepted before the sessions were ended.
@@ -383,8 +409,8 @@ export const interactionRoutes =
         // If they were ended since the password was accepted, the code is not even looked at.
         if ((await sessionEpochOf(tx, user.id)) !== current.step.epoch) return { over: true }
         const result = /^\d{6}$/.test(code) ? await checkCode(tx, { userId: user.id, purpose: 'login', code }, { secrets: codeSecrets }) : ({ ok: false, reason: 'wrong' } as const)
-        if (!result.ok || !offerWanted) return { over: false, result }
-        const offer: Offer = { ...secondFactorAssurance(result.channel), language: current.step.language }
+        if (!result.ok || !(offerWanted || phoneWanted)) return { over: false, result }
+        const offer: Offer = { ...secondFactorAssurance(result.channel), language: current.step.language, phone: phoneWanted, passkey: offerWanted }
         return { over: false, result, offerToken: await openPasskeyOffer(tx, { userId: user.id, boundTo: offerOf(details.uid), details: { ...offer } }, new Date(Date.now() + OFFER_LIFETIME_SECONDS * 1000)) }
       })
 
@@ -416,11 +442,11 @@ export const interactionRoutes =
         acr: secondFactorAssurance(result.channel).acr,
         deviceRemembered: remember,
       })
-      // With an offer open, the sign-in waits for the answer to it.
+      // With a question open, the sign-in waits for the answer to it.
       if (offerToken) {
-        cookies.push(setCookieHeader(OFFER_COOKIE, offerToken, { path: cookiePath(details.uid), maxAgeSeconds: OFFER_LIFETIME_SECONDS, secure }))
+        cookies.push(offerCookie(details.uid, offerToken))
         reply.header('Set-Cookie', cookies)
-        return reply.redirect(`${cookiePath(details.uid)}/passkey-offer`, 303)
+        return reply.redirect(phoneWanted ? phonePath(details.uid) : offerPath(details.uid), 303)
       }
       return finishLogin(request, reply, user.id, secondFactorAssurance(result.channel), cookies)
     })
@@ -472,29 +498,70 @@ export const interactionRoutes =
       await recordLogin(db, user.id)
       await audit.succeeded(originOf(request), { userId: user.id, method: 'passkey', acr: passkeyAssurance.acr })
       // This browser has a passkey of this person: nothing to offer them here.
-      return finishLogin(request, reply, user.id, passkeyAssurance, [passkeys.offers.answered(request.headers.cookie, user.id, 'done')])
+      return finishOrAskPhone(request, reply, details.uid, user, passkeyAssurance, languageOf(request, details.params, user.language), [passkeys.offers.answered(request.headers.cookie, user.id, 'done')])
     })
 
-    // --- The offer of a passkey, between a sign-in with a code and the way back to the application
+    // --- A sign-in that is complete and waits: for the phone number to be confirmed, then for the answer to the offer of a passkey
 
     const offerPath = (uid: string) => `${cookiePath(uid)}/passkey-offer`
+    const phonePath = (uid: string) => `${cookiePath(uid)}/phone`
+    const offerCookie = (uid: string, token: string) => setCookieHeader(OFFER_COOKIE, token, { path: cookiePath(uid), maxAgeSeconds: OFFER_LIFETIME_SECONDS, secure })
     const clearOffer = (uid: string) => setCookieHeader(OFFER_COOKIE, '', { path: cookiePath(uid), maxAgeSeconds: 0, secure })
     const tokenOf = (request: FastifyRequest) => readCookie(request.headers.cookie, OFFER_COOKIE) ?? ''
     const isOffer = (details: Record<string, unknown>): details is Record<string, unknown> & Offer =>
       typeof details.acr === 'string' && Array.isArray(details.amr) && details.amr.every((method) => typeof method === 'string') && typeof details.language === 'string'
 
     /**
-     * The sign-in that waits behind the offer: the token of this browser stands for an offer that is still open,
-     * was made in this interaction, and is to somebody who can still sign in. It is not open any more once it
-     * was answered, once it ran out, and once the person's sessions were ended.
+     * The sign-in that waits: the token of this browser stands for one that is still open, was completed in this
+     * interaction, and is of somebody who can still sign in. It is not open any more once it was finished, once
+     * it ran out, and once the person's sessions were ended.
      */
-    const offerFor = async (request: FastifyRequest, uid: string) => {
+    const waitingFor = async (request: FastifyRequest, uid: string) => {
       const open = await findPasskeyOffer(db, { token: tokenOf(request), boundTo: offerOf(uid) })
       if (!open || !isOffer(open.details)) return undefined
       const user = await findActiveUserById(db, open.userId)
       return user ? { uid, offer: open.details, user } : undefined
     }
-    type Waiting = NonNullable<Awaited<ReturnType<typeof offerFor>>>
+    type Waiting = NonNullable<Awaited<ReturnType<typeof waitingFor>>>
+
+    /** The sign-in that waits for the answer to the offer of a passkey: one that offers a passkey and has no question about the phone open. */
+    const offerFor = async (request: FastifyRequest, uid: string) => {
+      const waiting = await waitingFor(request, uid)
+      return waiting && !waiting.offer.phone && waiting.offer.passkey !== false ? waiting : undefined
+    }
+    /** The sign-in that waits for the phone number to be confirmed, or for "not now". */
+    const phoneFor = async (request: FastifyRequest, uid: string) => {
+      const waiting = await waitingFor(request, uid)
+      return waiting?.offer.phone ? waiting : undefined
+    }
+
+    /**
+     * Ends a sign-in that is complete, or lets it wait while the person is asked to confirm their phone number.
+     * For a sign-in that offers no passkey: with a remembered device, or with a passkey. With `epoch`, the
+     * sign-in rests on a password: it waits only if the person's sessions were not ended since that was accepted,
+     * asked where it is certain, as for a code.
+     */
+    const finishOrAskPhone = async (
+      request: FastifyRequest,
+      reply: FastifyReply,
+      uid: string,
+      user: StepUser,
+      assurance: { acr: string; amr: string[] },
+      language: string,
+      cookies: string[],
+      epoch?: number,
+    ) => {
+      if (!phoneStepWanted(request, user)) return finishLogin(request, reply, user.id, assurance, cookies)
+      const offer: Offer = { ...assurance, language, phone: true, passkey: false }
+      const token = await whileUserHeld(db, user.id, async (tx) =>
+        epoch !== undefined && (await sessionEpochOf(tx, user.id)) !== epoch
+          ? undefined
+          : openPasskeyOffer(tx, { userId: user.id, boundTo: offerOf(uid), details: { ...offer } }, new Date(Date.now() + OFFER_LIFETIME_SECONDS * 1000)),
+      )
+      if (cookies.length > 0 || token) reply.header('Set-Cookie', [...cookies, ...(token ? [offerCookie(uid, token)] : [])])
+      // The sessions were ended in the moment since the password was checked: back to the start.
+      return reply.redirect(token ? phonePath(uid) : cookiePath(uid), 303)
+    }
 
     const backToLogin = (reply: FastifyReply, uid: string) => reply.header('Set-Cookie', clearOffer(uid)).redirect(cookiePath(uid), 303)
 
@@ -554,6 +621,124 @@ export const interactionRoutes =
       const waiting = await offerFor(request, details.uid)
       if (!waiting) return reply.redirect(cookiePath(details.uid), 303)
       return finishOffered(request, reply, waiting, 'later')
+    })
+
+    // --- Confirming the phone number, between a complete sign-in and the way back to the application
+    //
+    // For a person whose number the back office entered or changed and who has not confirmed it: their codes come
+    // by e-mail until they do, and most never open the account pages. Nothing is sent unless they ask for it, as
+    // a message costs money, and "not now" is an answer: the sign-in goes on either way.
+
+    /**
+     * The phone question is answered: on to the offer of a passkey if this sign-in has one, else back to the
+     * application. Only the request that closes the waiting sign-in ends it, as with the offer.
+     */
+    const afterPhone = async (request: FastifyRequest, reply: FastifyReply, { uid, user, offer }: Waiting, cookies: string[] = []) => {
+      const waiting = { token: tokenOf(request), boundTo: offerOf(uid) }
+      if (offer.passkey) {
+        const continued = await continuePasskeyOffer(db, waiting, { details: { phone: false }, expiresAt: new Date(Date.now() + OFFER_LIFETIME_SECONDS * 1000) })
+        if (!continued) return backToLogin(reply, uid)
+        return reply.header('Set-Cookie', [offerCookie(uid, waiting.token), ...cookies]).redirect(offerPath(uid), 303)
+      }
+      const closed = await closePasskeyOffer(db, waiting)
+      if (closed?.userId !== user.id) return backToLogin(reply, uid)
+      return finishLogin(request, reply, user.id, { acr: offer.acr, amr: offer.amr }, [clearOffer(uid), ...cookies])
+    }
+
+    /**
+     * The page says what is true: a field for the code only while there is one that can still be entered, and
+     * then without the number, which may have been changed since the code went out. Otherwise it offers to send one.
+     */
+    const phonePage = async (reply: FastifyReply, { uid, user, offer }: Waiting & { user: { phone: string } }, { status = 200, error, notice }: { status?: number; error?: string; notice?: string } = {}) => {
+      const codeSent = (await currentCode(db, { userId: user.id, purpose: 'activation' }))?.usable === true
+      return reply
+        .code(status)
+        .type('text/html')
+        .send(ui.pages.for(offer.language).phoneStep({ action: phonePath(uid), sentTo: maskPhone(user.phone), codeSent, error, notice }))
+    }
+
+    /**
+     * What every request of the phone step begins with: the sign-in that waits for it, and a number that can
+     * still be confirmed. Without the first the person starts again; without the second there is nothing to ask,
+     * and the sign-in goes on. Returns the reply in both cases.
+     */
+    const phoneStepOf = async (request: FastifyRequest<{ Params: { uid: string } }>, reply: FastifyReply) => {
+      const details = await interactionFor(request, reply, request.params.uid)
+      if (!details) return { stop: expired(request, reply) }
+      const waiting = await phoneFor(request, details.uid)
+      if (!waiting) return { stop: reply.redirect(cookiePath(details.uid), 303) }
+      const { user } = waiting
+      // Confirmed in another window, or the number was taken away meanwhile.
+      if (!canConfirmPhone(user, notifier)) return { stop: afterPhone(request, reply, waiting) }
+      return { waiting: { ...waiting, user } }
+    }
+
+    app.get<{ Params: { uid: string } }>('/interaction/:uid/phone', async (request, reply) => {
+      const { waiting, stop } = await phoneStepOf(request, reply)
+      return waiting ? phonePage(reply, waiting) : stop
+    })
+
+    app.post<{ Params: { uid: string } }>('/interaction/:uid/phone/send', async (request, reply) => {
+      const { waiting, stop } = await phoneStepOf(request, reply)
+      if (!waiting) return stop
+      const { user } = waiting
+      const view = ui.pages.for(waiting.offer.language)
+
+      const sendWait = await limiter.codeResend(request.ip)
+      if (sendWait > 0) {
+        await audit.blocked(originOf(request), { scope: 'phone_code' })
+        return tooManyRequests(reply, view, sendWait)
+      }
+      try {
+        // Bound to the number it goes to, the one this request read: it confirms that number and no other.
+        const { code, expiresAt } = await issueCode(db, { userId: user.id, channel: 'sms', purpose: 'activation', boundTo: user.phone }, { secrets: codeSecrets })
+        await notifier.sendPhoneCode(user, { code, expiresAt })
+        await audit.codeSent(originOf(request), { userId: user.id, purpose: 'activation', channel: 'sms' })
+      } catch (error) {
+        if (error instanceof CodeLimitError) {
+          reply.header('Retry-After', error.retryAfterSeconds)
+          return phonePage(reply, waiting, { status: 429, error: limitMessage(view, error) })
+        }
+        if (!(error instanceof NotifierUnavailableError)) throw error
+        request.log.error(error, 'the code to confirm the phone number could not be sent')
+        // Nobody is waiting for that code: the page offers to send one again instead of asking for it.
+        await withdrawCode(db, { userId: user.id, purpose: 'activation' })
+        return phonePage(reply, waiting, { status: 503, error: view.t('account.phone.unavailable') })
+      }
+      return phonePage(reply, waiting, { notice: view.t('code.newOnItsWay') })
+    })
+
+    app.post<{ Params: { uid: string }; Body: { code?: unknown } }>('/interaction/:uid/phone/confirm', async (request, reply) => {
+      const { waiting, stop } = await phoneStepOf(request, reply)
+      if (!waiting) return stop
+      const { user } = waiting
+      const view = ui.pages.for(waiting.offer.language)
+
+      const wait = await limiter.codeBlockedFor(request.ip)
+      if (wait > 0) {
+        await audit.blocked(originOf(request), { scope: 'phone_code' })
+        return tooManyRequests(reply, view, wait)
+      }
+      const code = typeof request.body?.code === 'string' ? request.body.code : ''
+      // The check of the code and the confirmation are one step, for the person as they are at that moment.
+      const result = await confirmPhone(db, { actor: { type: 'user', id: user.id }, ...originOf(request), self: true }, { userId: user.id, code }, { secrets: codeSecrets }).catch((error: unknown) => {
+        // Nothing to confirm any more: confirmed in another window, or the person was locked meanwhile.
+        if (error instanceof LifecycleError) return 'nothing' as const
+        throw error
+      })
+      if (result !== 'nothing' && !result?.ok) {
+        await limiter.codeFailed(request.ip)
+        await audit.codeFailed(originOf(request), { userId: user.id, purpose: 'activation', reason: result?.reason ?? 'none' })
+        return phonePage(reply, waiting, { status: 401, error: view.t('code.badOrExpired') })
+      }
+      return afterPhone(request, reply, waiting)
+    })
+
+    app.post<{ Params: { uid: string } }>('/interaction/:uid/phone/skip', async (request, reply) => {
+      const { waiting, stop } = await phoneStepOf(request, reply)
+      if (!waiting) return stop
+      // Not asked again in this browser for a while, about this number.
+      return afterPhone(request, reply, waiting, [phoneReminder.later(request.headers.cookie, waiting.user)])
     })
 
     app.post<{ Params: { uid: string }; Body: { channel?: unknown } }>('/interaction/:uid/code/resend', async (request, reply) => {

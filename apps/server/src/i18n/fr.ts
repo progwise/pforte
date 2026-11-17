@@ -97,6 +97,9 @@ export const fr: Catalog = {
     'Votre compte est actif. Nous avons envoyé un code à 6 chiffres par SMS à {to}. Saisissez-le pour recevoir désormais vos codes de connexion par SMS.',
   'phone.confirm': 'Confirmer',
   'phone.skip': 'Passer pour le moment (les codes arrivent par e-mail)',
+  'phone.signIn':
+    "Votre numéro de téléphone {to} n'est pas encore confirmé, vos codes de connexion arrivent donc par e-mail. Pour le confirmer, nous y envoyons un code à 6 chiffres par SMS. Une fois ce code saisi, vos codes de connexion arriveront par SMS.",
+  'phone.later': 'Pas maintenant',
   'phone.wait': 'Veuillez patienter {seconds} secondes avant de demander un autre code.',
   'phone.cannotSend': "Le code n'a pas pu être envoyé. Vous pouvez passer cette étape et confirmer plus tard.",
   'phone.doneTitle': 'Numéro de téléphone confirmé',

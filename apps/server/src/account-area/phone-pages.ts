@@ -1,7 +1,7 @@
 import { confirmPhone, LifecycleError, type RequestContext } from '@progwise/pforte-db/admin'
 import { CodeLimitError, currentCode, issueCode, withdrawCode } from '@progwise/pforte-db/codes'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
-import { maskPhone } from '../auth/channels.js'
+import { canConfirmPhone, maskPhone } from '../auth/channels.js'
 import { NotifierUnavailableError } from '../notifications/notifier.js'
 import { escapeHtml } from '../ui/pages.js'
 import { tooManyRequests } from '../ui/too-many.js'
@@ -10,13 +10,6 @@ import type { AccountContext } from './routes.js'
 import type { AccountUser } from './session.js'
 
 export const PHONE = `${ACCOUNT_PATH}/phone`
-
-/**
- * Whether the person has a phone number that codes could go to, if only it were confirmed. Without SMS in this
- * installation there is nothing to confirm a number for.
- */
-export const canConfirmPhone = (ctx: Pick<AccountContext, 'notifier'>, user: AccountUser): user is AccountUser & { phone: string } =>
-  ctx.notifier.smsAvailable && Boolean(user.phone) && !user.phoneVerifiedAt
 
 /**
  * Confirming the phone number, for a person who could not do it when they chose their first password: they
@@ -40,7 +33,7 @@ export const registerPhonePages = (app: FastifyInstance, ctx: AccountContext) =>
     const signedIn = await gate.requireAccountSession(request, reply)
     if (!signedIn) return reply
     const { user } = signedIn
-    if (!canConfirmPhone(ctx, user)) return reply.redirect(ACCOUNT_PATH, 303)
+    if (!canConfirmPhone(user, notifier)) return reply.redirect(ACCOUNT_PATH, 303)
     const { t } = viewFor(request, user)
 
     // The page says what is true: a field for the code only while there is one that can still be entered.
@@ -72,7 +65,7 @@ ${
     if (!signedIn) return reply
     const { user, session } = signedIn
     if (!requireRecentSignIn(reply, session, PHONE)) return reply
-    if (!canConfirmPhone(ctx, user)) return reply.redirect(ACCOUNT_PATH, 303)
+    if (!canConfirmPhone(user, notifier)) return reply.redirect(ACCOUNT_PATH, 303)
 
     const wait = await limiter.codeResend(request.ip)
     if (wait > 0) {
@@ -99,7 +92,7 @@ ${
     const signedIn = await gate.requireAccountSession(request, reply)
     if (!signedIn) return reply
     const { user } = signedIn
-    if (!canConfirmPhone(ctx, user)) return reply.redirect(ACCOUNT_PATH, 303)
+    if (!canConfirmPhone(user, notifier)) return reply.redirect(ACCOUNT_PATH, 303)
 
     const wait = await limiter.codeBlockedFor(request.ip)
     if (wait > 0) {

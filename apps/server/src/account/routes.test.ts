@@ -847,15 +847,25 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
     it('lets the user skip the confirmation: the account works, the codes come by e-mail', async () => {
       h.notifier.smsAvailable = true
       const user = await invitedWithPhone()
-      const cookie = cookieOf(await activateWith(user.token))!
-      const skipped = await browser().request('POST', '/activate/phone/skip', { headers: { cookie } })
+      const laptop = browser()
+      await laptop.request('POST', '/activate', { form: { token: user.token, password: GOOD, confirm: GOOD } })
+      const skipped = await laptop.request('POST', '/activate/phone/skip')
       expect(skipped.statusCode).toBe(200)
       expect(skipped.body).toContain('Your account is active')
 
       expect((await row(user.email)).phone_verified_at).toBeNull()
       h.notifications.length = 0
-      await signIn(browser(), { ...WEB, email: user.email, password: GOOD })
+      // "Skip" was "not now": the sign-in in this browser does not ask the same question again and goes through.
+      const signedIn = await signIn(laptop, { ...WEB, email: user.email, password: GOOD })
+      expect(signedIn.code).toBeTruthy()
       expect(h.notifications.findLast((n) => n.kind === 'login-code')).toMatchObject({ channel: 'email' })
+
+      // Another browser has not heard that answer: there the sign-in asks.
+      h.notifications.length = 0
+      await h.database.pool.query('delete from otp_codes')
+      const elsewhere = browser()
+      await visit(elsewhere, user.email)
+      expect([...elsewhere.cookies.keys()]).toContain('pforte_passkey_step')
     })
 
     it('remembers the device when the password is set, whatever happens to the phone number', async () => {

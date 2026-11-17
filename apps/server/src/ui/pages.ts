@@ -58,6 +58,12 @@ export interface PageSet {
   forgotPassword(options: { email?: string; error?: string; clientId?: string }): string
   resetCode(options: { email: string; notice?: string; error?: string; clientId?: string }): string
   phoneConfirm(options: { sentTo: string; error?: string; notice?: string }): string
+  /**
+   * Asks somebody who has just signed in to confirm their phone number, before they go back to the application.
+   * `action` is where the step lives: its forms post to `/send`, `/confirm` and `/skip` below it. With `codeSent`
+   * there is a code to enter; without, the page offers to send one to `sentTo`.
+   */
+  phoneStep(options: { action: string; sentTo: string; codeSent: boolean; error?: string; notice?: string }): string
   /** A page that only says something: a title and a text, both already in the right language, and perhaps a button. */
   notice(title: string, message: string, action?: { href: string; label: string }): string
   /**
@@ -292,6 +298,31 @@ ${codeField}
 </form>
 <form method="post" action="/activate/phone/skip">
 <button type="submit" class="secondary">${escapeHtml(t('phone.skip'))}</button>
+</form>`,
+        ),
+
+      phoneStep: ({ action, sentTo, codeSent, error, notice }) =>
+        page(
+          t('phone.title'),
+          `<h1>${escapeHtml(t('phone.title'))}</h1>
+<p>${escapeHtml(codeSent ? t('account.phone.intro') : t('phone.signIn', { to: sentTo }))}</p>
+${status(notice)}
+${alert(error)}
+${
+  codeSent
+    ? `<form method="post" action="${escapeHtml(action)}/confirm">
+${codeField}
+<button type="submit">${escapeHtml(t('phone.confirm'))}</button>
+</form>
+<form method="post" action="${escapeHtml(action)}/send">
+<button type="submit" class="secondary">${escapeHtml(t('common.sendNewCode'))}</button>
+</form>`
+    : `<form method="post" action="${escapeHtml(action)}/send">
+<button type="submit">${escapeHtml(t('account.phone.send'))}</button>
+</form>`
+}
+<form method="post" action="${escapeHtml(action)}/skip">
+<button type="submit" class="secondary">${escapeHtml(t('phone.later'))}</button>
 </form>`,
         ),
 

@@ -13,6 +13,7 @@ import type { RateLimiter } from '../auth/rate-limiter.js'
 import { checkPassword } from '../auth/password-policy.js'
 import type { SendPasswordResetCode } from '../auth/password-reset.js'
 import { newDeviceCookie } from '../interaction/device-cookie.js'
+import { createPhoneReminder } from '../interaction/phone-reminder.js'
 import { readCookie, setCookieHeader, sign, unsign } from '../interaction/signed-cookie.js'
 import { parseAcceptLanguage } from '../i18n/index.js'
 import { type Notifier, NotifierUnavailableError } from '../notifications/notifier.js'
@@ -305,8 +306,9 @@ export const accountRoutes =
     }
 
     const endOfPhoneStep = setCookieHeader(PHONE_COOKIE, '', { path: '/activate', maxAgeSeconds: 0, secure })
-    const finishedPhoneStep = (reply: FastifyReply, page: string) => {
-      reply.header('Set-Cookie', endOfPhoneStep)
+    const phoneReminder = createPhoneReminder({ cookieKeys, secure })
+    const finishedPhoneStep = (reply: FastifyReply, page: string, cookies: string[] = []) => {
+      reply.header('Set-Cookie', [endOfPhoneStep, ...cookies])
       return html(reply, 200, page)
     }
 
@@ -365,8 +367,10 @@ export const accountRoutes =
 
     app.post('/activate/phone/skip', async (request, reply) => {
       const user = await phoneStep(request)
-      if (user && (await continueOffer(passkeyToken(request), 'account'))) return toOffer(reply, [endOfPhoneStep])
-      return finishedPhoneStep(reply, await activeAccount(ui.pages.for(languageOf(request, undefined, user?.language)), user?.clientId))
+      // "Skip" is "not now": the first sign-in in this browser does not ask the same question a minute later.
+      const later = user ? [phoneReminder.later(request.headers.cookie, user)] : []
+      if (user && (await continueOffer(passkeyToken(request), 'account'))) return toOffer(reply, [endOfPhoneStep, ...later])
+      return finishedPhoneStep(reply, await activeAccount(ui.pages.for(languageOf(request, undefined, user?.language)), user?.clientId), later)
     })
 
     // --- Forgotten password

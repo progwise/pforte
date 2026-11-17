@@ -14,7 +14,8 @@ after their next sign-in with a code, one question.
 - **The offer.** After a sign-in with a code, and at the end of an activation, one page asks "Sign in faster next
   time?" with *Create passkey* and *Not now*. It comes only on a device that can check its person itself. The sign-in is
   complete before the page is shown: whatever the person answers, also if they close the page and start again, they get
-  to their application.
+  to their application. Somebody who is asked to [confirm their phone number](sms.md#phone-numbers) at the same sign-in
+  sees that page first and the offer after it.
 - **"Not now"** is remembered in that browser, for that person, for 90 days. After a passkey was created or used in a
   browser, that person is not asked there again.
 - **Their passkeys** are listed on [the account pages](account.md#passkeys), where they add and remove them.
