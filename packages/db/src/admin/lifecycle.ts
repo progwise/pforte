@@ -271,8 +271,8 @@ export type PhoneConfirmation = { ok: true; user: UserRow } | { ok: false; reaso
  * (a lock, a deactivation or a confirmation that came in between counts, and the code is then not even looked
  * at), the check of the code against the number that is stored at that moment (it was issued bound to its
  * destination), the confirmation and its record, all or nothing. A change of the number by the back office
- * happens wholly before, and the code is then a wrong one, or wholly after, and takes the confirmation away
- * again. What is returned is the row as this step wrote it, not a later look at it. A wrong code still counts as
+ * happens wholly before, and the code is then ended (`updateUser`) and would be a wrong one if it were not, or
+ * wholly after, and takes the confirmation away again. What is returned is the row as this step wrote it, not a later look at it. A wrong code still counts as
  * an attempt; one that is no code at all (spaces aside) does not.
  *
  * The row is held `for no key update`, which is what a change of the number waits for, and not `for update`: a

@@ -1,5 +1,6 @@
 import { and, asc, eq, exists, gt, ilike, or, sql } from 'drizzle-orm'
 import { type AuditEventInput, type DatabaseOrTransaction, recordAuditEvent } from '../audit.js'
+import { withdrawCodeUnlessHeld } from '../codes.js'
 import { userClaims, users } from '../schema/index.js'
 import { assertAdminStays } from './admins.js'
 import { endUserSessions } from './lifecycle.js'
@@ -151,6 +152,10 @@ export const updateUser = async (
   if (changes.phone) values.phoneVerifiedAt = null
   if (changes.email) values.emailVerifiedAt = null
   const [updated] = await tx.update(users).set(values).where(eq(users.id, user.id)).returning()
+  // A code that is out to confirm the old number is bound to it and confirms nothing any more. It is ended, so
+  // that the pages offer to send one to the new number instead of asking for it. After the user's row is held,
+  // which is the order `confirmPhone` takes the two in.
+  if (changes.phone) await withdrawCodeUnlessHeld(tx, { userId: user.id, purpose: 'activation' })
   await recordAuditEvent(
     tx,
     audit(context, {

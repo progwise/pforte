@@ -203,11 +203,42 @@ describe.skipIf(!hasDatabase)('confirming the phone number at a sign-in', () => 
       expect(await confirmed()).toBe(true)
     })
 
-    it('does not confirm a number the back office changed while the code was on its way', async () => {
+    it('does not confirm a number the back office changed while the code was on its way, and offers a code to the new one', async () => {
       const { browser, phone, verifier } = await asked()
       await post(browser, `${phone}/send`)
       const code = h.lastPhoneCode(A.email)!
       await h.api('PATCH', `/users/${annaId}`, { body: { phone: OTHER_NUMBER } })
+
+      // The change ended the code that was out: the page does not ask for it, and offers one to the new number.
+      const page = await browser.request('GET', phone)
+      expect(page.body).not.toContain(CODE_FIELD)
+      expect(page.body).toContain('Your phone number +49•••••••••21 is not confirmed yet')
+      expect(page.body).toContain(`<form method="post" action="${phone}/send">\n<button type="submit">Confirm with a code by SMS</button>`)
+
+      const refused = await post(browser, `${phone}/confirm`, { code })
+      expect(refused.statusCode).toBe(401)
+      expect(refused.body).not.toContain(CODE_FIELD)
+      expect(await confirmed()).toBe(false)
+
+      // The new code goes to the new number and confirms it.
+      await h.database.pool.query(`update otp_codes set created_at = created_at - interval '2 minutes' where user_id = $1`, [annaId])
+      const sent = await post(browser, `${phone}/send`)
+      expect(sent.body).toContain(CODE_FIELD)
+      expect(phoneCodes().at(-1)!.user.phone).toBe(OTHER_NUMBER)
+      await arrived(browser, await post(browser, `${phone}/confirm`, { code: h.lastPhoneCode(A.email)! }), verifier)
+      expect(await confirmed()).toBe(true)
+    })
+
+    it('still asks for a code that was issued for the old number in the moment of the change, without a number, and refuses it', async () => {
+      const { browser, phone, verifier } = await asked()
+      await post(browser, `${phone}/send`)
+      const code = h.lastPhoneCode(A.email)!
+      // As the change leaves it when the code escaped it.
+      await h.database.pool.query(`update users set phone = $2 where id = $1`, [annaId, OTHER_NUMBER])
+
+      const page = await browser.request('GET', phone)
+      expect(page.body).toContain(CODE_FIELD)
+      expect(page.body).not.toContain('•')
 
       const refused = await post(browser, `${phone}/confirm`, { code })
       expect(refused.statusCode).toBe(401)
@@ -234,6 +265,47 @@ describe.skipIf(!hasDatabase)('confirming the phone number at a sign-in', () => 
       expect(second.body).toMatch(/You can ask for a new one in \d+ seconds/)
       expect(second.body).toContain(CODE_FIELD)
       expect(phoneCodes()).toHaveLength(1)
+    })
+
+    describe('from an address that is held back', () => {
+      const ip = '203.0.113.60'
+      const LIMIT = 'There were too many attempts from your network or for this address. Please try again in'
+      const from = (browser: Browser, path: string, form: Record<string, string> = {}) => browser.request('POST', path, { form, headers: { 'sec-fetch-site': 'same-origin' }, ip })
+
+      it('sends no code, says how long to wait, and still lets the person go on with "not now"', async () => {
+        const { browser, phone, verifier } = await asked()
+        // Others behind the same address have asked for all the codes it gets in an hour.
+        for (let n = 0; n < 10; n++) await h.limiter.codeResend(ip)
+
+        const held = await from(browser, `${phone}/send`)
+        expect(held.statusCode).toBe(429)
+        expect(Number(held.headers['retry-after'])).toBeGreaterThan(0)
+        expect(held.body).toContain(TITLE)
+        expect(held.body).toContain(LIMIT)
+        expect(held.body).toContain(`<form method="post" action="${phone}/skip">`)
+        expect(phoneCodes()).toHaveLength(0)
+        expect(await audited('login.blocked')).toEqual([expect.objectContaining({ scope: 'phone_code' })])
+
+        await arrived(browser, await from(browser, `${phone}/skip`), verifier)
+      })
+
+      it('does not look at the code, keeps the field, and still lets the person go on with "not now"', async () => {
+        const { browser, phone, verifier } = await asked()
+        await post(browser, `${phone}/send`)
+        // Others behind the same address have entered all the wrong codes it gets in a quarter of an hour.
+        for (let n = 0; n < 30; n++) await h.limiter.codeFailed(ip)
+
+        const held = await from(browser, `${phone}/confirm`, { code: h.lastPhoneCode(A.email)! })
+        expect(held.statusCode).toBe(429)
+        expect(Number(held.headers['retry-after'])).toBeGreaterThan(0)
+        expect(held.body).toContain(LIMIT)
+        expect(held.body).toContain(CODE_FIELD)
+        expect(held.body).toContain(`<form method="post" action="${phone}/skip">`)
+        expect(await confirmed()).toBe(false)
+        expect((await h.database.pool.query(`select attempts from otp_codes where user_id = $1 and purpose = 'activation'`, [annaId])).rows[0].attempts).toBe(0)
+
+        await arrived(browser, await from(browser, `${phone}/skip`), verifier)
+      })
     })
 
     it('offers to send again when the SMS could not be sent, instead of asking for a code nobody got', async () => {

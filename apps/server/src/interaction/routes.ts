@@ -30,7 +30,7 @@ import { parseAcceptLanguage } from '../i18n/index.js'
 import { isHandleOf, namedBy, type Passkeys } from '../passkeys/index.js'
 import type { Ui } from '../ui/index.js'
 import type { PageSet } from '../ui/pages.js'
-import { tooManyRequests } from '../ui/too-many.js'
+import { limitText, tooManyRequests } from '../ui/too-many.js'
 import { refuseForeignPosts } from '../security/origin-check.js'
 import { adoptNewDevice, deviceCookie, deviceTokens } from './device-cookie.js'
 import { createPhoneReminder } from './phone-reminder.js'
@@ -646,8 +646,10 @@ export const interactionRoutes =
     }
 
     /**
-     * The page says what is true: a field for the code only while there is one that can still be entered, and
-     * then without the number, which may have been changed since the code went out. Otherwise it offers to send one.
+     * The page says what is true: a field for the code only while there is one that can still be entered.
+     * Otherwise it offers to send one, also after the back office changed the number, which ends the code that
+     * was out (`updateUser`). With the field it names no number: a code that was issued for the old number in
+     * the moment of the change is still out, and went there.
      */
     const phonePage = async (reply: FastifyReply, { uid, user, offer }: Waiting & { user: { phone: string } }, { status = 200, error, notice }: { status?: number; error?: string; notice?: string } = {}) => {
       const codeSent = (await currentCode(db, { userId: user.id, purpose: 'activation' }))?.usable === true
@@ -655,6 +657,17 @@ export const interactionRoutes =
         .code(status)
         .type('text/html')
         .send(ui.pages.for(offer.language).phoneStep({ action: phonePath(uid), sentTo: maskPhone(user.phone), codeSent, error, notice }))
+    }
+
+    /**
+     * A limit per IP says "not now" to a code. The step stays, with how long to wait: a notice alone would be a
+     * dead end for somebody whose sign-in is complete, and "not now" must still take them to their application.
+     * Many people can sit behind one address, so the first click of one of them can meet the limit.
+     */
+    const phoneLimited = async (request: FastifyRequest, reply: FastifyReply, waiting: Parameters<typeof phonePage>[1], waitSeconds: number) => {
+      await audit.blocked(originOf(request), { scope: 'phone_code' })
+      reply.header('Retry-After', waitSeconds)
+      return phonePage(reply, waiting, { status: 429, error: limitText(ui.pages.for(waiting.offer.language), waitSeconds) })
     }
 
     /**
@@ -685,10 +698,7 @@ export const interactionRoutes =
       const view = ui.pages.for(waiting.offer.language)
 
       const sendWait = await limiter.codeResend(request.ip)
-      if (sendWait > 0) {
-        await audit.blocked(originOf(request), { scope: 'phone_code' })
-        return tooManyRequests(reply, view, sendWait)
-      }
+      if (sendWait > 0) return phoneLimited(request, reply, waiting, sendWait)
       try {
         // Bound to the number it goes to, the one this request read: it confirms that number and no other.
         const { code, expiresAt } = await issueCode(db, { userId: user.id, channel: 'sms', purpose: 'activation', boundTo: user.phone }, { secrets: codeSecrets })
@@ -715,10 +725,7 @@ export const interactionRoutes =
       const view = ui.pages.for(waiting.offer.language)
 
       const wait = await limiter.codeBlockedFor(request.ip)
-      if (wait > 0) {
-        await audit.blocked(originOf(request), { scope: 'phone_code' })
-        return tooManyRequests(reply, view, wait)
-      }
+      if (wait > 0) return phoneLimited(request, reply, waiting, wait)
       const code = typeof request.body?.code === 'string' ? request.body.code : ''
       // The check of the code and the confirmation are one step, for the person as they are at that moment.
       const result = await confirmPhone(db, { actor: { type: 'user', id: user.id }, ...originOf(request), self: true }, { userId: user.id, code }, { secrets: codeSecrets }).catch((error: unknown) => {

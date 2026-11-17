@@ -38,9 +38,10 @@ export const registerPhonePages = (app: FastifyInstance, ctx: AccountContext) =>
 
     // The page says what is true: a field for the code only while there is one that can still be entered.
     // Somebody who had to sign in again before the first code, whose code could not be sent or has no attempts
-    // left, is offered to send one. With the field the page names no number: the code went to the number of the
-    // moment it was sent, and the back office may have changed it since. Such a code is refused, and the next
-    // one goes to the number that is stored.
+    // left, is offered to send one, and so is somebody whose number the back office changed: that ends the code
+    // that was out (`updateUser`). With the field the page names no number: a code that was issued for the old
+    // number in the moment of the change is still out, and went there. It is refused, and the next one goes to
+    // the number that is stored.
     const waiting = (await currentCode(db, { userId: user.id, purpose: 'activation' }))?.usable === true
     const content = `<h1>${escapeHtml(t('phone.title'))}</h1>
 <div class="panel">

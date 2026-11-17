@@ -293,13 +293,11 @@ describe.skipIf(!hasDatabase)('the account pages: confirming the phone number', 
       const changed = await h.api('PATCH', `/users/${id}`, { body: { phone: '+4915187654321' } })
       expect(changed.statusCode, changed.body).toBe(200)
 
-      // The page still asks for the code that is on its way, and does not say that it went to the new number:
-      // it names no number at all.
-      const waiting = await browser.request('GET', '/account/phone')
-      expect(waiting.body).toContain('Enter the 6-digit code from the SMS.')
-      expect(waiting.body).toContain('<form method="post" action="/account/phone/confirm">')
-      expect(waiting.body).not.toContain('•')
-      expect(waiting.body).not.toContain('+49')
+      // The change ended the code that was out: the page does not ask for it, and offers one to the new number.
+      const page = await browser.request('GET', '/account/phone')
+      expect(page.body).not.toContain('/account/phone/confirm')
+      expect(page.body).toContain('+49•••••••••21')
+      expect(page.body).toContain(FIRST_SEND)
 
       const refused = await post(browser, '/account/phone/confirm', { code })
 

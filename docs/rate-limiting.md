@@ -28,7 +28,9 @@ An IPv6 address counts as its /64, since one connection normally holds a whole /
 ## The limits
 
 Each limit has a window; once a counter reaches its maximum, that rule says "wait" until the window ends. The page
-answers `429 Too Many Requests` with a `Retry-After` header and a message in the page's language.
+answers `429 Too Many Requests` with a `Retry-After` header and a message in the page's language. At the step that
+asks for a phone number to be confirmed at a sign-in, the message is on the step itself: the sign-in is complete,
+and *Not now* still leads to the application.
 
 | What | Limit | Counts |
 | --- | --- | --- |
