@@ -1,4 +1,7 @@
+import { sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { currentCode, issueCode } from '../codes.js'
+import type { Database } from '../index.js'
 import { createTestDatabase, hasDatabase } from '../test/test-database.js'
 import { createUser, deleteUser, findUserByEmail, listUsers, profileChanges, updateUser } from './users.js'
 
@@ -102,6 +105,55 @@ describe.skipIf(!hasDatabase)('admin user queries', () => {
 
     const newAddress = await database.db.transaction((tx) => updateUser(tx, context, newNumber.user, { email: 'moved@example.com' }))
     expect(newAddress.user.emailVerifiedAt).toBeNull()
+  })
+
+  describe('a code that is out to confirm the phone number', () => {
+    const secrets = ['code-secret-code-secret-code-secret-code']
+    const NUMBER = '+4915112345678'
+    const activation = (userId: string) => ({ userId, purpose: 'activation' as const })
+    const withCode = async (email: string) => {
+      const user = await database.db.transaction((tx) => createUser(tx, context, { email, firstName: 'Co', lastName: 'De', phone: NUMBER }))
+      await issueCode(database.db, { ...activation(user.id), channel: 'sms', boundTo: NUMBER }, { secrets })
+      return user
+    }
+
+    it('is ended when the number changes or is taken away, and stays for any other change', async () => {
+      const user = await withCode('code-out@example.com')
+
+      const renamed = await database.db.transaction((tx) => updateUser(tx, context, user, { firstName: 'Cody', email: 'code-still-out@example.com' }))
+      expect(await currentCode(database.db, activation(user.id))).toMatchObject({ usable: true })
+
+      const changed = await database.db.transaction((tx) => updateUser(tx, context, renamed.user, { phone: '+4915198765432' }))
+      expect(await currentCode(database.db, activation(user.id))).toBeUndefined()
+      // It was not used, so it still counts towards the limits on asking for codes.
+      expect(await count('otp_codes', `user_id = '${user.id}' and consumed_at is null`)).toBe(1)
+
+      await database.pool.query(`update otp_codes set created_at = created_at - interval '2 minutes' where user_id = $1`, [user.id])
+      await issueCode(database.db, { ...activation(user.id), channel: 'sms', boundTo: '+4915198765432' }, { secrets })
+      await database.db.transaction((tx) => updateUser(tx, context, changed.user, { phone: null }))
+      expect(await currentCode(database.db, activation(user.id))).toBeUndefined()
+    })
+
+    it('does not make the change wait for a request for a new code that holds it: neither request fails', async () => {
+      const user = await withCode('code-held@example.com')
+      await database.pool.query(`update otp_codes set created_at = created_at - interval '2 minutes' where user_id = $1`, [user.id])
+
+      const reissued = await database.db.transaction(async (tx) => {
+        // "Send a new code" has reached the old code and holds it ...
+        await tx.execute(sql`select 1 from otp_codes where user_id = ${user.id} for update`)
+        // ... when the back office changes number and address. A new address holds the person's row so that the
+        // new code, which refers to it, has to wait: the change must be through before, not wait for the code.
+        const changed = await Promise.race([
+          database.db.transaction((other) => updateUser(other, context, user, { phone: '+4915198765432', email: 'code-moved@example.com' })),
+          new Promise<'waits'>((resolve) => setTimeout(() => resolve('waits'), 2000)),
+        ])
+        expect(changed).toMatchObject({ changed: true })
+        return issueCode(tx as unknown as Database, { ...activation(user.id), channel: 'sms', boundTo: NUMBER }, { secrets })
+      })
+
+      expect(reissued.code).toMatch(/^\d{6}$/)
+      expect((await findUserByEmail(database.db, 'code-moved@example.com'))!.phoneVerifiedAt).toBeNull()
+    })
   })
 
   it('keeps who a deleted user was in the audit log', async () => {

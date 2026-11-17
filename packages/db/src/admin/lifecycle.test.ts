@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Database } from '../index.js'
 import { createTestDatabase, hasDatabase } from '../test/test-database.js'
-import { issueCode } from '../codes.js'
+import { currentCode, issueCode } from '../codes.js'
 import {
   activateUser,
   confirmPhone,
@@ -271,13 +271,27 @@ describe.skipIf(!hasDatabase)('user lifecycle', () => {
 
     it('does not confirm another number than the one the code was sent to', async () => {
       const { id, code } = await waiting()
-      const user = (await findUserById(database.db, id))!
-      await database.db.transaction((tx) => updateUser(tx, context, user, { phone: B }))
+      // The number as a change leaves it that the code escaped: it was issued for the old number a moment after.
+      await database.pool.query(`update users set phone = $1 where id = $2`, [B, id])
 
       expect(await confirm(id, code)).toEqual({ ok: false, reason: 'wrong' })
 
       expect(await confirmedAt(id)).toBeNull()
       expect(await event('user.phone.confirm', id)).toBeUndefined()
+    })
+
+    it('finds the code ended after a change of the number, and a new one confirms the new number', async () => {
+      const { id, code } = await waiting()
+      const user = (await findUserById(database.db, id))!
+      await database.db.transaction((tx) => updateUser(tx, context, user, { phone: B }))
+
+      expect(await currentCode(database.db, { userId: id, purpose: 'activation' })).toBeUndefined()
+      expect(await confirm(id, code)).toEqual({ ok: false, reason: 'expired' })
+      expect(await confirmedAt(id)).toBeNull()
+
+      const later = new Date(Date.now() + 2 * 60 * 1000)
+      const next = await issueCode(database.db, { userId: id, channel: 'sms', purpose: 'activation', boundTo: B }, { secrets, now: later })
+      expect(await confirmPhone(database.db, self(id), { userId: id, code: next.code }, { secrets, now: later })).toMatchObject({ ok: true })
     })
 
     it('waits for a change of the number that is under way, and then refuses the code of the old one', async () => {
@@ -295,7 +309,8 @@ describe.skipIf(!hasDatabase)('user lifecycle', () => {
         return { pending }
       })
 
-      expect(await pending).toEqual({ ok: false, reason: 'wrong' })
+      // The change ended the code. Had it not, the code would be a wrong one for the new number.
+      expect(await pending).toEqual({ ok: false, reason: 'expired' })
       const after = (await findUserById(database.db, id))!
       expect(after.phone).toBe(B)
       expect(after.phoneVerifiedAt).toBeNull()

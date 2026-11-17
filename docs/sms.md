@@ -74,17 +74,28 @@ something a static request cannot do, for example fetching a token before each c
 Numbers are stored in international format (`+4915112345678`). A number only receives codes after the user has
 confirmed it with a code, which happens right after choosing the first password. When an administrator changes
 a user's number, the confirmation is dropped, and codes go by e-mail until the new number is confirmed. A code
-confirms the number it was sent to and no other: one that is on its way when the number is changed is a wrong code
-for the new number.
+confirms the number it was sent to and no other: a change of the number ends the code that is on its way to the old
+one, and the pages then offer to send a code to the new number.
 
 A person who has a number that is not confirmed (they skipped the step, got the number later, or it was changed)
-confirms it on [the account pages](account.md): the overview there says so next to the number and has the button
-*Confirm with a code by SMS*. An administrator sees on a person's page whether the phone is confirmed, and cannot
-confirm it for them: only the person holds the phone.
+is **asked at their next sign-in**. After the password and the code, with a remembered device or with a passkey, and
+before they are back in the application, one page says that the number is not confirmed and that their codes come by
+e-mail until it is, with the buttons *Confirm with a code by SMS* and *Not now*. Nothing is sent before the person
+presses the button: a message costs money. With the code from the SMS the number is confirmed and the sign-in goes on;
+with *Not now* it goes on as well, and that browser is not asked again for 30 days, unless the number changes: a
+new number is a new question. Skipping the step at the end of an activation counts as the same answer. The sign-in
+is complete before the page is shown, so the person gets to their application whatever they answer, also when
+[a limit](rate-limiting.md) holds back the codes of their network address: the page then says how long to wait and
+keeps *Not now*. The page never comes without a sign-in page: not when an application finds the person signed in
+already.
+
+The same can be done at any time on [the account pages](account.md): the overview there says so next to the number
+and has the button *Confirm with a code by SMS*. An administrator sees on a person's page whether the phone is
+confirmed, and cannot confirm it for them: only the person holds the phone.
 
 ### Confirming a number in your own application
 
-If your people never see the account pages, your application can show the step itself. pforte still sends the code and
+Your application can also show the step itself, for example in its profile page. pforte still sends the code and
 checks it; your application only shows a field for it. It needs a machine client with the `directory` or `admin` scope
 ([syncing users](syncing-users.md#make-a-client-for-the-job)), and calls the admin API from its server, never from the
 browser:

@@ -30,7 +30,8 @@ confirmed, which normally happens right after they chose their first password. S
 number then, or whose number the back office has changed since, sees "Not confirmed, so your sign-in codes come by
 e-mail" next to the number, with the button *Confirm with a code by SMS*. pforte sends a code to the stored number, the
 person enters it, and from the next sign-in on the codes come by SMS. The number itself is not changed. The button is
-there only when this pforte sends SMS at all.
+there only when this pforte sends SMS at all. The same question is asked [at a sign-in](sms.md#phone-numbers), so a
+person need not find these pages for it.
 
 **There is no password field.** The change of password is the reset, with a new code to the mailbox or the phone. So
 somebody who finds a computer unlocked cannot set a password with what is on the screen.

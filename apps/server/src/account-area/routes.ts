@@ -3,7 +3,7 @@ import type { Database } from '@progwise/pforte-db'
 import { findGrantOfAccessToken } from '@progwise/pforte-db/admin'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { ACR_SECOND_FACTOR } from '../auth/assurance.js'
-import { maskPhone } from '../auth/channels.js'
+import { canConfirmPhone, maskPhone } from '../auth/channels.js'
 import type { LoginAudit } from '../auth/login-audit.js'
 import type { SendPasswordResetCode } from '../auth/password-reset.js'
 import type { RateLimiter } from '../auth/rate-limiter.js'
@@ -20,7 +20,7 @@ import type { Ui } from '../ui/index.js'
 import { escapeHtml, type PageSet } from '../ui/pages.js'
 import { ACCOUNT_PATH, ACCOUNT_UI_CLIENT_ID } from './constants.js'
 import { registerPasskeyPages } from './passkey-pages.js'
-import { canConfirmPhone, PHONE, registerPhonePages } from './phone-pages.js'
+import { PHONE, registerPhonePages } from './phone-pages.js'
 import { registerSecurityPages } from './security-pages.js'
 import { type AccountSession, type AccountUser, createAccountGate } from './session.js'
 
@@ -224,7 +224,7 @@ export const accountAreaRoutes =
 ${fact('account.profile.name', `${user.firstName} ${user.lastName}`.trim())}
 ${fact('account.profile.email', user.email)}
 ${
-  canConfirmPhone(dependencies, user)
+  canConfirmPhone(user, dependencies.notifier)
     ? `<dt>${escapeHtml(t('account.profile.phone'))}</dt><dd>${escapeHtml(maskPhone(user.phone))}<br><span class="muted">${escapeHtml(t('account.profile.phoneUnconfirmed'))}</span>
 <form method="post" action="${PHONE}/send"><button type="submit" class="secondary">${escapeHtml(t('account.phone.send'))}</button></form></dd>`
     : fact('account.profile.phone', user.phone ? maskPhone(user.phone) : t('account.profile.noPhone'))

@@ -98,6 +98,9 @@ export const en = {
     'Your account is active. We sent a 6-digit code by SMS to {to}. Enter it to receive your sign-in codes by SMS from now on.',
   'phone.confirm': 'Confirm',
   'phone.skip': 'Skip for now (codes come by e-mail)',
+  'phone.signIn':
+    'Your phone number {to} is not confirmed yet, so your sign-in codes come by e-mail. To confirm it, we send a 6-digit code to it by SMS. Once you have entered it, your sign-in codes come by SMS.',
+  'phone.later': 'Not now',
   'phone.wait': 'Please wait {seconds} seconds before asking for another code.',
   'phone.cannotSend': 'The code could not be sent. You can skip this step and confirm later.',
   'phone.doneTitle': 'Phone number confirmed',

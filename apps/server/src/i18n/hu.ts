@@ -95,6 +95,9 @@ export const hu: Catalog = {
     'A fiókja aktív. 6 számjegyű kódot küldtünk SMS-ben erre a számra: {to}. Adja meg, hogy a bejelentkezési kódokat ezentúl SMS-ben kapja.',
   'phone.confirm': 'Megerősítés',
   'phone.skip': 'Most kihagyom (a kódok e-mailben érkeznek)',
+  'phone.signIn':
+    'A telefonszáma ({to}) még nincs megerősítve, ezért a bejelentkezési kódok e-mailben érkeznek. A megerősítéshez 6 számjegyű kódot küldünk rá SMS-ben. Miután megadta, a bejelentkezési kódok SMS-ben érkeznek.',
+  'phone.later': 'Most nem',
   'phone.wait': 'Kérjük, várjon {seconds} másodpercet, mielőtt újabb kódot kér.',
   'phone.cannotSend': 'A kódot nem sikerült elküldeni. Kihagyhatja ezt a lépést, és később megerősítheti.',
   'phone.doneTitle': 'A telefonszám megerősítve',

@@ -1,5 +1,5 @@
 import { createHmac, randomInt, timingSafeEqual } from 'node:crypto'
-import { and, eq, gt, isNull, sql } from 'drizzle-orm'
+import { and, eq, gt, inArray, isNull, sql } from 'drizzle-orm'
 import type { DatabaseOrTransaction } from './audit.js'
 import type { Database } from './index.js'
 import { otpCodes, users } from './schema/index.js'
@@ -108,6 +108,25 @@ export const withdrawCode = async (db: DatabaseOrTransaction, { userId, purpose 
     .update(otpCodes)
     .set({ expiresAt: now })
     .where(and(eq(otpCodes.userId, userId), eq(otpCodes.purpose, purpose), isNull(otpCodes.consumedAt), gt(otpCodes.expiresAt, now)))
+}
+
+/**
+ * Ends the code as `withdrawCode` does, for a change that holds the user's row and makes the code useless: a new
+ * phone number, which the code that is out is not bound to.
+ *
+ * It does not wait for a code that another request holds at that moment, and leaves that one alone. Only a
+ * request for a new code holds a code without holding the user's row first, and it is ending that code itself.
+ * To wait for it could be to wait for ever: it goes on to store the new code, which refers to the user's row, and
+ * that waits for this change when the change sets a new e-mail address as well. A deadlock, and one of the two
+ * requests would fail.
+ */
+export const withdrawCodeUnlessHeld = async (db: DatabaseOrTransaction, { userId, purpose }: { userId: string; purpose: Purpose }, now = new Date()) => {
+  const open = db
+    .select({ id: otpCodes.id })
+    .from(otpCodes)
+    .where(and(eq(otpCodes.userId, userId), eq(otpCodes.purpose, purpose), isNull(otpCodes.consumedAt), gt(otpCodes.expiresAt, now)))
+    .for('no key update', { skipLocked: true })
+  await db.update(otpCodes).set({ expiresAt: now }).where(inArray(otpCodes.id, open))
 }
 
 export type CodeCheck =

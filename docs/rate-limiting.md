@@ -28,14 +28,16 @@ An IPv6 address counts as its /64, since one connection normally holds a whole /
 ## The limits
 
 Each limit has a window; once a counter reaches its maximum, that rule says "wait" until the window ends. The page
-answers `429 Too Many Requests` with a `Retry-After` header and a message in the page's language.
+answers `429 Too Many Requests` with a `Retry-After` header and a message in the page's language. At the step that
+asks for a phone number to be confirmed at a sign-in, the message is on the step itself: the sign-in is complete,
+and *Not now* still leads to the application.
 
 | What | Limit | Counts |
 | --- | --- | --- |
 | Wrong passwords | 5 per address **and** IP, 20 per address, 30 per IP, each per 15 minutes | Wrong passwords. A right one forgives the mistakes of that address from that IP. |
 | Wrong codes | 30 per IP per 15 minutes | Wrong, expired-by-attempts and malformed codes at sign-in, password reset and phone confirmation. On top of this, a code allows 5 attempts. |
 | Refused passkeys | 30 per IP per 15 minutes | Sign-ins with a passkey that pforte refused, for whatever reason. A held-back address is not checked at all, also not with the right passkey. |
-| Asking for another code | 10 per IP per hour | "Send a new code" and "send it by e-mail instead", and every code to confirm a phone number on the account pages. The first code of a sign-in is not counted: it needs the password. A user also gets at most one code a minute and five an hour. |
+| Asking for another code | 10 per IP per hour | "Send a new code" and "send it by e-mail instead", and every code to confirm a phone number on the account pages or at a sign-in. The first code of a sign-in is not counted: it needs the password. A user also gets at most one code a minute and five an hour. |
 | Password reset requests | 5 per address and 30 per IP per hour | Every request, for an address that exists or not. |
 | Wrong activation links | 20 per IP per 15 minutes | Links that do not work. |
 | Failed authentication of applications and administrators | 30 per IP per 15 minutes | Wrong client secrets at `/token`, and missing or wrong tokens at `/admin`. |

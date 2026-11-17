@@ -96,6 +96,9 @@ export const de: Catalog = {
     'Ihr Konto ist aktiv. Wir haben einen 6-stelligen Code per SMS an {to} gesendet. Geben Sie ihn ein, um Ihre Anmeldecodes künftig per SMS zu erhalten.',
   'phone.confirm': 'Bestätigen',
   'phone.skip': 'Vorerst überspringen (Codes kommen per E-Mail)',
+  'phone.signIn':
+    'Ihre Telefonnummer {to} ist noch nicht bestätigt, deshalb kommen Ihre Anmeldecodes per E-Mail. Zur Bestätigung senden wir einen 6-stelligen Code per SMS dorthin. Sobald Sie ihn eingegeben haben, kommen Ihre Anmeldecodes per SMS.',
+  'phone.later': 'Jetzt nicht',
   'phone.wait': 'Bitte warten Sie {seconds} Sekunden, bevor Sie einen weiteren Code anfordern.',
   'phone.cannotSend': 'Der Code konnte nicht gesendet werden. Sie können diesen Schritt überspringen und später bestätigen.',
   'phone.doneTitle': 'Telefonnummer bestätigt',
