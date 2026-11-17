@@ -29,11 +29,15 @@ docker network create "$NETWORK" >/dev/null
 PASSWORD=$(openssl rand -hex 16)
 docker run -d --name "$DATABASE" --network "$NETWORK" \
   -e POSTGRES_USER=pforte -e POSTGRES_PASSWORD="$PASSWORD" -e POSTGRES_DB=pforte postgres:18-alpine >/dev/null
+# Asked over the network, as pforte will connect, not over the socket: a fresh Postgres first runs a server
+# for its own set-up that listens on the socket only, answers "ready" there, and is shut down again before the
+# real one starts. A check that met it went on while there was no server.
+database_ready() { docker exec "$DATABASE" pg_isready -h 127.0.0.1 -U pforte -d pforte >/dev/null 2>&1; }
 for _ in $(seq 1 60); do
-  docker exec "$DATABASE" pg_isready -U pforte -d pforte >/dev/null 2>&1 && break
+  database_ready && break
   sleep 1
 done
-docker exec "$DATABASE" pg_isready -U pforte -d pforte >/dev/null 2>&1 || fail "Postgres did not become ready"
+database_ready || fail "Postgres did not become ready"
 DATABASE_URL="postgres://pforte:$PASSWORD@$DATABASE:5432/pforte"
 
 step "Version and help"
