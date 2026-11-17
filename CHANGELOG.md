@@ -147,6 +147,12 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   to the first administrator (`BOOTSTRAP_ADMIN_EMAIL`) now says that the account is for the administration. The list of
   clients and `GET /admin/clients` show the start address of the two built-in clients
   ([the first administrator](docs/administration.md#the-first-administrator)).
+- **The examples wait for the Postgres that pforte connects to.** On its first start, with an empty data folder,
+  Postgres runs a server for its own set-up that answers on the socket only, and shuts it down before the real one
+  starts. The health check of the database in `examples/production` and `examples/swarm` asked over the socket, so it
+  could call the database healthy too early: with Docker Compose pforte was then started while there was no server,
+  failed and was started again. The check now asks over the network (`pg_isready -h 127.0.0.1`). An installation that
+  runs has its data and is not affected; take the line over if you want your copy of the example to match.
 
 ## 0.2.0 (2026-10-23)
 
