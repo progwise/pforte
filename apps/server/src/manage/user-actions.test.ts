@@ -134,6 +134,39 @@ describe.skipIf(!hasDatabase)('the administration: actions on a user', () => {
     expect((await h.database.pool.query(`select count(*)::int as n from oidc_payloads where account_id = $1`, [benId])).rows[0].n).toBe(0)
   })
 
+  it('leads an administrator whose password it reset on to the administration, and nobody else anywhere', async () => {
+    const reset = async () => {
+      h.notifications.length = 0
+      await h.database.pool.query('delete from otp_codes')
+      await follow(await post(`/manage/users/${benId}/reset-password`))
+      const { url, code } = h.notifications.findLast((n) => n.kind === 'reset-code')!
+      // The person follows the link in the mail, in a browser that knows nothing of the administration.
+      const browser = new Browser(h.app)
+      const link = new URL(url!)
+      const page = await browser.request('GET', `${link.pathname}${link.search}`)
+      expect(page.statusCode, page.body).toBe(200)
+      const clientId = link.searchParams.get('client_id')
+      const chosen = await browser.request('POST', '/reset/code', {
+        form: { email: 'ben.keller@example.com', code: code!, password: 'a long enough passphrase', confirm: 'a long enough passphrase', ...(clientId ? { client_id: clientId } : {}) },
+      })
+      expect(chosen.statusCode, chosen.body).toBe(200)
+      expect(chosen.body).toContain('<h1>Password changed</h1>')
+      return { form: page.body, page: chosen.body, clientId }
+    }
+
+    // somebody who is no administrator: the administration does not know which application they are going to
+    const person = await reset()
+    expect(person.clientId).toBeNull()
+    expect(person.page).not.toContain('Continue to')
+
+    await h.database.pool.query(`update users set is_admin = true where id = $1`, [benId])
+    const administrator = await reset()
+    expect(administrator.clientId).toBe('pforte-admin-ui')
+    // The page from the link hands the client on with the form, as the page of "Forgot your password?" does.
+    expect(administrator.form).toContain('<input type="hidden" name="client_id" value="pforte-admin-ui">')
+    expect(administrator.page).toContain('<a class="button" href="https://localhost:3300/manage">Continue to Administration</a>')
+  })
+
   it('signs out everywhere and says how much ended', async () => {
     await h.database.pool.query(`insert into oidc_payloads (id, type, payload, account_id) values ('ua-2', 1, '{}', $1), ('ua-3', 1, '{}', $1)`, [benId])
 

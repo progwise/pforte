@@ -253,6 +253,32 @@ describe.skipIf(!hasDatabase)('admin API: user lifecycle', () => {
       expect((await h.audit('user.password_reset.request', user.id))[0].details.sessionsEnded).toBeGreaterThan(0)
     })
 
+    it('puts the application the person is on their way to into the link, and only one that is registered', async () => {
+      const user = await seeded('anna.schmidt@example.com')
+      const { browser } = await signedIn(user.email)
+      h.notifications.length = 0
+      await h.database.pool.query('delete from otp_codes')
+
+      const unknown = await h.api('POST', `/users/${user.id}/reset-password`, { body: { clientId: 'no-such-client' } })
+      expect(unknown.statusCode).toBe(400)
+      expect(unknown.json().detail).toBe('There is no client "no-such-client".')
+      // Nothing happened: no code, and the person is still signed in.
+      expect(h.notifications).toHaveLength(0)
+      expect(await hasSession(browser)).toBe(true)
+
+      const known = await h.api('POST', `/users/${user.id}/reset-password`, { body: { clientId: WEB.clientId } })
+      expect(known.statusCode, known.body).toBe(200)
+      const link = new URL(h.notifications.findLast((n) => n.kind === 'reset-code')!.url!)
+      expect(link.pathname).toBe('/reset/code')
+      expect(link.searchParams.get('client_id')).toBe(WEB.clientId)
+      expect(link.searchParams.get('email')).toBe(user.email)
+
+      // Without one the link is as it was.
+      await h.database.pool.query('delete from otp_codes')
+      expect((await act(user.id, 'reset-password')).statusCode).toBe(200)
+      expect(new URL(h.notifications.findLast((n) => n.kind === 'reset-code')!.url!).searchParams.has('client_id')).toBe(false)
+    })
+
     it('refuses a user who is not active', async () => {
       const created = (await h.api('POST', '/users', { body: { email: 'no-reset@example.com', firstName: 'No', lastName: 'Reset' } })).json()
 

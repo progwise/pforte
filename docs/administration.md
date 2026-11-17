@@ -25,8 +25,10 @@ choose a password. In development the seed already has `admin@example.com` (pass
 
 Afterwards administrators are made like any other change: set the admin right of a user, in the administration or through the
 API (`isAdmin`). When the administration sends the activation link to somebody who has the admin right, the mail and the
-page after choosing the password lead on to the administration, as they do for the first administrator. Through the API
-that is the `clientId` of the [activation](syncing-users.md#a-new-person-must-be-activated): `pforte-admin-ui`.
+page after choosing the password lead on to the administration, as they do for the first administrator. The same holds
+when the administration resets the password of somebody who has the admin right: the page after choosing the new one has
+the button *Continue to Administration*. Through the API that is the `clientId` of the
+[activation](syncing-users.md#a-new-person-must-be-activated) and of the password reset: `pforte-admin-ui`.
 
 ## Signing in
 

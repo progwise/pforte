@@ -426,7 +426,9 @@ export const accountRoutes =
           }
           if (user?.status !== 'active' || !user.passwordHash) return
           try {
-            const channel = await sendPasswordResetCode(user)
+            // The link in the mail leads to the same page as this browser is on, also with the button at the end.
+            const client = clientId ? await getClient(db, clientId) : undefined
+            const channel = await sendPasswordResetCode(user, { clientId: client?.clientId })
             await audit.resetRequested(where, { userId: user.id })
             await audit.codeSent(where, { userId: user.id, purpose: 'password_reset', channel })
           } catch (error) {

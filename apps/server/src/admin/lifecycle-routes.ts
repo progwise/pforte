@@ -216,13 +216,19 @@ export const lifecycleRoutes =
           summary: 'Reset the password of a user',
           description:
             'For an active user. Sends them a code to choose a new password, ends all their sessions and refresh ' +
-            'tokens and tells their applications (back-channel logout), since the account may be compromised.',
+            'tokens and tells their applications (back-channel logout), since the account may be compromised. The body is ' +
+            'optional; with `clientId` (a registered client) the page after choosing the new password leads to its start ' +
+            'address (`clientUri`); an unknown client is a 400.',
           params,
+          body: z.object({ clientId: z.string().min(1).max(63).optional() }).nullish(),
           response: { 200: userSchema, ...ERROR_RESPONSES },
         },
       },
       async (request, reply) => {
         try {
+          const clientId = request.body?.clientId
+          const client = clientId ? await getClient(db, clientId) : undefined
+          if (clientId && !client) return problem(reply, 400, 'Invalid request', `There is no client "${clientId}".`)
           const reset = await db.transaction(async (tx) => {
             const found = await findUserById(tx, request.params.id)
             return found ? requestPasswordReset(tx, requestContext(request), found) : undefined
@@ -231,7 +237,7 @@ export const lifecycleRoutes =
           const { user } = reset
           // Before the code is sent: the sessions are gone whether or not the mail can go out.
           clientLogouts.send(user, reset.logouts)
-          await sendPasswordResetCode(user)
+          await sendPasswordResetCode(user, { clientId: client?.clientId })
           return toUserDto(user)
         } catch (error) {
           if (error instanceof LifecycleError) return refused(reply, error)

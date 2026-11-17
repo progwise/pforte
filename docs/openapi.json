@@ -7845,7 +7845,31 @@
         "tags": [
           "Lifecycle"
         ],
-        "description": "For an active user. Sends them a code to choose a new password, ends all their sessions and refresh tokens and tells their applications (back-channel logout), since the account may be compromised.",
+        "description": "For an active user. Sends them a code to choose a new password, ends all their sessions and refresh tokens and tells their applications (back-channel logout), since the account may be compromised. The body is optional; with `clientId` (a registered client) the page after choosing the new password leads to its start address (`clientUri`); an unknown client is a 400.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "clientId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 63
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        },
         "parameters": [
           {
             "schema": {
