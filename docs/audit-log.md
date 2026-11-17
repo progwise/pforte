@@ -60,6 +60,10 @@ account pages and at the step right after an activation. A wrong code is a `logi
 `purpose: activation` in both places; the code sent from the account pages is a `login.code_sent` with that purpose and
 `channel: sms`.
 
+An application can show that step in its own pages ([SMS](sms.md#confirming-a-number-in-your-own-application)). Then the
+actor is its client: `user.phone.confirm.request` when it had the code sent (with `expiresAt`, never the code), and
+`user.phone.confirm` without `self` when the code the person typed was right. A wrong code is not recorded there.
+
 ### Passkeys
 
 | Action | When | Details |

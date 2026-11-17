@@ -92,6 +92,13 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   `account.profile.phoneUnconfirmed`, `account.phone.send`, `account.phone.intro`, `account.phone.introSend` and
   `account.phone.unavailable`; **if you added a language in your `locales` folder**, add them there, or they appear in
   English ([the account pages](docs/account.md#what-a-person-can-do), [SMS](docs/sms.md#phone-numbers)).
+- **An application can let a person confirm their phone number in its own pages.** For applications whose people never
+  see pforte's account pages: `POST /admin/users/{id}/send-phone-code` has pforte send the code by SMS to the stored
+  number, `POST /admin/users/{id}/confirm-phone` checks the code the person typed into the application and confirms the
+  number. pforte sends and checks; the application only shows the field. Both are open to the scopes `directory` and
+  `admin`, follow the limits of every code (one a minute and five an hour per person, five attempts per code), and are
+  recorded with the client as the actor (`user.phone.confirm.request`, `user.phone.confirm`)
+  ([confirming a number in your own application](docs/sms.md#confirming-a-number-in-your-own-application)).
 
 ### Fixed
 

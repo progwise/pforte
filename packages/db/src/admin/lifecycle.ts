@@ -244,32 +244,63 @@ export const requestPasswordReset = async (tx: DatabaseOrTransaction, context: R
 }
 
 /**
+ * The phone number of a user that a code can be sent to, to confirm it: of an active user, stored and not confirmed
+ * yet. Anything else is refused with the reason.
+ */
+export const phoneToConfirm = (user: UserRow) => {
+  if (user.status !== 'active') throw new LifecycleError(`Cannot confirm the phone number of a user who is ${user.status}. It is possible for: active.`)
+  if (!user.phone) throw new LifecycleError('The user has no phone number.')
+  if (user.phoneVerifiedAt) throw new LifecycleError('The phone number of the user is confirmed already.')
+  return user.phone
+}
+
+/** Records that a client had the code sent that confirms the phone number of a user. Never the code. */
+export const recordPhoneCodeSent = (db: DatabaseOrTransaction, context: RequestContext, user: UserRow, expiresAt: Date) =>
+  recordAuditEvent(db, audit(context, 'user.phone.confirm.request', user, { expiresAt: expiresAt.toISOString() }))
+
+/** What entering the code for a phone number led to: the user as confirmed, or why the code did not count. */
+export type PhoneConfirmation = { ok: true; user: UserRow } | { ok: false; reason: 'malformed' | Exclude<CodeCheck, { ok: true }>['reason'] }
+
+/**
  * A person enters the code that was sent to their phone number. If it is right, the number is confirmed and codes
- * can go there by SMS from now on.
+ * can go there by SMS from now on. Returns undefined when there is no such user, and throws a `LifecycleError`
+ * when there is nothing to confirm (`phoneToConfirm`).
  *
  * The code proves something about the number it was sent to, and about no other. So the person's row is held from
- * the first look at the number to the last write: the code is checked against the number that is stored at that
- * moment (it was issued bound to its destination), the confirmation is written and recorded, all or nothing. A
- * change of the number by the back office happens wholly before, and the code is then a wrong one, or wholly
- * after, and takes the confirmation away again. A wrong code still counts as an attempt.
+ * the first look to the last write, and everything is decided on that row: whether there is something to confirm
+ * (a lock, a deactivation or a confirmation that came in between counts, and the code is then not even looked
+ * at), the check of the code against the number that is stored at that moment (it was issued bound to its
+ * destination), the confirmation and its record, all or nothing. A change of the number by the back office
+ * happens wholly before, and the code is then a wrong one, or wholly after, and takes the confirmation away
+ * again. What is returned is the row as this step wrote it, not a later look at it. A wrong code still counts as
+ * an attempt; one that is no code at all (spaces aside) does not.
  *
  * The row is held `for no key update`, which is what a change of the number waits for, and not `for update`: a
  * new code that is issued at the same moment ends the old one and then refers to this row (the foreign key of
  * the new code takes `for key share`). Under `for update` that one would wait for this, and this for the old
  * code it holds: a deadlock, and one of the two requests would fail.
  */
-export const confirmPhone = (db: Database, context: RequestContext, { userId, code }: { userId: string; code: string }, options: CodeOptions): Promise<CodeCheck> =>
+export const confirmPhone = (
+  db: Database,
+  context: RequestContext,
+  { userId, code }: { userId: string; code: string },
+  options: CodeOptions,
+): Promise<PhoneConfirmation | undefined> =>
   db.transaction(async (tx) => {
     const [user] = await tx.select().from(users).where(eq(users.id, userId)).for('no key update')
-    if (!user?.phone || user.phoneVerifiedAt) return { ok: false, reason: 'none' }
-    const result = await checkCode(tx, { userId, purpose: 'activation', code, boundTo: user.phone }, options)
+    if (!user) return undefined
+    const phone = phoneToConfirm(user)
+    const digits = code.replaceAll(' ', '')
+    if (!/^\d{6}$/.test(digits)) return { ok: false, reason: 'malformed' }
+    const result = await checkCode(tx, { userId, purpose: 'activation', code: digits, boundTo: phone }, options)
     if (!result.ok) return result
-    await tx
+    const [confirmed] = await tx
       .update(users)
       .set({ phoneVerifiedAt: options.now ?? new Date() })
       .where(eq(users.id, userId))
-    await recordAuditEvent(tx, audit(context, 'user.phone.confirm', user, {}))
-    return result
+      .returning()
+    await recordAuditEvent(tx, audit(context, 'user.phone.confirm', confirmed!, {}))
+    return { ok: true, user: confirmed! }
   })
 
 export const endSessions = async (tx: DatabaseOrTransaction, context: RequestContext, user: UserRow) => {

@@ -81,3 +81,39 @@ A person who has a number that is not confirmed (they skipped the step, got the 
 confirms it on [the account pages](account.md): the overview there says so next to the number and has the button
 *Confirm with a code by SMS*. An administrator sees on a person's page whether the phone is confirmed, and cannot
 confirm it for them: only the person holds the phone.
+
+### Confirming a number in your own application
+
+If your people never see the account pages, your application can show the step itself. pforte still sends the code and
+checks it; your application only shows a field for it. It needs a machine client with the `directory` or `admin` scope
+([syncing users](syncing-users.md#make-a-client-for-the-job)), and calls the admin API from its server, never from the
+browser:
+
+```sh
+# 1. The person presses "confirm" in your application: pforte sends a 6-digit code by SMS to the stored number.
+curl -X POST "$PFORTE/admin/users/$ID/send-phone-code" -H "authorization: Bearer $TOKEN"
+# {"sentTo":"+49•••••••••78","expiresAt":"2026-01-01T10:10:00.000Z"}
+
+# 2. The person types the code into your application: pforte checks it and confirms the number.
+curl -X POST "$PFORTE/admin/users/$ID/confirm-phone" -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' -d '{"code":"123456"}'
+# the user, with "phoneVerifiedAt" set
+```
+
+`$ID` is the person's ID at pforte, which is the `sub` of their ID token. From the next sign-in on, their codes go by SMS.
+
+| Answer | Meaning |
+| --- | --- |
+| `200` | The code was sent, or the number is confirmed. |
+| `409` | Nothing to confirm: the person has no number, it is confirmed already, the person is not active, or this pforte sends no SMS. The `detail` says which. |
+| `422` | (`confirm-phone`) The code is wrong, has expired or was tried too often. A code has five attempts and is valid for ten minutes; send a new one. |
+| `429` | (`send-phone-code`) A person gets one code a minute and five an hour. `Retry-After` says how long to wait. |
+| `503` | (`send-phone-code`) The SMS could not be sent. No code is waiting; try again later. |
+
+Whether a person has something to confirm is in what your application already gets: `phone_number_verified` in the ID
+token and at the userinfo endpoint (scope `phone`), and `phoneVerifiedAt` of the user in the admin API.
+
+**Call it only for the person who is signed in to your application, and only when they asked for it.** The code shows
+that whoever typed it holds the phone; that this is the person the account belongs to is what your application vouches
+for. Each code is an SMS that somebody pays for, so send one when the person presses the button, not when a page opens.
+Both calls are recorded in the audit log with your client as the actor.

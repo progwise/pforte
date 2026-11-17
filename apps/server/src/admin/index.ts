@@ -40,11 +40,13 @@ export interface AdminDependencies {
   allowPrivateAddresses?: boolean
   /** Tells the applications of a user whose sessions an administrator ended. */
   clientLogouts: ClientLogouts
+  /** The secrets that sign one-time codes (see `deriveCodeSecrets`), for the code that confirms a phone number. */
+  codeSecrets: string[]
 }
 
 /** The admin API, mounted under /admin. */
 export const adminRoutes =
-  ({ db, provider, notifier, sendPasswordResetCode, limiter, allowPrivateAddresses, clientLogouts }: AdminDependencies) =>
+  ({ db, provider, notifier, sendPasswordResetCode, limiter, allowPrivateAddresses, clientLogouts, codeSecrets }: AdminDependencies) =>
   async (app: FastifyInstance) => {
     app.setValidatorCompiler(validatorCompiler)
     app.setSerializerCompiler(serializerCompiler)
@@ -162,7 +164,7 @@ export const adminRoutes =
     await app.register(devicesRoutes({ db, auth }))
     await app.register(passkeysRoutes({ db, auth }))
     await app.register(sessionsRoutes({ db, auth }))
-    await app.register(lifecycleRoutes({ db, auth, notifier, sendPasswordResetCode, limiter, issuer: provider.issuer, clientLogouts }))
+    await app.register(lifecycleRoutes({ db, auth, notifier, sendPasswordResetCode, limiter, issuer: provider.issuer, clientLogouts, codeSecrets }))
     await app.register(claimTypesRoutes({ db, auth, reloadProvider }))
     await app.register(clientsRoutes({ db, auth, reloadProvider, allowPrivateAddresses }))
     await app.register(auditRoutes({ db, auth }))
