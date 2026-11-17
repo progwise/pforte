@@ -144,14 +144,17 @@ Keep the link to each test's log. Record the outcome of each run below.
 
 ### Since the last run
 
-The run below is the last one. Nothing merged after it was checked against the suite: there is no run for 0.2.0, and none for
+The run below is the last one. Nothing merged after it was checked against the suite: there is no run for 0.2.0 or 0.3.0, and none for
 the activation that remembers the device ([#44](https://github.com/progwise/pforte/issues/44)), where it was left out on purpose.
 That change adds a cookie to the sign-in (`pforte_device_new`) that only an activation sets, which the suite never does; the
 endpoints of the provider, the session and the tokens are as they were, so no result is expected to change. The same holds
 for the logout token that applications now get when an administrator ends a person's sessions
 ([#27](https://github.com/progwise/pforte/issues/27)): it is the token of a sign-out, sent on an occasion the suite does not
 have. The account pages ([#18](https://github.com/progwise/pforte/issues/18)) add a second built-in client, and the ID tokens of
-the two built-in clients now always carry `auth_time`; no other client and no endpoint is touched. This is an expectation, not a result. A full run is due before 1.0
+the two built-in clients now always carry `auth_time`; no other client and no endpoint is touched. 0.3.0 also changes the
+sign-in itself: passkeys as a second way in, with the `amr` `["pop", "mfa"]`, a page that asks for an unconfirmed phone number
+between a complete sign-in and the way back to the application (only where SMS is on and the person has such a number, which the
+user of the suite has not), and `prompt=login`, which now takes another person than the one signed in. This is an expectation, not a result. A full run is due before 1.0
 ([#48](https://github.com/progwise/pforte/issues/48), which lists what changed since).
 
 ### Run of 2026-10-20: no failures

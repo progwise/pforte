@@ -10,6 +10,22 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
 
 ## 0.3.0 (2026-11-17)
 
+**Before you update:** back up the database. This release has five migrations (the tables for passkeys, and a counter on
+every user that ends a sign-in under way with the person's sessions); run them with `pforte migrate`, or let
+`MIGRATE_ON_START` do it. These changes can affect what you already run, and each is described below:
+
+- **Passkeys** are on for everybody and are bound to the host in `ISSUER`: do not change that host afterwards. A sign-in
+  with one has the `amr` `["pop", "mfa"]`, which matters to an application that expects `pwd` there.
+- **An application with a back-channel logout address** now also receives a logout token when an administrator ends a
+  person's sessions, and when a password reset is completed.
+- **Two e-mails are new and cannot be turned off:** one after a password was changed, one for every new passkey.
+- **A person whose phone number is not confirmed is asked at their next sign-in**, where this pforte sends SMS.
+- **A second built-in client, `pforte-account-ui`,** appears in the list of clients, for the account pages at `/account`.
+- **The admin API** answers `GET /admin/users/{id}/sessions` with the new fields `amr` and `staysSignedIn`, which a
+  client that checks answers against the OpenAPI document of 0.2.0 rejects.
+- **If you replaced texts or added a language** in your `locales` folder, add the new texts named below, or they appear
+  as built in.
+
 ### Added
 
 - **Activation can remember the device.** The page where a person chooses their first password has the box "Remember this
