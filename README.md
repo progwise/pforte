@@ -1,3 +1,5 @@
+<img src="site/src/favicon.svg" alt="" width="64" height="64">
+
 # pforte
 
 A small, self-hosted OpenID Connect identity service for organisations whose users are managed
