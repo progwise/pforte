@@ -154,7 +154,8 @@ have. The account pages ([#18](https://github.com/progwise/pforte/issues/18)) ad
 the two built-in clients now always carry `auth_time`; no other client and no endpoint is touched. 0.3.0 also changes the
 sign-in itself: passkeys as a second way in, with the `amr` `["pop", "mfa"]`, a page that asks for an unconfirmed phone number
 between a complete sign-in and the way back to the application (only where SMS is on and the person has such a number, which the
-user of the suite has not), and `prompt=login`, which now takes another person than the one signed in. This is an expectation, not a result. A full run is due before 1.0
+user of the suite has not), and `prompt=login`: when a different person than the one signed in enters their password there, they
+can now complete the sign-in, where it ended in an error before. Signing in again as the same person is as it was. This is an expectation, not a result. A full run is due before 1.0
 ([#48](https://github.com/progwise/pforte/issues/48), which lists what changed since).
 
 ### Run of 2026-10-20: no failures
