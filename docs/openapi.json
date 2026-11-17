@@ -7344,7 +7344,7 @@
         ],
         "description": "For a created user: sends the activation link, where they choose their first password; a new call replaces the earlier link. For a deactivated user who already has a password: makes them active again, without a link. The link is never returned or logged by pforte. The body is optional; with `clientId` (a registered client) the e-mail names the application and the page after choosing the password leads to its start address (`clientUri`); an unknown client is a 400.",
         "requestBody": {
-          "required": true,
+          "required": false,
           "content": {
             "application/json": {
               "schema": {
@@ -7847,7 +7847,7 @@
         ],
         "description": "For an active user. Sends them a code to choose a new password, ends all their sessions and refresh tokens and tells their applications (back-channel logout), since the account may be compromised. The body is optional; with `clientId` (a registered client) the page after choosing the new password leads to its start address (`clientUri`); an unknown client is a 400.",
         "requestBody": {
-          "required": true,
+          "required": false,
           "content": {
             "application/json": {
               "schema": {

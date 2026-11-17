@@ -92,6 +92,19 @@ export const adminRoutes =
         const scopes = hooks.map((hook) => (hook as { scopes?: readonly string[] } | undefined)?.scopes).find(Boolean)
         return scopes && 'schema' in result && result.schema ? { ...result, schema: { ...result.schema, 'x-required-scopes': scopes } } : result
       },
+      // A body that may be left out is not required. The generator marks every body as required, also one whose
+      // schema allows none (`.nullish()`), and a client made from the document would then insist on one.
+      transformObject: (documents) => {
+        const document = 'openapiObject' in documents ? documents.openapiObject : documents.swaggerObject
+        for (const item of Object.values(document.paths ?? {})) {
+          for (const operation of Object.values(item ?? {})) {
+            const body = (operation as { requestBody?: { required?: boolean; content?: Record<string, { schema?: { anyOf?: { type?: string }[] } }> } } | undefined)?.requestBody
+            const optional = Object.values(body?.content ?? {}).every((media) => media.schema?.anyOf?.some((option) => option.type === 'null'))
+            if (body && optional) body.required = false
+          }
+        }
+        return document
+      },
     })
 
     app.setErrorHandler((error, request, reply) => {
