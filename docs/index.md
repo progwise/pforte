@@ -3,7 +3,7 @@
 A small, self-hosted OpenID Connect identity service for organisations whose users are managed by a back office rather than by
 self-registration. One container next to a Postgres, on a server you own.
 
-[Quick start](quick-start.md) · [Run it on a server](../examples/production/README.md) · [Source on GitHub](https://github.com/progwise/pforte)
+[Quick start](quick-start.md) · [Run it on a server](../examples/production/README.md) · [On a Docker Swarm](../examples/swarm/README.md) · [Source on GitHub](https://github.com/progwise/pforte)
 
 ## Why another identity service
 
@@ -39,12 +39,13 @@ in the back office wants to learn. pforte does the small set of things above and
 - **Administration**: users, clients, claim types, an audit log and CSV import, in the browser and through an admin API
   ([the administration](administration.md), [importing users](import.md)).
 - **Account pages**: every person sees where they are signed in, their remembered devices and recent sign-ins, can sign out
-  everywhere, forget devices, add and remove passkeys and change the password, after a sign-in with two factors
-  ([the account pages](account.md)).
+  everywhere, forget devices, add and remove passkeys, confirm their phone number and change the password, after a
+  sign-in with two factors ([the account pages](account.md)).
 - **Safety**: rate limits on sign-in, an audit of sign-in events, security headers, and a production start that refuses weak
   secrets ([security measures](security.md), [threat model](threat-model.md)).
 - **Operation**: configuration by environment variables, migrations at start, an image that runs unprivileged on a read-only
-  filesystem ([configuration](configuration.md), [production with Docker Compose](../examples/production/README.md)).
+  filesystem ([configuration](configuration.md), [production with Docker Compose](../examples/production/README.md),
+  [on a Docker Swarm](../examples/swarm/README.md)).
 
 ## Concepts
 

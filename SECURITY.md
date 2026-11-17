@@ -15,7 +15,7 @@ they prefer not to be named.
 
 ## Supported versions
 
-The latest release receives security fixes. While the version starts with 0, that is the latest minor version, for example 0.1.x.
+The latest release receives security fixes. While the version starts with 0, that is the latest minor version, for example 0.2.x.
 Update to it before reporting a problem, if you can.
 
 ## Scope

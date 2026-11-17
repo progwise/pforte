@@ -48,6 +48,9 @@ $EDITOR .env             # the host name, the sender address, the name of your o
 docker compose up -d
 ```
 
+On a Docker Swarm that already has an edge proxy, [pforte on a Docker Swarm](../examples/swarm/README.md) deploys the same as a
+stack.
+
 The image is `ghcr.io/progwise/pforte`. Pin a version in `.env` (`PFORTE_IMAGE=ghcr.io/progwise/pforte:0.2.0`); the changes of each
 version are in the [changelog](../CHANGELOG.md). Every setting is described in the [configuration reference](configuration.md).
 

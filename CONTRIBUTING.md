@@ -88,9 +88,9 @@ uses the `client_credentials` grant with only the scopes `admin` and/or `directo
 
 Users have a lifecycle: `POST /admin/users/{id}/lock`, `unlock`, `activate`, `deactivate`,
 `reset-password` and `end-sessions`. Locking, deactivating, deleting and resetting the password
-end the user's sessions and refresh tokens. Activation links and reset requests go through a
-notifier; until e-mail and SMS exist, the development notifier writes them to the server log
-(and refuses to run with `NODE_ENV=production`, so secrets never reach production logs).
+end the user's sessions and refresh tokens. Activation links and codes go through a notifier:
+by e-mail with `SMTP_URL`, as in the set-up above. Without it the development notifier writes them
+to the server log (and refuses to run with `NODE_ENV=production`, so secrets never reach production logs).
 
 The administration UI is at <http://localhost:3300/manage>: sign in as `admin@example.com` (`dev-password`) and enter the code
 from Mailpit. See [docs/administration.md](docs/administration.md).
@@ -123,7 +123,7 @@ migrates. `pforte:dev --help` lists the commands.
 ### The documentation site
 
 The site at pforte.dev is generated from `docs/` and a few other documents of the repository (`CHANGELOG.md`, `SECURITY.md`,
-`examples/production/README.md`) by the small generator in `site/`. The documents are the only source: write them for readers on
+`examples/production/README.md`, `examples/swarm/README.md`) by the small generator in `site/`. The documents are the only source: write them for readers on
 GitHub as well, link to other documents with relative links (`security.md`, `../CONTRIBUTING.md`), and the generator turns them
 into links of the site or of GitHub.
 
@@ -189,14 +189,21 @@ downloads nothing, and runs in CI as the job `browser`.
 | Path | Contents |
 | --- | --- |
 | `apps/server` | Fastify application: OpenID Connect provider, admin API and pages |
+| `apps/cli` | The `pforte` command line for administrators, such as the CSV import |
 | `packages/db` | Drizzle ORM schema, migrations and the database connection |
+| `packages/import` | Reads user files (CSV) and imports them through the admin API |
+| `site` | Generator of the documentation site from `docs/` |
+| `docs` | The documentation, and `openapi.json` of the admin API |
 | `examples/relying-party` | Example application that signs in with pforte; see its README |
+| `examples/production` | pforte, Postgres and Caddy with Docker Compose |
+| `examples/swarm` | pforte as a stack on a Docker Swarm |
+| `scripts` | Development keys, the smoke tests of the image and the examples, the release |
 
 ## Rules for the repository
 
 - No customer names, real data or secrets. Fixtures and seed data are fictional.
 - Configuration comes from environment variables. Do not add defaults for secrets.
-- Every secret (`DATABASE_URL`, `COOKIE_KEYS`, `JWKS`) can also be read from a file with the
+- Every secret (`DATABASE_URL`, `COOKIE_KEYS`, `JWKS`, `SMTP_URL`, `SMS_HEADERS`) can also be read from a file with the
   `_FILE` suffix, e.g. `COOKIE_KEYS_FILE=/run/secrets/cookie_keys`, for mounted secrets. Setting
   both the variable and the `_FILE` variant is an error.
 

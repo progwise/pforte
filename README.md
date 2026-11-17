@@ -63,14 +63,14 @@ Protocol
 Login
 
 - E-mail and password
-- Second factor by SMS code, with a code by e-mail as fallback while no phone number is stored
+- Second factor by a code: by SMS to a phone number its owner has confirmed, by e-mail otherwise
 - "Remember this device" to skip the second factor on a known device
 - Passkeys: sign in with the device's own check (face, finger, PIN) instead of password and code
 - Password reset by SMS or e-mail code, and an e-mail that tells the person their password was changed
 - Activation link for new users, who set their first password on activation
 - Login pages in several languages, with the organisation's name, colours and logo from configuration
-- Account pages where a person sees their sessions, remembered devices and recent sign-ins, signs out everywhere and
-  changes the password
+- Account pages where a person sees their sessions, remembered devices and recent sign-ins, signs out everywhere,
+  adds and removes passkeys, confirms their phone number and changes the password
 
 Administration
 
@@ -82,7 +82,7 @@ Administration
 Operations
 
 - Docker image, configuration by environment variables, Postgres as the only dependency
-- Adapters for SMS and e-mail providers; the first ones are a European SMS gateway and SMTP
+- E-mail by SMTP, and SMS through the HTTP API of a provider you choose, set up by configuration
 - Rate limiting on login and code requests
 
 ## Not planned
@@ -117,7 +117,8 @@ ERP ──(hourly)──▶ import job ──(admin API)──▶ pforte
 ## Quick start
 
 For a server: [examples/production](examples/production/README.md) runs pforte, Postgres and Caddy (automatic TLS) with
-Docker Compose, with secrets as files and a read-only, unprivileged pforte. Every setting is in
+Docker Compose, with secrets as files and a read-only, unprivileged pforte. On a Docker Swarm that already has an edge
+proxy, [examples/swarm](examples/swarm/README.md) deploys the same as a stack. Every setting is in
 [docs/configuration.md](docs/configuration.md). The image is `ghcr.io/progwise/pforte`, for amd64 and arm64; pin a version.
 
 ## Development
@@ -143,8 +144,13 @@ Done: the OpenID Connect provider, the admin API, CSV import, the administration
 password reset, the audit log and rate limits, branding and languages, the Docker image and a production example, and the
 releases 0.1.0 and 0.2.0.
 
-Next: a page where people manage their own account ([#18](https://github.com/progwise/pforte/issues/18)), and ideas that wait
-for a need: a consent screen, custom URL schemes for native apps, self-service sign-up, a first-party login API.
+On `main` and waiting for the next release (the [changelog](CHANGELOG.md) has them under "Unreleased"): the account pages,
+passkeys ([#45](https://github.com/progwise/pforte/issues/45)), telling applications when somebody else ends a person's
+sessions, confirming a phone number later (on the account pages, at a sign-in or in an application's own pages), and an
+example for Docker Swarm.
+
+Next: the OpenID conformance suite again before 1.0 ([#48](https://github.com/progwise/pforte/issues/48)), and ideas that
+wait for a need: a consent screen, custom URL schemes for native apps, self-service sign-up, a first-party login API.
 
 ## Contributing
 
