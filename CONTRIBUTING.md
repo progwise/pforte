@@ -88,9 +88,12 @@ uses the `client_credentials` grant with only the scopes `admin` and/or `directo
 
 Users have a lifecycle: `POST /admin/users/{id}/lock`, `unlock`, `activate`, `deactivate`,
 `reset-password` and `end-sessions`. Locking, deactivating, deleting and resetting the password
-end the user's sessions and refresh tokens. Activation links and codes go through a notifier:
-by e-mail with `SMTP_URL`, as in the set-up above. Without it the development notifier writes them
-to the server log (and refuses to run with `NODE_ENV=production`, so secrets never reach production logs).
+end the user's sessions and refresh tokens. Activation links and codes go through a notifier. In
+the set-up above both go by e-mail and land in Mailpit; without `SMTP_URL` the development notifier
+writes them to the server log instead (and refuses to run with `NODE_ENV=production`, so secrets
+never reach production logs). With SMS switched on (above), a code goes by SMS to a person whose
+number is confirmed, as it is for the ten seeded users, also the code of a reset an administrator
+starts. The activation link is always an e-mail.
 
 The administration UI is at <http://localhost:3300/manage>: sign in as `admin@example.com` (`dev-password`) and enter the code
 from Mailpit. See [docs/administration.md](docs/administration.md).

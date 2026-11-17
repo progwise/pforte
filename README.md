@@ -63,7 +63,8 @@ Protocol
 Login
 
 - E-mail and password
-- Second factor by a code: by SMS to a phone number its owner has confirmed, by e-mail otherwise
+- Second factor by a code: by e-mail, or by SMS where an SMS provider is set up and the person has confirmed their
+  phone number
 - "Remember this device" to skip the second factor on a known device
 - Passkeys: sign in with the device's own check (face, finger, PIN) instead of password and code
 - Password reset by SMS or e-mail code, and an e-mail that tells the person their password was changed
@@ -117,8 +118,9 @@ ERP ──(hourly)──▶ import job ──(admin API)──▶ pforte
 ## Quick start
 
 For a server: [examples/production](examples/production/README.md) runs pforte, Postgres and Caddy (automatic TLS) with
-Docker Compose, with secrets as files and a read-only, unprivileged pforte. On a Docker Swarm that already has an edge
-proxy, [examples/swarm](examples/swarm/README.md) deploys the same as a stack. Every setting is in
+Docker Compose, with secrets as files and a read-only, unprivileged pforte. On a Docker Swarm whose edge proxy is
+[caddy-docker-proxy](https://github.com/lucaslorentz/caddy-docker-proxy), [examples/swarm](examples/swarm/README.md)
+deploys the same as a stack; with another proxy the stack needs that proxy's routing instead. Every setting is in
 [docs/configuration.md](docs/configuration.md). The image is `ghcr.io/progwise/pforte`, for amd64 and arm64; pin a version.
 
 ## Development
