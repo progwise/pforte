@@ -8,6 +8,8 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
 
 ## Unreleased
 
+## 0.3.0 (2026-11-17)
+
 ### Added
 
 - **Activation can remember the device.** The page where a person chooses their first password has the box "Remember this
