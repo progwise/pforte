@@ -204,12 +204,16 @@ const lightened = (color: string, against: string[], ratio: number) => {
  * own. What carries the brand is kept and only made readable: a link is lightened in its own hue until it reads on
  * the card and on the page (4.5:1), the main button until its shape stands out from the card (3:1). The text on the
  * button stays if it still reads there, else it is black or white: one of the two reads on every colour.
+ *
+ * `chosen` are the dark colours a brand names itself. They are taken as they are, and what is calculated is
+ * calculated for them: a link for the card the brand chose, the text of a button for the button it chose.
  */
-export const darkColors = (light: Colors): Colors => {
-  const primary = lightened(light.primary, [DARK_BASE.surface], 3)
+export const darkColors = (light: Colors, chosen: Partial<Colors> = {}): Colors => {
+  const ground = { ...DARK_BASE, ...chosen }
+  const primary = chosen.primary ?? lightened(light.primary, [ground.surface], 3)
   const reads = (text: string) => contrastRatio(primary, text) >= 4.5
-  const primaryText = reads(light.primaryText) ? light.primaryText : reads('#ffffff') ? '#ffffff' : '#000000'
-  return { ...DARK_BASE, primary, primaryText, link: lightened(light.link, [DARK_BASE.surface, DARK_BASE.background], 4.5) }
+  const primaryText = chosen.primaryText ?? (reads(light.primaryText) ? light.primaryText : reads('#ffffff') ? '#ffffff' : '#000000')
+  return { ...ground, primary, primaryText, link: chosen.link ?? lightened(light.link, [ground.surface, ground.background], 4.5) }
 }
 
 /** Gives the theme the dark variant that is calculated from its colours. */

@@ -252,7 +252,7 @@ the cookie.
 
 A browser in which no application ever said anything gets pforte's pages as the device is set
 (`prefers-color-scheme`). The parameter is pforte's own, not part of OpenID Connect; a library passes it on as any
-additional parameter of the authorization request. It is read from the query of a `GET` request only. An installation
+additional parameter of the authorization request. It is read from the query of a `GET` request that is answered with a page or with a redirect to one; a request for a file or to the API changes nothing. An installation
 can be light for everybody ([`"dark": false`](branding-and-languages.md#light-and-dark)); it ignores the parameter.
 
 ## Browser and mobile applications

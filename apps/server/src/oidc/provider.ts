@@ -186,7 +186,8 @@ export const createProvider = async ({ config, db, onError, ui = createUi() }: P
     const colorScheme = createColorScheme({ secure: secureIssuer })
     provider.use(async (ctx, next) => {
       await next()
-      const { scheme, setCookie } = colorScheme.of(ctx.method, ctx.query[COLOR_SCHEME_PARAMETER], ctx.get('cookie'))
+      const asked = { method: ctx.method, parameter: ctx.query[COLOR_SCHEME_PARAMETER], cookieHeader: ctx.get('cookie') }
+      const { scheme, setCookie } = colorScheme.of(asked, { status: ctx.status, contentType: ctx.response.get('content-type') })
       if (setCookie) ctx.append('Set-Cookie', setCookie)
       if (typeof ctx.body === 'string') ctx.body = colorScheme.mark(ctx.body, scheme)
     })

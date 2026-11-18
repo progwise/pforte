@@ -18,16 +18,27 @@ const isScheme = (value: unknown): value is ColorScheme => value === 'light' || 
  * from then on, whatever leads to it, until a request says something else: no page has to pass the parameter on.
  * `auto` removes the cookie. Without it the page says nothing and the stylesheet follows the device.
  *
+ * Only an answer that is a page, or a redirect on the way to one, sets the cookie. A file of the branding folder may
+ * be kept by a cache for a year and handed to other people with its headers, and the answers of the interfaces for
+ * programs have no business with a browser's look.
+ *
  * The cookie holds one of two words and is checked when read, so it needs no signature. Any site can set it with a
  * link, as any site can send somebody to the sign-in page: it changes the look and nothing else.
  */
 export const createColorScheme = ({ secure }: { secure: boolean }) => {
   const cookie = (value: string, maxAgeSeconds: number) => setCookieHeader(COLOR_SCHEME_COOKIE, value, { path: '/', maxAgeSeconds, secure, sameSite: 'Lax' })
 
-  /** What a request says: the look of its page, and the cookie to answer with if it carried the parameter. */
-  const of = (method: string, parameter: unknown, cookieHeader: string | undefined): { scheme?: ColorScheme; setCookie?: string } => {
-    if (method === 'GET' && isScheme(parameter)) return { scheme: parameter, setCookie: cookie(parameter, SECONDS) }
-    if (method === 'GET' && parameter === 'auto') return { setCookie: cookie('', 0) }
+  /**
+   * What a request says, given the answer to it (`status` and `contentType`): the look of its page, and the cookie
+   * to answer with if the request carried the parameter and the answer is a page or a redirect that is not kept.
+   */
+  const of = (
+    { method, parameter, cookieHeader }: { method: string; parameter: unknown; cookieHeader: string | undefined },
+    { status, contentType }: { status: number; contentType: unknown },
+  ): { scheme?: ColorScheme; setCookie?: string } => {
+    const page = [302, 303, 307].includes(status) || (typeof contentType === 'string' && contentType.startsWith('text/html'))
+    if (method === 'GET' && page && isScheme(parameter)) return { scheme: parameter, setCookie: cookie(parameter, SECONDS) }
+    if (method === 'GET' && page && parameter === 'auto') return { setCookie: cookie('', 0) }
     const kept = readCookie(cookieHeader, COLOR_SCHEME_COOKIE)
     return isScheme(kept) ? { scheme: kept } : {}
   }
@@ -42,7 +53,8 @@ export const createColorScheme = ({ secure }: { secure: boolean }) => {
     /** For every page Fastify sends. The pages of the OpenID library do not pass here: `provider.ts` does the same for them. */
     addTo(app: FastifyInstance) {
       app.addHook('onSend', async (request, reply, payload) => {
-        const { scheme, setCookie } = of(request.method, (request.query as Record<string, unknown> | undefined)?.[COLOR_SCHEME_PARAMETER], request.headers.cookie)
+        const asked = { method: request.method, parameter: (request.query as Record<string, unknown> | undefined)?.[COLOR_SCHEME_PARAMETER], cookieHeader: request.headers.cookie }
+        const { scheme, setCookie } = of(asked, { status: reply.statusCode, contentType: reply.getHeader('content-type') })
         if (setCookie) reply.header('Set-Cookie', setCookie)
         return mark(payload, scheme)
       })
