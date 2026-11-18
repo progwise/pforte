@@ -360,6 +360,8 @@ ${formHtml}
 
       manage: ({ title, nav, person, flash, sectionsLabel, content }) => {
         const links = nav.map((item) => `<a href="${escapeHtml(item.href)}"${item.current ? ' aria-current="page"' : ''}>${escapeHtml(item.label)}</a>`).join('\n')
+        // Twice in the page, as the sections are: beside them in the wide bar, and at the end of the menu that opens.
+        const signOut = person ? `<form method="post" action="${escapeHtml(person.signOutAction ?? '/manage/logout')}"><button type="submit" class="secondary">${escapeHtml(person.signOutLabel)}</button></form>` : ''
         return `<!doctype html>
 <html lang="${escapeHtml(language)}">
 <head>
@@ -377,15 +379,10 @@ ${links}
 <details class="menu">
 <summary><span>${escapeHtml(nav.find((item) => item.current)?.label ?? sectionsLabel)}</span></summary>
 <nav aria-label="${escapeHtml(sectionsLabel)}">
-${links}${person ? `\n<p>${escapeHtml(person.signedInAs)}</p>` : ''}
+${links}${person ? `\n<p>${escapeHtml(person.signedInAs)}</p>\n${signOut}` : ''}
 </nav>
 </details>
-${
-  person
-    ? `<div class="who"><span>${escapeHtml(person.signedInAs)}</span>
-<form method="post" action="${escapeHtml(person.signOutAction ?? '/manage/logout')}"><button type="submit" class="secondary">${escapeHtml(person.signOutLabel)}</button></form></div>`
-    : ''
-}
+${person ? `<div class="who"><span>${escapeHtml(person.signedInAs)}</span>\n${signOut}</div>` : ''}
 </header>
 <main class="page" id="content">
 ${flash ? `<p class="flash ${flash.kind}" role="${flash.kind === 'error' ? 'alert' : 'status'}">${escapeHtml(flash.text)}</p>` : ''}

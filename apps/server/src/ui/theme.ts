@@ -192,14 +192,15 @@ nav.links a { color: var(--muted); }
 
 /* The administration: a wide layout with a bar and sections, tables and forms. */
 body.manage { display: block; padding: 0; min-height: 100vh; }
-.bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.25rem 1.5rem; padding: 0 1rem;
+.bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 1.5rem; padding: 0 1rem;
   background: var(--surface); border-bottom: 1px solid var(--border); box-shadow: 0 1px 3px rgb(0 0 0 / 8%); }
-.bar .who { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; font-size: 0.9rem; color: var(--muted); }
+/* Each of the three has its own room above and below, so nothing touches an edge, also where the bar wraps. */
+.bar .who { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; padding: 0.5rem 0; font-size: 0.9rem; color: var(--muted); }
 .bar form { margin: 0; }
 .bar button { width: auto; padding: 0.5rem 0.9rem; margin: 0; }
-.bar .logo, .bar .brand { margin: 0; max-height: 2.5rem; font-size: 1rem; }
+.bar .logo, .bar .brand { margin: 0.5rem 0; max-height: 2.5rem; font-size: 1rem; }
 nav.sections { display: flex; flex-wrap: wrap; gap: 0.25rem; }
-nav.sections a { display: inline-flex; align-items: center; min-height: 3.25rem; padding: 0 0.9rem; border-bottom: 3px solid transparent;
+nav.sections a { display: inline-flex; align-items: center; min-height: 3.5rem; padding: 0 0.9rem; border-bottom: 3px solid transparent;
   color: var(--text); font: 600 0.95rem var(--font-heading); text-decoration: none; }
 nav.sections a:hover { background: var(--background); }
 nav.sections a[aria-current="page"] { border-bottom-color: var(--link); color: var(--link); }
@@ -267,15 +268,17 @@ dl.facts dd { margin: 0; }
 @media (max-width: 40rem) { dl.facts { grid-template-columns: 1fr; } dl.facts dt { margin-top: 0.5rem; } }
 form.below { margin-top: 1rem; }
 
-/* On a phone the bar is one line: the logo, the sections as a menu that opens, and the button to sign out. */
+/*
+ * The bar is one line wherever the wide one does not fit one row: the logo and the sections as a menu that opens, with
+ * the button to sign out at its end. A width alone does not say "desk": a phone held sideways and a tablet held
+ * upright are wider than a phone and still too narrow for the sections side by side.
+ */
 details.menu { display: none; }
-@media (max-width: 40rem) {
+@media (max-width: 75rem) {
   .bar { position: relative; flex-wrap: nowrap; gap: 0.5rem; padding: 0.5rem 1rem; }
-  .bar .logo, .bar .brand { flex: none; max-width: 35%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bar .who { flex: none; }
-  .bar .who span, nav.sections { display: none; }
-  .bar button { min-height: 2.75rem; padding: 0.5rem 0.4rem; }
-  details.menu { display: block; flex: 1 1 0; min-width: 0; }
+  .bar .logo, .bar .brand { flex: none; margin: 0; max-width: 35%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar .who, nav.sections { display: none; }
+  details.menu { display: block; flex: 1 1 0; min-width: 0; max-width: 24rem; }
   details.menu summary { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; min-height: 2.75rem; padding: 0 0.7rem;
     border: 1px solid var(--input-border); border-radius: var(--radius-small); font: 600 1rem var(--font-heading); cursor: pointer; list-style: none; }
   details.menu summary::-webkit-details-marker { display: none; }
@@ -288,6 +291,11 @@ details.menu { display: none; }
     color: var(--text); font: 600 1rem var(--font-heading); text-decoration: none; }
   details.menu nav a[aria-current="page"] { box-shadow: inset 3px 0 var(--link); color: var(--link); }
   details.menu nav p { margin: 0; padding: 0.75rem 1rem; font-size: 0.9rem; color: var(--muted); }
+  details.menu nav form { padding: 0 1rem 1rem; }
+  details.menu nav button { width: 100%; min-height: 2.75rem; box-shadow: inset 0 0 0 1px var(--input-border); }
+}
+/* The pages themselves are a phone's only on a phone: at the width of a tablet a table has room. */
+@media (max-width: 40rem) {
   .page { margin-top: 1rem; }
   .page > h1 { margin-bottom: 1rem; font-size: 1.45rem; }
   .panel { padding: 1rem; }

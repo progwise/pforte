@@ -31,6 +31,15 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   question to the page after it for at most ten minutes. The example application takes `UI_LOCALES` to try the
   parameter ([which language is used](docs/branding-and-languages.md#which-language-is-used),
   [signing out](docs/integrating-a-client.md#signing-out), [#90](https://github.com/progwise/pforte/issues/90)).
+- **The bar of the account pages and of the administration is one line on a phone held sideways too.** The one-line
+  bar, with the sections as a menu that opens, ended at 640 pixels. A phone held sideways and a tablet held upright are
+  wider, so they got the bar of a desk, which wrapped into three rows there and took half of a low screen. The bar is
+  now one line up to 1,200 pixels, the width from which the sections fit side by side. The button to sign out has
+  moved into the opened menu, as its last entry below "Signed in as …", so the closed menu has the room to name the
+  current page. On a wider screen the bar is as before, with a little room above and below, so that a logo no longer
+  touches the edge where the bar does wrap. The lists and tables keep their own widths: they are stacked below 640
+  pixels only. **Nothing needs doing, and no text is new.** An installation sees no other change than the wider reach
+  of the one-line bar ([account pages](docs/account.md), [#93](https://github.com/progwise/pforte/issues/93)).
 - **The activation mail says "7 days", not "168 hours".** The two activation mails stated how long the link is valid as
   a number of hours. They now say it as a person would, in English, German, French and Hungarian: "7 days", "7 Tage",
   "7 jours", "7 napig". The same wording, with a singular, is used wherever pforte states a time in a sentence: the

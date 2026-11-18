@@ -92,8 +92,8 @@ describe.skipIf(!hasDatabase)('the account pages', () => {
       expect(response.body).toContain(`<dd>${B.email}</dd>`)
       expect(response.body).toContain('<dd>English</dd>')
       expect(response.body).toContain('action="/account/logout"')
-      // Read-only: the only form on the page is the one that signs out.
-      expect(response.body.match(/<form/g)).toHaveLength(1)
+      // Read-only: the only form on the page is the one that signs out, once in the wide bar and once in the menu.
+      expect(response.body.match(/<form[^>]*>/g)).toEqual(Array(2).fill('<form method="post" action="/account/logout">'))
       expect(response.body).not.toMatch(/<input|<textarea|<select/)
     })
 

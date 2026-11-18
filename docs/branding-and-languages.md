@@ -60,7 +60,7 @@ Every entry is optional. This one shows them all:
 | Entry | Meaning |
 | --- | --- |
 | `name` | Shown above the pages as text, or as the description of the logo. Also named in e-mails and SMS (instead of `ORGANISATION_NAME`). |
-| `logo` | `.svg`, `.png`, `.jpg` or `.webp`, up to 512 KB. Shown at most 12 rem wide and 4 rem high, and as the icon of the browser tab. In the bar of the administration and of the [account pages](account.md) it is at most 2.5 rem high, and on a phone at most a third of the bar wide: a wide wordmark gets small there, a square mark does not. Without a logo that icon is pforte's signet, in the colours of your main button; with neither a logo nor a `name`, the signet is shown above the pages as well. |
+| `logo` | `.svg`, `.png`, `.jpg` or `.webp`, up to 512 KB. Shown at most 12 rem wide and 4 rem high, and as the icon of the browser tab. In the bar of the administration and of the [account pages](account.md) it is at most 2.5 rem high, and where the bar is one line (on a screen up to 1,200 pixels wide) at most a third of the bar wide: a wide wordmark gets small there, a square mark does not. Without a logo that icon is pforte's signet, in the colours of your main button; with neither a logo nor a `name`, the signet is shown above the pages as well. |
 | `radius` | Corner radius of the card, like `16px` or `1rem`, up to 32px. Fields and buttons are two thirds of it. |
 | `colors` | Hex colours. `primary` and `primaryText` are the main button, `link` the links and secondary buttons, `muted` hints and footer links. What you leave out stays neutral. |
 | `fonts.body` | Text, fields and hints. |
