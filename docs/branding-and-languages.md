@@ -96,7 +96,7 @@ There is no switch on the pages, and no script.
 - `primary` is kept if the button stands out from the dark card, else lightened in its own hue until it does (3:1).
   `primaryText` stays if it reads on that button, else it becomes black or white.
 
-To choose a colour yourself, name it in `dark.colors`; what you leave out stays calculated. pforte warns at startup
+To choose a colour yourself, name it in `dark.colors`; what you leave out stays calculated, for the colours you chose: a link is made to read on your own dark `surface` and `background`. A colour you name is taken as it is. pforte warns at startup
 about dark colours that are hard to read, as it does for the light ones, and says that it means the dark page.
 
 **The logo on a dark page.** A logo is usually drawn for a light page, and pforte cannot tell from a file whether it

@@ -108,7 +108,7 @@ const readAsset = (dir: string, relative: unknown, where: string, allowed: strin
 }
 
 /** Writes the colours a brand names over those in `colors`. `where` is the entry they come from: `colors` or `dark.colors`. */
-const parseColors = (value: unknown, colors: Theme['colors'], where = 'colors') => {
+const parseColors = (value: unknown, colors: Partial<Theme['colors']>, where = 'colors') => {
   if (!isRecord(value)) throw new BrandError(`"${where}" must be an object`)
   onlyKnown(value, COLOR_KEYS, `"${where}"`)
   for (const [key, color] of Object.entries(value)) {
@@ -229,14 +229,15 @@ export const loadBrand = (dir: string): Brand => {
 
   // The dark variant is calculated from the colours above; `dark` changes single colours of it, or switches it off.
   if (parsed.dark !== false) {
-    const dark = parsed.dark ?? {}
+    const dark = parsed.dark === undefined ? {} : parsed.dark
     if (!isRecord(dark)) throw new BrandError('"dark" must be false, or an object with "colors" and "logoTile"')
     onlyKnown(dark, ['colors', 'logoTile'], '"dark"')
-    const colors = darkColors(theme.colors)
-    if (dark.colors !== undefined) parseColors(dark.colors, colors, 'dark.colors')
+    // What the brand names is taken as it is; the rest is calculated to be read on it, on a card it chose too.
+    const chosen: Partial<Theme['colors']> = {}
+    if (dark.colors !== undefined) parseColors(dark.colors, chosen, 'dark.colors')
     if (dark.logoTile !== undefined && typeof dark.logoTile !== 'boolean') throw new BrandError('"dark.logoTile" must be true or false')
     // A logo was drawn for a light page, so it keeps a light ground unless the brand says it reads on dark.
-    theme.dark = { colors, logoTile: Boolean(theme.logoUrl) && dark.logoTile !== false }
+    theme.dark = { colors: darkColors(theme.colors, chosen), logoTile: Boolean(theme.logoUrl) && dark.logoTile !== false }
   }
 
   return { theme: withSignet(theme), name, warnings: contrastWarnings(theme) }

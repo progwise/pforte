@@ -166,10 +166,25 @@ describe('the branding folder', () => {
     })
 
     it('takes single colours from the brand and calculates the rest', () => {
-      const { theme } = loadBrand(folder({ colors, dark: { colors: { primary: '#F2C94C', primaryText: '#1d2b4a', surface: '#202020' } } }))
-      expect(theme.dark!.colors).toEqual({ ...darkColors({ ...DEFAULT_COLORS, ...colors }), primary: '#f2c94c', primaryText: '#1d2b4a', surface: '#202020' })
+      const chosen = { primary: '#f2c94c', primaryText: '#1d2b4a', surface: '#202020' }
+      const { theme } = loadBrand(folder({ colors, dark: { colors: { ...chosen, primary: '#F2C94C' } } }))
+      expect(theme.dark!.colors).toMatchObject(chosen)
+      expect(theme.dark!.colors).toEqual(darkColors({ ...DEFAULT_COLORS, ...colors }, chosen))
       // The light colours are not touched.
       expect(theme.colors).toMatchObject(colors)
+    })
+
+    it('calculates the rest for the card the brand chose: a link that read on pforte\'s card is lightened for a lighter one', () => {
+      const { theme, warnings } = loadBrand(folder({ colors: { link: '#888888' }, dark: { colors: { surface: '#333333' } } }))
+      expect(theme.dark!.colors.surface).toBe('#333333')
+      expect(theme.dark!.colors.link).not.toBe('#888888')
+      // The grey is hard to read on the light card, which is the brand's own choice. On the dark one it now reads.
+      expect(warnings.filter((warning) => warning.includes('on a dark page'))).toEqual([])
+      expect(warnings).toHaveLength(2)
+      // A link the brand names itself is not corrected, only warned about.
+      const named = loadBrand(folder({ dark: { colors: { surface: '#333333', link: '#888888' } } }))
+      expect(named.theme.dark!.colors.link).toBe('#888888')
+      expect(named.warnings).toEqual([expect.stringMatching(/^Low contrast for links on the card on a dark page: 3\.\d:1/)])
     })
 
     it('is switched off with false: the brand is light for everybody', () => {
@@ -187,6 +202,7 @@ describe('the branding folder', () => {
     it.each([
       ['something that is neither false nor an object', { dark: true }, /"dark" must be false, or an object/],
       ['a list', { dark: [] }, /"dark" must be false, or an object/],
+      ['nothing where something has to be', { dark: null }, /"dark" must be false, or an object/],
       ['an entry it does not know', { dark: { colours: {} } }, /"dark" has unknown entry "colours"/],
       ['a colour that is not hex', { dark: { colors: { primary: 'gold' } } }, /"dark.colors.primary" must be a hex colour/],
       ['a colour that could be CSS', { dark: { colors: { primary: '#fff; x: y' } } }, /"dark.colors.primary" must be a hex colour/],

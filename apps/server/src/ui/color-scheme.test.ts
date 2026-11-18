@@ -14,12 +14,16 @@ const NO_COOKIE = 'pforte_color_scheme=; Path=/; Max-Age=0; HttpOnly; SameSite=L
 const PAGE = '<!doctype html>\n<html lang="de">\n<head>'
 
 describe('light or dark, as a request says', () => {
-  const { of, mark } = createColorScheme({ secure: true })
+  const colorScheme = createColorScheme({ secure: true })
+  const { mark } = colorScheme
+  const A_PAGE = { status: 200, contentType: 'text/html; charset=utf-8' }
+  /** What a request says, where the answer to it is a page unless the test says otherwise. */
+  const of = (method: string, parameter: unknown, cookieHeader: string | undefined, answer: { status: number; contentType: unknown } = A_PAGE, from = colorScheme) => from.of({ method, parameter, cookieHeader }, answer)
 
   it('takes the parameter and answers with a cookie that holds for 400 days', () => {
     expect(of('GET', 'dark', undefined)).toEqual({ scheme: 'dark', setCookie: DARK_COOKIE })
     expect(of('GET', 'light', undefined)).toEqual({ scheme: 'light', setCookie: LIGHT_COOKIE })
-    expect(createColorScheme({ secure: false }).of('GET', 'dark', undefined).setCookie).toBe(DARK_COOKIE.replace('; Secure', ''))
+    expect(of('GET', 'dark', undefined, A_PAGE, createColorScheme({ secure: false })).setCookie).toBe(DARK_COOKIE.replace('; Secure', ''))
   })
 
   it('takes the cookie where the request has no parameter, and sets none', () => {
@@ -52,6 +56,30 @@ describe('light or dark, as a request says', () => {
   it('takes the parameter from a request for a page only: a form that is sent changes nothing', () => {
     expect(of('POST', 'dark', undefined)).toEqual({})
     expect(of('POST', 'light', 'pforte_color_scheme=dark')).toEqual({ scheme: 'dark' })
+  })
+
+  it.each([
+    ['a redirect on the way to a page', { status: 303, contentType: undefined }],
+    ['a redirect with 302', { status: 302, contentType: undefined }],
+    ['a redirect with 307', { status: 307, contentType: undefined }],
+    ['a page that says what went wrong', { status: 400, contentType: 'text/html; charset=utf-8' }],
+  ])('sets the cookie with %s', (_name, answer) => {
+    expect(of('GET', 'dark', undefined, answer)).toEqual({ scheme: 'dark', setCookie: DARK_COOKIE })
+    expect(of('GET', 'auto', 'pforte_color_scheme=dark', answer)).toEqual({ setCookie: NO_COOKIE })
+  })
+
+  it.each([
+    ['a file of the branding folder, which a cache may keep and hand to others', { status: 200, contentType: 'image/svg+xml' }],
+    ['a font', { status: 200, contentType: 'font/woff2' }],
+    ['data', { status: 200, contentType: 'application/json; charset=utf-8' }],
+    ['a script', { status: 200, contentType: 'text/javascript' }],
+    ['an answer without content', { status: 204, contentType: undefined }],
+    ['a redirect that a browser keeps for good', { status: 301, contentType: undefined }],
+    ['a redirect that a browser keeps for good, with 308', { status: 308, contentType: undefined }],
+  ])('sets no cookie with %s, and still reads the one that is there', (_name, answer) => {
+    expect(of('GET', 'dark', undefined, answer)).toEqual({})
+    expect(of('GET', 'light', 'pforte_color_scheme=dark', answer)).toEqual({ scheme: 'dark' })
+    expect(of('GET', 'auto', 'pforte_color_scheme=dark', answer)).toEqual({ scheme: 'dark' })
   })
 
   it('writes the look on a page of pforte, and leaves everything else alone', () => {
@@ -100,9 +128,10 @@ describe('a page that Fastify sends', () => {
     expect(response.headers['set-cookie']).toEqual(['other=1; Path=/', LIGHT_COOKIE])
   })
 
-  it('leaves data alone', async () => {
-    const response = await app.inject({ url: '/data', headers: { cookie: 'pforte_color_scheme=dark' } })
+  it('leaves data alone, and sets no cookie with it', async () => {
+    const response = await app.inject({ url: '/data?color_scheme=light', headers: { cookie: 'pforte_color_scheme=dark' } })
     expect(response.json()).toEqual({ page: PAGE })
+    expect(response.headers['set-cookie']).toBeUndefined()
   })
 })
 
@@ -220,11 +249,29 @@ describe.skipIf(!hasDatabase)('light or dark across the pages of pforte', () => 
     expect(lookOf((await browser.request('GET', '/account/signed-out')).body)).toBe('dark')
   })
 
-  it('never marks what the data interfaces answer', async () => {
+  it('sets no cookie with a file that a cache may keep for others, nor with the answers of the interfaces for programs', async () => {
+    const browser = new Browser(h.app)
+    const signet = await browser.request('GET', `${createUi().theme.iconUrl}?color_scheme=dark`)
+    expect(signet.statusCode).toBe(200)
+    expect(signet.headers['cache-control']).toBe('public, max-age=31536000, immutable')
+    expect(signet.headers['set-cookie']).toBeUndefined()
+
+    for (const url of ['/.well-known/openid-configuration?color_scheme=dark', '/jwks?color_scheme=dark', '/health?color_scheme=dark']) {
+      const response = await browser.request('GET', url)
+      expect(response.statusCode, url).toBe(200)
+      expect(schemeCookies(response), url).toEqual([])
+    }
+    const users = await h.api('GET', '/users?color_scheme=dark')
+    expect(users.statusCode).toBe(200)
+    expect(schemeCookies(users)).toEqual([])
+    expect(browser.cookies.has('pforte_color_scheme')).toBe(false)
+  })
+
+  it('never marks what the interfaces for programs answer', async () => {
     const browser = new Browser(h.app)
     browser.cookies.set('pforte_color_scheme', 'dark')
     expect((await browser.request('GET', '/.well-known/openid-configuration')).json().issuer).toBe('https://localhost:3300')
-    const users = await h.api('GET', '/users?color_scheme=dark')
+    const users = await h.api('GET', '/users')
     expect(users.statusCode).toBe(200)
     expect(users.body).not.toContain('data-color-scheme')
   })

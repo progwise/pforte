@@ -84,6 +84,35 @@ describe('the dark colours', () => {
     expect(grey).toMatchObject({ primary: '#999999', primaryText: '#000000' })
   })
 
+  describe('with colours the brand chose itself', () => {
+    const light = { ...DEFAULT_COLORS, link: '#888888' }
+
+    it('are calculated for the card and the page the brand chose, not for pforte\'s', () => {
+      // On pforte's dark card this grey link reads as it is. On a lighter card of the brand it would not.
+      expect(darkColors(light).link).toBe('#888888')
+      expect(contrastRatio('#888888', '#333333')).toBeLessThan(4.5)
+      const chosen = darkColors(light, { surface: '#333333' })
+      expect(chosen.surface).toBe('#333333')
+      expect(contrastRatio(chosen.link, '#333333')).toBeGreaterThanOrEqual(4.5)
+      expect(contrastWarnings({ colors: chosen })).toEqual([])
+      // The same for the page, and for the button that has to stand out from the card.
+      expect(contrastRatio(darkColors(light, { background: '#3a3a3a' }).link, '#3a3a3a')).toBeGreaterThanOrEqual(4.5)
+      const button = darkColors({ ...DEFAULT_COLORS, primary: '#777777', primaryText: '#000000' }, { surface: '#444444' })
+      expect(contrastRatio(button.primary, '#444444')).toBeGreaterThanOrEqual(3)
+      expect(contrastRatio(button.primary, button.primaryText)).toBeGreaterThanOrEqual(4.5)
+    })
+
+    it('take what the brand names as it is, also where it reads badly: that is a warning, not a correction', () => {
+      const chosen = darkColors(light, { surface: '#333333', link: '#777777', primary: '#222222', primaryText: '#333333' })
+      expect(chosen).toMatchObject({ surface: '#333333', link: '#777777', primary: '#222222', primaryText: '#333333' })
+      expect(contrastWarnings({ colors: chosen })).toHaveLength(3)
+    })
+
+    it('give a button the brand chose a text that reads on it', () => {
+      expect(darkColors({ ...DEFAULT_COLORS, primaryText: '#ffffff' }, { primary: '#f2c94c' })).toMatchObject({ primary: '#f2c94c', primaryText: '#000000' })
+    })
+  })
+
   it('are readable whatever the colours of the brand are', () => {
     const steps = ['00', '33', '66', '99', 'cc', 'ff']
     const all = steps.flatMap((r) => steps.flatMap((g) => steps.map((b) => `#${r}${g}${b}`)))
