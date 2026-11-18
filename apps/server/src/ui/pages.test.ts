@@ -103,20 +103,37 @@ describe('pages', () => {
       pages.for('en').manage({ title: 'Devices', nav, sectionsLabel: 'Sections', content: '', person: { signedInAs: 'Signed in as <Ada>', signOutLabel: 'Sign out' }, ...options })
     const LINKS = '<a href="/account">Overview</a>\n<a href="/account/devices" aria-current="page">Devices &lt;2&gt;</a>'
 
-    it('have the sections as a row, and for a phone as a menu that names the current one and needs no script', () => {
+    const SIGN_OUT = '<form method="post" action="/manage/logout"><button type="submit" class="secondary">Sign out</button></form>'
+
+    it('have the sections as a row, and for a narrower screen as a menu that names the current one and needs no script', () => {
       const page = area()
       expect(page).toContain(`<nav class="sections" aria-label="Sections">\n${LINKS}\n</nav>`)
-      expect(page).toContain(`<details class="menu">\n<summary><span>Devices &lt;2&gt;</span></summary>\n<nav aria-label="Sections">\n${LINKS}\n<p>Signed in as &lt;Ada&gt;</p>\n</nav>\n</details>`)
-      // Closed when the page comes, so it is one line; the stylesheet shows it on a narrow screen only.
+      expect(page).toContain(`<details class="menu">\n<summary><span>Devices &lt;2&gt;</span></summary>\n<nav aria-label="Sections">\n${LINKS}\n<p>Signed in as &lt;Ada&gt;</p>\n${SIGN_OUT}\n</nav>\n</details>`)
+      // Closed when the page comes, so it is one line; the stylesheet shows it where the row of sections does not fit.
       expect(page).not.toContain('<details class="menu" open')
-      expect(page).toMatch(/details\.menu \{ display: none; \}\n@media \(max-width: 40rem\) \{[^@]*nav\.sections \{ display: none; \}[^@]*details\.menu \{ display: block;/)
+      expect(page).toMatch(/details\.menu \{ display: none; \}\n@media \(max-width: 75rem\) \{[^@]*nav\.sections \{ display: none; \}[^@]*details\.menu \{ display: block;/)
       expect(page).not.toContain('<script')
+    })
+
+    it('have the button to sign out twice: beside the sections of the wide bar, and as the last entry of the menu, where the stylesheet shows one of them', () => {
+      const page = area()
+      expect(page).toContain(`<div class="who"><span>Signed in as &lt;Ada&gt;</span>\n${SIGN_OUT}</div>`)
+      expect(page.split(SIGN_OUT)).toHaveLength(3)
+      expect(page).toMatch(/@media \(max-width: 75rem\) \{[^@]*\.bar \.who, nav\.sections \{ display: none; \}/)
+      // Each area signs out at its own address.
+      expect(area({ person: { signedInAs: 'x', signOutLabel: 'Sign out', signOutAction: '/account/logout' } }).split('<form method="post" action="/account/logout">')).toHaveLength(3)
+    })
+
+    it('stack the lists on a phone only, not wherever the bar is one line', () => {
+      expect(area()).toMatch(/@media \(max-width: 40rem\) \{\n  \.page \{[^@]*table\.stack thead/)
+      expect(area()).not.toMatch(/@media \(max-width: 75rem\) \{[^@]*table\.stack/)
     })
 
     it('name the menu by what it holds where no section is the current one, and leave the person out where there is none', () => {
       const page = area({ nav: nav.map(({ href, label }) => ({ href, label })), person: undefined })
       expect(page).toContain('<summary><span>Sections</span></summary>')
       expect(page).not.toContain('Signed in as')
+      expect(page).not.toContain('<form')
     })
   })
 
