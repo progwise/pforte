@@ -20,7 +20,14 @@ export type LifecycleAction = 'lock' | 'unlock' | 'activate' | 'deactivate' | 'r
 export class LifecycleError extends Error {}
 
 /** How long an activation link stays valid. */
+/** How long an activation link works unless the caller says otherwise (`validityMs`): seven days. */
 export const ACTIVATION_VALIDITY_MS = 7 * 24 * 60 * 60 * 1000
+
+/** What an activation can be given: the application the person is on their way to, and how long the link works. */
+export interface ActivationOptions {
+  clientId?: string
+  validityMs?: number
+}
 
 /**
  * The lifecycle of a user:
@@ -181,9 +188,9 @@ export const deactivateUser = async (tx: DatabaseOrTransaction, context: Request
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex')
 
 /** Replaces the activation link of a user who has no password yet. The token is returned once; only its hash is stored. */
-const issueActivationLink = async (tx: DatabaseOrTransaction, user: UserRow, clientId?: string) => {
+const issueActivationLink = async (tx: DatabaseOrTransaction, user: UserRow, { clientId, validityMs = ACTIVATION_VALIDITY_MS }: ActivationOptions) => {
   const token = randomBytes(32).toString('base64url')
-  const expiresAt = new Date(Date.now() + ACTIVATION_VALIDITY_MS)
+  const expiresAt = new Date(Date.now() + validityMs)
   const updated = await setStatus(tx, user, {
     status: 'created',
     activationTokenHash: hashToken(token),
@@ -201,10 +208,10 @@ export const requestActivationLink = async (
   tx: DatabaseOrTransaction,
   context: RequestContext,
   user: UserRow,
-  options: { clientId?: string } = {},
+  options: ActivationOptions = {},
 ) => {
   if (user.status !== 'created') return undefined
-  const { token, expiresAt, updated } = await issueActivationLink(tx, user, options.clientId)
+  const { token, expiresAt, updated } = await issueActivationLink(tx, user, options)
   await recordAuditEvent(
     tx,
     audit(context, 'user.activation.request', user, { self: true, expiresAt: expiresAt.toISOString(), ...(options.clientId ? { clientId: options.clientId } : {}) }),
@@ -217,7 +224,7 @@ export const requestActivationLink = async (
  * once, for the notifier, and only its hash is stored. A deactivated user who already has a
  * password simply becomes active again.
  */
-export const activateUser = async (tx: DatabaseOrTransaction, context: RequestContext, user: UserRow, options: { clientId?: string } = {}) => {
+export const activateUser = async (tx: DatabaseOrTransaction, context: RequestContext, user: UserRow, options: ActivationOptions = {}) => {
   assertAllowed(user, 'activate')
 
   if (user.status === 'deactivated' && user.passwordHash) {
@@ -226,7 +233,7 @@ export const activateUser = async (tx: DatabaseOrTransaction, context: RequestCo
     return { user: updated, activation: undefined }
   }
 
-  const { token, expiresAt, updated } = await issueActivationLink(tx, user, options.clientId)
+  const { token, expiresAt, updated } = await issueActivationLink(tx, user, options)
   // The audit event never contains the token.
   await recordAuditEvent(
     tx,

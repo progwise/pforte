@@ -38,6 +38,8 @@ export interface AdminDependencies {
   limiter: RateLimiter
   /** `OUTBOUND_ALLOW_PRIVATE_ADDRESSES`: lets a client's back-channel logout address be http on a private network. */
   allowPrivateAddresses?: boolean
+  /** `ACTIVATION_LINK_DAYS` in milliseconds: how long an activation link works; seven days if not given. */
+  activationValidityMs?: number
   /** Tells the applications of a user whose sessions an administrator ended. */
   clientLogouts: ClientLogouts
   /** The secrets that sign one-time codes (see `deriveCodeSecrets`), for the code that confirms a phone number. */
@@ -46,7 +48,7 @@ export interface AdminDependencies {
 
 /** The admin API, mounted under /admin. */
 export const adminRoutes =
-  ({ db, provider, notifier, sendPasswordResetCode, limiter, allowPrivateAddresses, clientLogouts, codeSecrets }: AdminDependencies) =>
+  ({ db, provider, notifier, sendPasswordResetCode, limiter, allowPrivateAddresses, activationValidityMs, clientLogouts, codeSecrets }: AdminDependencies) =>
   async (app: FastifyInstance) => {
     app.setValidatorCompiler(validatorCompiler)
     app.setSerializerCompiler(serializerCompiler)
@@ -177,7 +179,7 @@ export const adminRoutes =
     await app.register(devicesRoutes({ db, auth }))
     await app.register(passkeysRoutes({ db, auth }))
     await app.register(sessionsRoutes({ db, auth }))
-    await app.register(lifecycleRoutes({ db, auth, notifier, sendPasswordResetCode, limiter, issuer: provider.issuer, clientLogouts, codeSecrets }))
+    await app.register(lifecycleRoutes({ db, auth, notifier, sendPasswordResetCode, limiter, issuer: provider.issuer, activationValidityMs, clientLogouts, codeSecrets }))
     await app.register(claimTypesRoutes({ db, auth, reloadProvider }))
     await app.register(clientsRoutes({ db, auth, reloadProvider, allowPrivateAddresses }))
     await app.register(auditRoutes({ db, auth }))

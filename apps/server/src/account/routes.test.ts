@@ -1003,6 +1003,34 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
 })
 
 
+describe.skipIf(!hasDatabase)('activation links with a validity of the installation\'s own', () => {
+  let h: AdminHarness
+  const daysLeft = (expiresAt: Date | undefined) => (expiresAt!.getTime() - Date.now()) / 86_400_000
+
+  beforeAll(async () => {
+    h = await createAdminHarness({ activationValidityMs: 3 * 86_400_000 })
+  })
+
+  afterAll(async () => {
+    await h?.close()
+  })
+
+  it('gives three days to the link an administrator sends and to the one a person asks for', async () => {
+    const email = 'three-days@example.com'
+    const { id } = (await h.api('POST', '/users', { body: { email, firstName: 'Ada', lastName: 'Lovelace' } })).json() as { id: string }
+
+    const invited = await h.api('POST', `/users/${id}/activate`)
+    expect(daysLeft(new Date(invited.json().activation.expiresAt))).toBeCloseTo(3, 2)
+    expect(daysLeft(h.notifications.at(-1)!.expiresAt)).toBeCloseTo(3, 2)
+
+    h.notifications.length = 0
+    await new Browser(h.app).request('POST', '/reset', { form: { email } })
+    await h.settle()
+    expect(h.notifications.map((sent) => sent.kind)).toEqual(['activation'])
+    expect(daysLeft(h.notifications[0]!.expiresAt)).toBeCloseTo(3, 2)
+  })
+})
+
 describe.skipIf(!hasDatabase)('activation by request, switched off', () => {
   let h: AdminHarness
 

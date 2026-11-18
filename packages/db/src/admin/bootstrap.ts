@@ -1,7 +1,7 @@
 import { count, eq, sql } from 'drizzle-orm'
 import type { Database } from '../index.js'
 import { users } from '../schema/index.js'
-import { activateUser } from './lifecycle.js'
+import { type ActivationOptions, activateUser } from './lifecycle.js'
 import { createUser, findUserByEmail, type RequestContext, updateUser } from './users.js'
 
 type UserRow = typeof users.$inferSelect
@@ -19,13 +19,14 @@ const context: RequestContext = { actor: { type: 'system' }, userAgent: 'bootstr
  *
  * `deliver` sends the link and runs before the change is committed: if it cannot be sent, nothing is changed and the
  * next start tries again. Otherwise the link would be lost with nobody left to ask for another. `clientId` is the
- * registered client the page after choosing the password leads on to, as for any activation.
+ * registered client the page after choosing the password leads on to, and `validityMs` how long the link works, as for
+ * any activation.
  */
 export const ensureAdministrator = (
   db: Database,
   email: string,
   deliver: (user: UserRow, activation: { token: string; expiresAt: Date }) => Promise<void>,
-  options: { clientId?: string } = {},
+  options: ActivationOptions = {},
 ): Promise<BootstrapResult> =>
   db.transaction(async (tx) => {
     // The same lock the rule "the last administrator stays" takes, and for the same reason: starts at the same moment.

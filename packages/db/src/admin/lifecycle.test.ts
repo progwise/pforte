@@ -12,6 +12,7 @@ import {
   LifecycleError,
   type LifecycleAction,
   lockUser,
+  requestActivationLink,
   requestPasswordReset,
   unlockUser,
 } from './lifecycle.js'
@@ -167,6 +168,19 @@ describe.skipIf(!hasDatabase)('user lifecycle', () => {
       const logged = await event('user.activate', user.id)
       expect(JSON.stringify(logged)).not.toContain(activation!.token)
       expect(logged.details).toMatchObject({ linkSent: true })
+    })
+
+    it('makes the link work for as long as the caller says, also the one a person asks for themselves', async () => {
+      const days = (expiresAt: Date) => (expiresAt.getTime() - Date.now()) / 86_400_000
+      const user = await userIn('created')
+
+      const invited = await database.db.transaction((tx) => activateUser(tx, context, user, { validityMs: 3 * 86_400_000 }))
+      expect(days(invited.activation!.expiresAt)).toBeCloseTo(3, 2)
+      expect(days((await findUserById(database.db, user.id))!.activationExpiresAt!)).toBeCloseTo(3, 2)
+
+      const asked = await database.db.transaction((tx) => requestActivationLink(tx, context, invited.user, { validityMs: 86_400_000 }))
+      expect(days(asked!.activation.expiresAt)).toBeCloseTo(1, 2)
+      expect((await event('user.activation.request', user.id)).details).toMatchObject({ expiresAt: asked!.activation.expiresAt.toISOString() })
     })
 
     it('replaces the earlier link when activation is started again', async () => {

@@ -91,6 +91,8 @@ const sendPasswordResetCode = createPasswordResetSender({
   issuer: config.issuer,
 })
 const passkeys = createPasskeys({ issuer: config.issuer, ui, db, notifier, background, cookieKeys: config.cookieKeys, name: organisationName, accountPages: accountPages.available })
+const activationValidityMs = config.activationLinkDays * 24 * 60 * 60 * 1000
+
 const app = buildApp({
   ui,
   passkeys,
@@ -108,6 +110,7 @@ const app = buildApp({
     codeSecrets: deriveCodeSecrets(config.cookieKeys),
     notifier,
     selfServiceActivation: config.selfServiceActivation,
+    activationValidityMs,
     cookieKeys: config.cookieKeys,
     secure: config.issuer.startsWith('https:'),
     issuer: config.issuer,
@@ -125,6 +128,7 @@ const app = buildApp({
     sendPasswordResetCode,
     limiter,
     allowPrivateAddresses: config.allowPrivateAddresses,
+    activationValidityMs,
     clientLogouts,
     codeSecrets: deriveCodeSecrets(config.cookieKeys),
   },
@@ -136,7 +140,7 @@ if (!accountPages.available) app.log.error(accountPages.reason)
 if (config.bootstrapAdminEmail) {
   // A failure here, such as a mail server that is down, must not keep the identity service from starting: nothing was
   // changed, and the next start tries again.
-  bootstrapAdministrator({ db, email: config.bootstrapAdminEmail, notifier, issuer: config.issuer })
+  bootstrapAdministrator({ db, email: config.bootstrapAdminEmail, notifier, issuer: config.issuer, activationValidityMs })
     .then((message) => message && app.log.info(message))
     .catch((error) => app.log.error(error, 'BOOTSTRAP_ADMIN_EMAIL: the first administrator could not be set up; it is tried again at the next start'))
 }

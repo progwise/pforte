@@ -27,6 +27,18 @@ describe.skipIf(!hasDatabase)('setting up the first administrator at start', () 
     expect(message).not.toContain('token=')
   })
 
+  it('makes that link work for as long as the installation says', async () => {
+    const other = await createTestDatabase()
+    const sent = createRecordingNotifier()
+    try {
+      await ensureAdminUiClient(other.db, 'https://id.example.com')
+      await bootstrapAdministrator({ db: other.db, email: 'boss@example.com', notifier: sent.notifier, issuer: 'https://id.example.com', activationValidityMs: 2 * 86_400_000 })
+      expect((sent.notifications[0]!.expiresAt!.getTime() - Date.now()) / 86_400_000).toBeCloseTo(2, 2)
+    } finally {
+      await other.drop()
+    }
+  })
+
   it('says what the account is for, and has the page after choosing the password lead on to the administration', async () => {
     expect(recording.notifications[0]!.applicationName).toBe('Administration')
     const { rows } = await database.pool.query(`select u.activation_client_id, c.client_uri from users u join clients c on c.client_id = u.activation_client_id`)

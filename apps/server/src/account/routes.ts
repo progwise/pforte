@@ -35,6 +35,8 @@ export interface AccountDependencies {
   notifier: Pick<Notifier, 'smsAvailable' | 'sendPhoneCode' | 'sendActivationLink' | 'sendPasswordChanged'>
   /** Whether a person without a password may ask for their activation link on the reset page (`SELF_SERVICE_ACTIVATION`). */
   selfServiceActivation: boolean
+  /** How long an activation link works (`ACTIVATION_LINK_DAYS`); seven days if not given. */
+  activationValidityMs?: number
   /** Sign the cookie that carries the phone confirmation step. */
   cookieKeys: string[]
   /** Whether the service is reached over https, which makes cookies `Secure`. */
@@ -86,7 +88,7 @@ const normalizeEmail = (value: unknown) => text(value).trim().toLowerCase()
 
 /** Pages that are not part of a sign-in: choosing the first password, and choosing a new one after forgetting it. */
 export const accountRoutes =
-  ({ db, sendPasswordResetCode, codeSecrets, notifier, selfServiceActivation, cookieKeys, secure, issuer, ui, limiter, audit, background, clientLogouts, passkeys }: AccountDependencies) =>
+  ({ db, sendPasswordResetCode, codeSecrets, notifier, selfServiceActivation, activationValidityMs, cookieKeys, secure, issuer, ui, limiter, audit, background, clientLogouts, passkeys }: AccountDependencies) =>
   async (app: FastifyInstance) => {
     await app.register(formbody)
     ui.pages.addHeaders(app)
@@ -414,7 +416,7 @@ export const accountRoutes =
               // The application the person came from, if it is a registered one: the mail names it and the page ends with a button to it.
               const client = clientId ? await getClient(db, clientId) : undefined
               const result = await db.transaction((tx) =>
-                requestActivationLink(tx, { actor: { type: 'user', id: user.id }, ...where }, user, { clientId: client?.clientId }),
+                requestActivationLink(tx, { actor: { type: 'user', id: user.id }, ...where }, user, { clientId: client?.clientId, validityMs: activationValidityMs }),
               )
               if (!result) return
               const url = `${issuer}/activate?token=${encodeURIComponent(result.activation.token)}`
