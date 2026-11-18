@@ -10,7 +10,8 @@ const SECONDS = 10 * 60
  * The request says which language the application asked for and whose sign-in it is about. The page at the end
  * knows neither: the request that reaches it carries nothing, and after a "yes" the session is gone. So the language
  * chosen for the question travels in a cookie. It is for every path, because the page at the end can be the
- * provider's own notice or the "signed out" page of the account pages or of the administration.
+ * provider's own notice or the "signed out" page of the account pages or of the administration. Where the answer
+ * leads back to an application instead, none of these follows, and the answer ends the cookie (see `provider.ts`).
  */
 export const createLogoutLanguage = ({ cookieKeys, secure }: { cookieKeys: string[]; secure: boolean }) => {
   // Lax as the cookies of the account pages: a sign-out starts at the site of an application.

@@ -279,6 +279,32 @@ describe.skipIf(!hasDatabase)('the pages of the OpenID library, in pforte\'s loo
       expect(languageCookies(notice)).toEqual(['pforte_logout_language=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax; Secure'])
     })
 
+    it.each(['yes', 'no'] as const)('ends with the answer "%s" where that leads back to an application, so no later page of pforte speaks it', async (answer) => {
+      const browser = await signedIn()
+      const query = new URLSearchParams({ client_id: WEB.clientId, post_logout_redirect_uri: 'http://localhost:3400/', ui_locales: 'de' })
+      const question = await browser.request('GET', `/session/end?${query}`, ENGLISH_BROWSER)
+      expect(question.body).toContain('<html lang="de">')
+
+      const answered = await browser.request('POST', '/session/end/confirm', { form: { xsrf: xsrfOf(question.body), ...(answer === 'yes' ? { logout: 'yes' } : {}) } })
+      expect(answered.headers.location).toBe('http://localhost:3400/')
+      expect(languageCookies(answered)).toEqual(['pforte_logout_language=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax; Secure'])
+
+      // Somebody opens a notice of pforte a moment later, in a browser that prefers French.
+      const french = { headers: { 'accept-language': 'fr-FR,fr;q=0.9' } }
+      expect((await browser.request('GET', '/session/end/success', french)).body).toContain('<html lang="fr">')
+      expect((await browser.request('GET', '/account/signed-out', french)).body).toContain('<html lang="fr">')
+      // The administration has English and German only: French is not German.
+      expect((await browser.request('GET', '/manage/signed-out', french)).body).not.toContain('<html lang="de">')
+    })
+
+    it('keeps it with the answer where the page that follows is one of pforte\'s own', async () => {
+      const browser = await signedIn()
+      const question = await browser.request('GET', '/session/end?ui_locales=de', ENGLISH_BROWSER)
+      const answered = await browser.request('POST', '/session/end/confirm', { form: { xsrf: xsrfOf(question.body), logout: 'yes' } })
+      expect(answered.headers.location).toBe('https://localhost:3300/session/end/success')
+      expect(languageCookies(answered)).toEqual([])
+    })
+
     it('takes no language from a cookie it did not sign', async () => {
       const browser = new Browser(h.app)
       browser.cookies.set('pforte_logout_language', Buffer.from(JSON.stringify({ language: 'de', expiresAt: Date.now() + 60_000 })).toString('base64url') + '.forged')
