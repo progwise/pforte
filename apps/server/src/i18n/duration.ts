@@ -1,7 +1,4 @@
-import type { MessageKey, Values } from './index.js'
-
-/** A text in the language of the reader: `view.t` of a page, or `i18n.text` with the language filled in. */
-type Translate = (key: MessageKey, values?: Values) => string
+import type { MessageKey, Worded } from './index.js'
 
 /** The four built-in languages say "1 minute" and "2 minutes"; a language with more forms than these two has its own texts. */
 const form = (count: number) => (count === 1 ? 'one' : 'other')
@@ -10,12 +7,14 @@ const form = (count: number) => (count === 1 ? 'one' : 'other')
  * How long something stays valid, as a person says it: minutes below an hour, hours below two days, whole days
  * from there on ("10 minutes", "1 hour", "7 days"). In the form the sentence "valid for …" takes: "7 Tage", "7 napig".
  */
-export const validity = (t: Translate, milliseconds: number) => {
+export const validity = (milliseconds: number): Worded => (t) => {
+  // A message is worded a moment after its link or code was made, so what is left is a little short of the whole
+  // time: the nearest minute is that time again. That half a minute is all that is ever added.
   const minutes = Math.max(1, Math.round(milliseconds / 60_000))
   if (minutes < 60) return t(`duration.for.minute.${form(minutes)}`, { count: minutes })
-  const hours = Math.round(milliseconds / 3_600_000)
+  // Hours and days are rounded down: 47 and a half hours are 47 hours, not two days.
+  const hours = Math.floor(minutes / 60)
   if (hours < 48) return t(`duration.for.hour.${form(hours)}`, { count: hours })
-  // Rounded down: a link of two and a half days is valid for two days, not for three.
   const days = Math.floor(hours / 24)
   return t(`duration.for.day.${form(days)}`, { count: days })
 }
@@ -24,9 +23,9 @@ export const validity = (t: Translate, milliseconds: number) => {
  * What a text gets that says how long to wait: `wait` in words, rounded up to whole minutes, in the form the sentence
  * "again in …" takes ("1 minute", "5 Minuten", "5 perc"); and `minutes`, the bare number such a text had before 0.3.2.
  */
-export const waitValues = (t: Translate, seconds: number) => {
+export const waitValues = (seconds: number): { wait: Worded; minutes: number } => {
   const minutes = Math.max(1, Math.ceil(seconds / 60))
-  return { wait: t(`duration.in.minute.${form(minutes)}`, { count: minutes }), minutes }
+  return { wait: (t) => t(`duration.in.minute.${form(minutes)}`, { count: minutes }), minutes }
 }
 
 /**

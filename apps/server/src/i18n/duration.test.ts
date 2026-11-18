@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { DURATION_VALUES, validity, waitValues } from './duration.js'
-import { BUILT_IN, createI18n, type MessageKey, type Values } from './index.js'
+import { BUILT_IN, createI18n, type I18n, type Worded } from './index.js'
 
 const i18n = createI18n()
-const inLanguage = (language: string) => (key: MessageKey, values?: Values) => i18n.text(language, key, values)
+const LANGUAGES = ['en', 'de', 'fr', 'hu']
+/** A time in words, with the texts of one language. */
+const worded = (language: string, value: Worded, from: I18n = i18n) => value((key, values) => from.text(language, key, values))
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
@@ -19,19 +21,26 @@ describe('how long something is valid, in words', () => {
     [48 * HOUR, '2 days', '2 Tage', '2 jours', '2 napig'],
     [7 * DAY, '7 days', '7 Tage', '7 jours', '7 napig'],
   ])('%d ms', (milliseconds, en, de, fr, hu) => {
-    expect(['en', 'de', 'fr', 'hu'].map((language) => validity(inLanguage(language), milliseconds))).toEqual([en, de, fr, hu])
+    expect(LANGUAGES.map((language) => worded(language, validity(milliseconds)))).toEqual([en, de, fr, hu])
   })
 
-  it('names the time a message is written a moment after the link was made', () => {
-    expect(validity(inLanguage('en'), 7 * DAY - 40)).toBe('7 days')
-    expect(validity(inLanguage('en'), 10 * MINUTE - 40)).toBe('10 minutes')
-    expect(validity(inLanguage('en'), HOUR - 40)).toBe('1 hour')
+  it('names the whole time in a message that is written a moment after the link or the code was made', () => {
+    expect(worded('en', validity(7 * DAY - 40))).toBe('7 days')
+    expect(worded('en', validity(10 * MINUTE - 40))).toBe('10 minutes')
+    expect(worded('en', validity(HOUR - 40))).toBe('1 hour')
+    // Half a minute is what a message may be late by. Beyond it the time is rounded down.
+    expect(worded('en', validity(7 * DAY - 29_000))).toBe('7 days')
+    expect(worded('en', validity(7 * DAY - 31_000))).toBe('6 days')
   })
 
-  it('never promises more whole days than there are, and never less than a minute', () => {
-    expect(validity(inLanguage('en'), 60 * HOUR)).toBe('2 days')
-    expect(validity(inLanguage('en'), 71 * HOUR)).toBe('2 days')
-    expect(validity(inLanguage('en'), 5_000)).toBe('1 minute')
+  it('never promises more hours or days than there are, and never less than a minute', () => {
+    expect(worded('en', validity(46 * HOUR + 30 * MINUTE))).toBe('46 hours')
+    expect(worded('en', validity(47 * HOUR + 30 * MINUTE))).toBe('47 hours')
+    expect(worded('en', validity(48 * HOUR - MINUTE))).toBe('47 hours')
+    expect(worded('en', validity(60 * HOUR))).toBe('2 days')
+    expect(worded('en', validity(71 * HOUR + 30 * MINUTE))).toBe('2 days')
+    expect(worded('en', validity(90 * MINUTE))).toBe('1 hour')
+    expect(worded('en', validity(5_000))).toBe('1 minute')
   })
 })
 
@@ -42,13 +51,12 @@ describe('how long to wait, in words', () => {
     [61, 2, '2 minutes', '2 Minuten', '2 minutes', '2 perc'],
     [3600, 60, '60 minutes', '60 Minuten', '60 minutes', '60 perc'],
   ])('%d seconds', (seconds, minutes, en, de, fr, hu) => {
-    expect(['en', 'de', 'fr', 'hu'].map((language) => waitValues(inLanguage(language), seconds))).toEqual(
-      [en, de, fr, hu].map((wait) => ({ wait, minutes })),
-    )
+    expect(waitValues(seconds).minutes).toBe(minutes)
+    expect(LANGUAGES.map((language) => worded(language, waitValues(seconds).wait))).toEqual([en, de, fr, hu])
   })
 
   it('reads as a sentence with one minute and with several', () => {
-    const sentence = (language: string, seconds: number) => i18n.text(language, 'limit.text', waitValues(inLanguage(language), seconds))
+    const sentence = (language: string, seconds: number) => i18n.text(language, 'limit.text', waitValues(seconds))
     expect(sentence('en', 30)).toContain('Please try again in 1 minute.')
     expect(sentence('en', 300)).toContain('Please try again in 5 minutes.')
     expect(sentence('de', 30)).toContain('in 1 Minute erneut.')
@@ -68,9 +76,33 @@ describe('the texts that state a time', () => {
 
   it('uses a language\'s own words for the time, and English ones where an added language has none', () => {
     const own = createI18n({ overrides: { nl: { 'duration.for.day.other': '{count} dagen' }, de: { 'duration.for.day.other': '{count} Tage lang' } } })
-    const t = (language: string) => (key: MessageKey, values?: Values) => own.text(language, key, values)
-    expect(validity(t('nl'), 7 * DAY)).toBe('7 dagen')
-    expect(validity(t('nl'), HOUR)).toBe('1 hour')
-    expect(validity(t('de'), 7 * DAY)).toBe('7 Tage lang')
+    expect(worded('nl', validity(7 * DAY), own)).toBe('7 dagen')
+    expect(worded('nl', validity(HOUR), own)).toBe('1 hour')
+    expect(worded('de', validity(7 * DAY), own)).toBe('7 Tage lang')
+  })
+
+  describe('in a language that has only some of the texts', () => {
+    const sentence = 'Code per e-mail naar {to}. Hij is {validity} geldig.'
+    const words = { 'duration.for.minute.other': '{count} minuten' } as const
+    const sent = (texts: Record<string, string>, language = 'nl') =>
+      createI18n({ overrides: { nl: texts } }).text(language, 'code.sentEmail', { to: 'a@b.c', validity: validity(10 * MINUTE) })
+
+    it('words the time in the language of the sentence: an English sentence gets English words', () => {
+      expect(sent(words)).toBe('We sent a 6-digit code by e-mail to a@b.c. It is valid for 10 minutes.')
+      expect(createI18n({ overrides: { nl: words } }).text('nl', 'limit.text', waitValues(300))).toContain('Please try again in 5 minutes.')
+    })
+
+    it('uses the language\'s own words in its own sentence, and English ones while it has none', () => {
+      expect(sent({ ...words, 'code.sentEmail': sentence })).toBe('Code per e-mail naar a@b.c. Hij is 10 minuten geldig.')
+      expect(sent({ 'code.sentEmail': sentence })).toBe('Code per e-mail naar a@b.c. Hij is 10 minutes geldig.')
+    })
+
+    it('looks for the words of a region where the sentence is, then in its language', () => {
+      const regional = createI18n({ overrides: { 'fr-CH': { 'duration.for.minute.other': '{count} min' } } })
+      const text = (language: string) => regional.text(language, 'code.sentEmail', { to: 'a@b.c', validity: validity(10 * MINUTE) })
+      // The sentence is the French one, so the words are French, not those of the region that has no sentence.
+      expect(text('fr-CH')).toContain('Il est valable 10 minutes.')
+      expect(text('fr')).toContain('Il est valable 10 minutes.')
+    })
   })
 })

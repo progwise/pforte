@@ -319,7 +319,7 @@ export const interactionRoutes =
     const limitMessage = (view: PageSet, error: CodeLimitError) =>
       error.reason === 'cooldown'
         ? view.t('code.cooldown', { seconds: error.retryAfterSeconds })
-        : view.t('code.tooMany', waitValues(view.t, error.retryAfterSeconds))
+        : view.t('code.tooMany', waitValues(error.retryAfterSeconds))
 
     const cannotSend = (reply: FastifyReply, view: PageSet, error: NotifierUnavailableError) => {
       reply.log.error(error, 'the sign-in code could not be sent')

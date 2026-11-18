@@ -1,7 +1,7 @@
 import { CODE_LIFETIME_MS } from '@progwise/pforte-db/codes'
 import type { FastifyInstance } from 'fastify'
 import { validity } from '../i18n/duration.js'
-import type { I18n, MessageKey, Values } from '../i18n/index.js'
+import type { I18n, MessageKey, TextValues } from '../i18n/index.js'
 import { buildContentSecurityPolicy, buildCss, defaultTheme, type FooterLink, type Theme } from './theme.js'
 
 const escapeMap: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
@@ -24,7 +24,7 @@ export interface PasskeyProbe {
 export interface PageSet {
   language: string
   /** A text in this language, for the parts of a page that routes fill in themselves. */
-  t(key: MessageKey, values?: Values): string
+  t(key: MessageKey, values?: TextValues): string
   login(options: {
     uid: string
     clientName?: string
@@ -124,7 +124,7 @@ export const createPages = (i18n: I18n, { rememberDeviceDefault = false, theme =
   },
   for(requested) {
     const language = i18n.pick(requested)
-    const t = (key: MessageKey, values?: Values) => i18n.text(language, key, values)
+    const t = (key: MessageKey, values?: TextValues) => i18n.text(language, key, values)
 
     const header = theme.logoUrl
       ? `<img class="logo" src="${escapeHtml(theme.logoUrl)}" alt="${escapeHtml(theme.name ?? '')}">\n`
@@ -208,7 +208,7 @@ ${
         page(
           t('code.title'),
           `<h1>${escapeHtml(t('code.title'))}</h1>
-<p>${escapeHtml(t(channel === 'sms' ? 'code.sentSms' : 'code.sentEmail', { to: sentTo, validity: validity(t, CODE_LIFETIME_MS) }))}</p>
+<p>${escapeHtml(t(channel === 'sms' ? 'code.sentSms' : 'code.sentEmail', { to: sentTo, validity: validity(CODE_LIFETIME_MS) }))}</p>
 ${status(notice)}
 ${alert(error)}
 <form method="post" action="/interaction/${encodeURIComponent(uid)}/code">

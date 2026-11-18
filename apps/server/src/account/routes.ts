@@ -441,7 +441,7 @@ export const accountRoutes =
           }
         }),
       )
-      return html(reply, 200, view.resetCode({ email, clientId, notice: view.t('reset.sent', { validity: validity(view.t, CODE_LIFETIME_MS) }) }))
+      return html(reply, 200, view.resetCode({ email, clientId, notice: view.t('reset.sent', { validity: validity(CODE_LIFETIME_MS) }) }))
     })
 
     app.get<{ Querystring: { email?: string; lang?: string; client_id?: string } }>('/reset/code', async (request, reply) =>

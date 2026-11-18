@@ -1,6 +1,6 @@
 import type { Mailer } from './mailer.js'
 import { validity } from '../i18n/duration.js'
-import type { I18n, MessageKey, Values } from '../i18n/index.js'
+import type { I18n, MessageKey, TextValues } from '../i18n/index.js'
 import type { SmsSender } from './sms.js'
 
 export type Channel = 'email' | 'sms'
@@ -110,7 +110,7 @@ const hoursUntil = (expiresAt: Date) => Math.max(1, Math.round((expiresAt.getTim
 /** Sends the messages by e-mail and, where configured, by SMS. */
 export const createMailNotifier = ({ mailer, sms, organisation, i18n }: MailNotifierSettings): Notifier => {
   const language = (user: NotifiableUser) => i18n.pick(user.language)
-  const text = (user: NotifiableUser, key: MessageKey, values: Values = {}) =>
+  const text = (user: NotifiableUser, key: MessageKey, values: TextValues = {}) =>
     i18n.text(language(user), key, { organisation, firstName: user.firstName, ...values })
 
   const sendSms = async (user: NotifiableUser, message: string) => {
@@ -128,8 +128,7 @@ export const createMailNotifier = ({ mailer, sms, organisation, i18n }: MailNoti
     async sendActivationLink(user, { url, expiresAt, applicationName }) {
       // Naming the application tells the person what the account is for.
       const kind = applicationName ? 'mail.activationFor' : 'mail.activation'
-      const worded = validity((key, values) => text(user, key, values), expiresAt.getTime() - Date.now())
-      const values = { url, validity: worded, hours: hoursUntil(expiresAt), ...(applicationName ? { application: applicationName } : {}) }
+      const values = { url, validity: validity(expiresAt.getTime() - Date.now()), hours: hoursUntil(expiresAt), ...(applicationName ? { application: applicationName } : {}) }
       await mailer.send({ to: user.email, subject: text(user, `${kind}.subject`, values), text: text(user, `${kind}.text`, values) })
     },
     async sendResetCode(user, { code, expiresAt, url, channel }) {

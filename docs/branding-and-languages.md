@@ -166,7 +166,7 @@ singular and the plural: "1 minute", "10 minutes", "7 days".
 
 | Value | Says | In these texts |
 | --- | --- | --- |
-| `{validity}` | How long a link or a code is valid: minutes below an hour, hours below two days, whole days from there on. | `mail.activation.text`, `mail.activationFor.text`, `code.sentEmail`, `code.sentSms`, `reset.sent` |
+| `{validity}` | How long a link or a code is valid: minutes below an hour, hours below two days, whole days from there on. Hours and days are rounded down, so the text never promises more than there is. | `mail.activation.text`, `mail.activationFor.text`, `code.sentEmail`, `code.sentSms`, `reset.sent` |
 | `{wait}` | How long to wait before trying again, in minutes, rounded up. | `limit.text`, `code.tooMany`, `account.password.wait` |
 
 The words come from texts of their own, which you can replace like any other and which a new language should have:
@@ -174,6 +174,10 @@ The words come from texts of their own, which you can replace like any other and
 and `day`, for the sentence "valid for …"; `duration.in.minute.one` and `duration.in.minute.other` for the sentence
 "again in …". The two sentences have their own texts because some languages use another form in each: Hungarian
 says "7 napig" in the first and "5 perc" in the second. `.one` is used for exactly one, `.other` for every other number.
+
+The words are taken from the language the sentence around them comes from. A new language that has the words but
+not yet the sentence shows that sentence in English, with the English words; one that has the sentence but not the
+words shows its own sentence with the time in English.
 
 A text of yours that states a time is free in two ways:
 
