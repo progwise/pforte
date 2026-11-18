@@ -181,6 +181,10 @@ session. What pforte asks the person is whether to sign out *completely*, that i
 Either way pforte then sends the browser to `post_logout_redirect_uri`, without saying which answer it was. So do not wait
 for the return to end your session, and do not show "you are signed in" there.
 
+Add `ui_locales` (for example `ui_locales=de`) to have the question in the language of your application, as with the
+authorization request. Without it the question is in the person's own language, then the browser's
+([which language is used](branding-and-languages.md#which-language-is-used)).
+
 **Back-channel logout.** If the client has a back-channel logout address, pforte sends a `logout_token` (a signed JWT) to it
 with a POST when a session of the person ends. Use it to end your own session of that person. Answer `200` or `204`. The
 token is sent in two cases:
@@ -226,7 +230,7 @@ These are standard parameters of the authorization request:
 | `max_age=300` | Sign in again if the last sign-in is older than 300 seconds. The ID token then has `auth_time`. |
 | `acr_values=urn:pforte:acr:mfa` | Require the code, even when the browser is remembered. Use it before something sensitive. Check the `acr` of the ID token: a library does not do it for you. |
 | `login_hint=anna@example.com` | Fills in the e-mail address. |
-| `ui_locales=de` | The language of pforte's pages: `de`, `en`, `fr` or `hu`. Without it pforte follows the browser, then its default language. |
+| `ui_locales=de` | The language of pforte's pages: `de`, `en`, `fr`, `hu` or one the installation added; several are a list, most preferred first (`ui_locales=fr hu`). Without it pforte uses the person's own language once it knows who is signing in, before that the browser's, then its default language. The end-session request takes the same parameter. |
 
 ## Browser and mobile applications
 

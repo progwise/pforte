@@ -425,6 +425,27 @@ describe.skipIf(!hasDatabase)('the administration UI: signing in and out', () =>
       expect(await held()).toEqual([])
     })
 
+    it('says that the administrator is signed out in their own language, as the question before it', async () => {
+      await h.database.pool.query(`update users set language = 'de' where email = 'admin@example.com'`)
+      try {
+        const browser = new Browser(h.app)
+        await drive(browser, '/manage')
+        const left = await browser.request('POST', '/manage/logout', { headers: { 'sec-fetch-site': 'same-origin' } })
+        const asked = await browser.request('GET', left.headers.location as string, { headers: { 'accept-language': 'en' } })
+        expect(asked.body).toContain('<html lang="de">')
+        const xsrf = /name="xsrf" value="([^"]+)"/.exec(asked.body)![1]!
+        const ended = await browser.request('POST', '/session/end/confirm', { form: { xsrf, logout: 'yes' } })
+        expect(ended.headers.location).toBe('https://localhost:3300/manage/signed-out')
+
+        const page = await browser.request('GET', '/manage/signed-out', { headers: { 'accept-language': 'en' } })
+        expect(page.body).toContain('<html lang="de">')
+        expect(page.body).toContain('Sie sind abgemeldet')
+        expect(setCookies(page)).toEqual(['pforte_logout_language=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax; Secure'])
+      } finally {
+        await h.database.pool.query(`update users set language = 'en' where email = 'admin@example.com'`)
+      }
+    })
+
     it('shows a page that says so, with a way to sign in again', async () => {
       const response = await new Browser(h.app).request('GET', '/manage/signed-out')
       expect(response.statusCode).toBe(200)

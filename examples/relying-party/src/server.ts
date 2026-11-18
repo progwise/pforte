@@ -15,6 +15,9 @@ const port = Number(process.env.PORT ?? 3400)
 const baseUrl = (process.env.BASE_URL ?? `http://localhost:${port}`).replace(/\/$/, '')
 const redirectUri = `${baseUrl}/callback`
 const secure = baseUrl.startsWith('https:')
+// The language this application asks pforte's pages to be in (`ui_locales`), when it signs somebody in and when it
+// signs them out. An application with a language setting of its own passes that; this one has a setting for it.
+const uiLocales: Record<string, string> = process.env.UI_LOCALES?.trim() ? { ui_locales: process.env.UI_LOCALES.trim() } : {}
 
 // demo-web is a public client: it has no secret and PKCE protects the authorization code.
 // Plain http is only accepted for local development; use an https issuer anywhere else.
@@ -164,6 +167,7 @@ const server = createServer(async (request, response) => {
         code_challenge_method: 'S256',
         state,
         nonce,
+        ...uiLocales,
       })
       return redirect(response, authorizationUrl.href)
     }
@@ -201,6 +205,7 @@ const server = createServer(async (request, response) => {
       const endSession = client.buildEndSessionUrl(config, {
         ...(idToken ? { id_token_hint: idToken } : {}),
         post_logout_redirect_uri: `${baseUrl}/`,
+        ...uiLocales,
       })
       return redirect(response, endSession.href)
     }

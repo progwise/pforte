@@ -1,14 +1,17 @@
-import { createOidcPayloadStore, listClaimTypes } from '@progwise/pforte-db/oidc'
+import { createOidcPayloadStore, findActiveUserById, listClaimTypes } from '@progwise/pforte-db/oidc'
 import type { Database } from '@progwise/pforte-db'
 import { verify } from '@node-rs/argon2'
-import Provider, { type Configuration, type JWK } from 'oidc-provider'
+import Provider, { type Configuration, type JWK, type KoaContextWithOIDC } from 'oidc-provider'
 import type { Config } from '../config.js'
 import { parseAcceptLanguage } from '../i18n/index.js'
 import { createUi, type Ui } from '../ui/index.js'
+import { ACCOUNT_PATH } from '../account-area/constants.js'
 import { ACR_PASSWORD, ACR_SECOND_FACTOR } from '../auth/assurance.js'
+import { MANAGE_PATH } from '../manage/constants.js'
 import { createFindAccount, standardClaims } from './accounts.js'
 import { ClientAdapter, PayloadAdapter } from './adapter.js'
 import { createCors } from './cors.js'
+import { createLogoutLanguage } from './logout-language.js'
 
 export interface ProviderOptions {
   config: Pick<Config, 'issuer' | 'cookieKeys' | 'jwks'> & Partial<Pick<Config, 'allowPrivateAddresses'>>
@@ -50,8 +53,23 @@ export const createProvider = async ({ config, db, onError, ui = createUi() }: P
   const claimTypeKeys = (await listClaimTypes(db)).map((claimType) => claimType.key)
   const store = createOidcPayloadStore(db)
   const secureIssuer = config.issuer.startsWith('https:')
+  const browserLanguages = (ctx: { get(name: string): string }) => parseAcceptLanguage(ctx.get('accept-language'))
   /** The pages in the language of the browser, for what the library renders. */
-  const viewFor = (ctx: { get(name: string): string }) => ui.pages.for(ui.i18n.pick(parseAcceptLanguage(ctx.get('accept-language'))))
+  const viewFor = (ctx: { get(name: string): string }) => ui.pages.for(ui.i18n.pick(browserLanguages(ctx)))
+
+  const logoutLanguage = createLogoutLanguage({ cookieKeys: config.cookieKeys, secure: secureIssuer })
+  /**
+   * The language of a sign-out, chosen as the sign-in pages choose theirs: what the application asked for
+   * (`ui_locales`), else the language of the person who is signed in or whom the `id_token_hint` names, else the
+   * browser's, else the default. Chosen once for a request.
+   */
+  const languageOfLogout = (ctx: KoaContextWithOIDC): Promise<string> =>
+    (ctx.state.logoutLanguage ??= (async () => {
+      const { params, session, entities } = ctx.oidc
+      const accountId = session?.accountId ?? entities.IdTokenHint?.payload.sub
+      const person = typeof accountId === 'string' ? await findActiveUserById(db, accountId) : undefined
+      return ui.i18n.pick(typeof params?.ui_locales === 'string' ? params.ui_locales.split(' ') : undefined, person?.language, browserLanguages(ctx))
+    })())
 
   const cors = createCors(db)
 
@@ -113,17 +131,21 @@ export const createProvider = async ({ config, db, onError, ui = createUi() }: P
       rpInitiatedLogout: {
         enabled: true,
         // The library's own pages load fonts from a font service and look like nothing else here. These are
-        // pforte's: in the language of the browser, in the look of the installation, with nothing from outside.
+        // pforte's: in the language of the sign-out, in the look of the installation, with nothing from outside.
         logoutSource: async (ctx, form) => {
-          const view = viewFor(ctx)
+          const view = ui.pages.for(await languageOfLogout(ctx))
           ctx.type = 'html'
           ctx.set('Content-Security-Policy', ui.pages.contentSecurityPolicy)
           ctx.body = view.logoutConfirm({ host: ctx.host, formHtml: form, clientName: ctx.oidc.client?.clientName })
         },
         // The library comes here after a "no" as well, when there is no address to go back to. The sign-in at
         // pforte is then still there, and the page must not say that it is gone.
+        // The request that comes here says nothing about the sign-out it ends: the language is the one the
+        // question left behind.
         postLogoutSuccessSource: async (ctx) => {
-          const view = viewFor(ctx)
+          const language = logoutLanguage.read(ctx.get('cookie'))
+          if (language) ctx.append('Set-Cookie', logoutLanguage.forget())
+          const view = ui.pages.for(ui.i18n.pick(language, browserLanguages(ctx)))
           const signedIn = Boolean((await ctx.oidc.provider.Session.get(ctx)).accountId)
           ctx.type = 'html'
           ctx.set('Content-Security-Policy', ui.pages.contentSecurityPolicy)
@@ -144,6 +166,19 @@ export const createProvider = async ({ config, db, onError, ui = createUi() }: P
   })
 
   provider.use(cors.middleware)
+  // Every request to sign out leaves the language of its pages behind for the page at the end. Here and not in
+  // `logoutSource`, because the library asks no question of a browser without a session and so never calls it.
+  // The answer ends that again unless it leads to one of the three pages that take the language and remove it:
+  // behind any other address, also one of an application at pforte's own host, no such page follows, and a later
+  // page of pforte must not speak the language of a sign-out long over.
+  const pagesAtTheEnd = new Set(['/session/end/success', `${ACCOUNT_PATH}/signed-out`, `${MANAGE_PATH}/signed-out`].map((path) => `${config.issuer}${path}`))
+  const leadsToPageAtTheEnd = (location: string) => pagesAtTheEnd.has(location.split(/[?#]/)[0]!)
+  provider.use(async (plain, next) => {
+    await next()
+    const ctx = plain as KoaContextWithOIDC
+    if (ctx.oidc?.route === 'end_session' && ctx.status === 200) ctx.append('Set-Cookie', logoutLanguage.remember(await languageOfLogout(ctx)))
+    if (ctx.oidc?.route === 'end_session_confirm' && ctx.status === 303 && !leadsToPageAtTheEnd(ctx.response.get('location'))) ctx.append('Set-Cookie', logoutLanguage.forget())
+  })
   provider.on('server_error', (_ctx, error) => onError?.(error))
 
   // Because `expiresWithSession` is false, the library marks every authorization as surviving

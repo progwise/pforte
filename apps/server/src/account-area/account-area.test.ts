@@ -402,8 +402,10 @@ describe.skipIf(!hasDatabase)('the account pages', () => {
       const ended = await browser.request('POST', '/session/end/confirm', { form: { xsrf: xsrf!, logout: 'yes' } })
       const { response: done, visited } = await driveSignIn(h, browser, ended.headers.location as string, A.email)
       expect(visited.at(-1)).toBe('/account/signed-out')
-      // In the language of the browser: there is no person any more to take one from.
-      expect(done.body).toContain('You are signed out')
+      // In the person's language, which the question left behind: there is no person any more to take one from,
+      // and the browser of these tests asks for English.
+      expect(done.body).toContain('<html lang="de">')
+      expect(done.body).toContain('Sie sind abgemeldet')
 
       // The next visit needs the password and a code again.
       const before = codesFor(A.email).length
