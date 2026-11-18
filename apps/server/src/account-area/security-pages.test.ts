@@ -602,7 +602,7 @@ describe.skipIf(!hasDatabase)('the account pages: sessions, devices, sign-ins an
       const again = await post(browser, '/account/password')
 
       expect(again.headers.location).toBe('/account/password')
-      expect((await follow(browser, again)).body).toMatch(/<p class="flash error" role="alert">A code was asked for too often\. Please try again in \d+ minutes\.<\/p>/)
+      expect((await follow(browser, again)).body).toMatch(/<p class="flash error" role="alert">A code was asked for too often\. Please try again in 1 minute\.<\/p>/)
       expect(resetCodes()).toHaveLength(1)
     })
 

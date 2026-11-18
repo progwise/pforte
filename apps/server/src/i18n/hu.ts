@@ -21,8 +21,8 @@ export const hu: Catalog = {
   'login.wrong': 'Az e-mail-cím vagy a jelszó nem helyes.',
 
   'code.title': 'Adja meg a kódot',
-  'code.sentEmail': '6 számjegyű kódot küldtünk e-mailben erre a címre: {to}. A kód 10 percig érvényes.',
-  'code.sentSms': '6 számjegyű kódot küldtünk SMS-ben erre a számra: {to}. A kód 10 percig érvényes.',
+  'code.sentEmail': '6 számjegyű kódot küldtünk e-mailben erre a címre: {to}. A kód {validity} érvényes.',
+  'code.sentSms': '6 számjegyű kódot küldtünk SMS-ben erre a számra: {to}. A kód {validity} érvényes.',
   'code.remember': 'Az eszköz megjegyzése 90 napig, hogy itt ne kelljen újra kódot megadnom',
   'code.submit': 'Tovább',
   'code.useEmail': 'Inkább e-mailben kérem a kódot',
@@ -35,11 +35,11 @@ export const hu: Catalog = {
   'code.newOnItsWay': 'Az új kód úton van.',
   'code.badOrExpired': 'A kód nem helyes, vagy lejárt. Lent kérhet újat.',
   'code.cooldown': 'Nemrég küldtünk egy kódot. Új kódot {seconds} másodperc múlva kérhet.',
-  'code.tooMany': 'Túl sok kódot kért. Kérjük, próbálja újra {minutes} perc múlva.',
+  'code.tooMany': 'Túl sok kódot kért. Kérjük, próbálja újra {wait} múlva.',
   'code.tooManyTitle': 'Túl sok kód',
 
   'limit.title': 'Túl sok próbálkozás',
-  'limit.text': 'A hálózatáról vagy erre a címre túl sok próbálkozás érkezett. Kérjük, próbálja újra {minutes} perc múlva.',
+  'limit.text': 'A hálózatáról vagy erre a címre túl sok próbálkozás érkezett. Kérjük, próbálja újra {wait} múlva.',
 
   'logout.title': 'Kijelentkezés?',
   'logout.text': 'Ki szeretne jelentkezni innen: {host}?',
@@ -84,7 +84,7 @@ export const hu: Catalog = {
   'reset.intro': 'Adja meg az e-mail-címét. Küldünk egy kódot vagy egy hivatkozást, amellyel jelszót választhat.',
   'reset.send': 'Küldés',
   'reset.noEmail': 'Kérjük, adja meg az e-mail-címét.',
-  'reset.sent': 'Ha ehhez a címhez tartozik fiók, üzenetet küldtünk neki: egy kódot, amelyet alább adhat meg, vagy egy hivatkozást a jelszó választásához. A kód 10 percig érvényes.',
+  'reset.sent': 'Ha ehhez a címhez tartozik fiók, üzenetet küldtünk neki: egy kódot, amelyet alább adhat meg, vagy egy hivatkozást a jelszó választásához. A kód {validity} érvényes.',
   'reset.codeTitle': 'Új jelszó választása',
   'reset.codeSubmit': 'Jelszó módosítása',
   'reset.doneTitle': 'A jelszó megváltozott',
@@ -109,10 +109,10 @@ export const hu: Catalog = {
     'Tisztelt {firstName}!\n\nA bejelentkezési kódja: {code}. A kód {minutes} percig érvényes.\n\nHa nem Ön próbált bejelentkezni, ne adja át senkinek a kódot, és értesítse az adminisztrációt.\n',
   'mail.activation.subject': 'Aktiválja a fiókját: {organisation}',
   'mail.activation.text':
-    'Tisztelt {firstName}!\n\nFiókot hoztak létre Önnek itt: {organisation}. Ezen a hivatkozáson választhat jelszót:\n\n{url}\n\nA hivatkozás {hours} óráig érvényes. Ha nem számított erre az üzenetre, figyelmen kívül hagyhatja.\n',
+    'Tisztelt {firstName}!\n\nFiókot hoztak létre Önnek itt: {organisation}. Ezen a hivatkozáson választhat jelszót:\n\n{url}\n\nA hivatkozás {validity} érvényes. Ha nem számított erre az üzenetre, figyelmen kívül hagyhatja.\n',
   'mail.activationFor.subject': 'Aktiválja a fiókját: {application}',
   'mail.activationFor.text':
-    'Tisztelt {firstName}!\n\nFiókot hoztak létre Önnek itt: {organisation}, a következőhöz: {application}. Ezen a hivatkozáson választhat jelszót:\n\n{url}\n\nA hivatkozás {hours} óráig érvényes. Ha nem számított erre az üzenetre, figyelmen kívül hagyhatja.\n',
+    'Tisztelt {firstName}!\n\nFiókot hoztak létre Önnek itt: {organisation}, a következőhöz: {application}. Ezen a hivatkozáson választhat jelszót:\n\n{url}\n\nA hivatkozás {validity} érvényes. Ha nem számított erre az üzenetre, figyelmen kívül hagyhatja.\n',
   'continue.button': 'Tovább ide: {name}',
   'mail.resetCode.subject': 'Új jelszó: {organisation}',
   'mail.resetCode.text':
@@ -202,7 +202,7 @@ export const hu: Catalog = {
   'account.password.title': 'Jelszó módosítása',
   'account.password.help': 'Kódot küldünk: SMS-ben, ha a telefonszáma meg van erősítve, egyébként e-mailben. A következő oldalon megadja a kódot, és új jelszót választ. Ezután mindenhol kijelentkeztetjük, és az új jelszóval jelentkezhet be újra.',
   'account.password.button': 'Kód küldése',
-  'account.password.wait': 'Túl gyakran kértek kódot. Kérjük, próbálja újra {minutes} perc múlva.',
+  'account.password.wait': 'Túl gyakran kértek kódot. Kérjük, próbálja újra {wait} múlva.',
   'account.password.unavailable': 'A kódot nem sikerült elküldeni. Kérjük, próbálja újra később.',
   'account.stepUp.again': 'Ehhez újra be kellett jelentkeznie. Most ismételje meg, amit tenni szeretett volna.',
   'account.passkeys.title': 'Jelkulcsok',
@@ -233,4 +233,14 @@ export const hu: Catalog = {
   'sms.login': 'A(z) {organisation} bejelentkezési kódja: {code}. {minutes} percig érvényes. Ne adja át senkinek.',
   'sms.reset': 'A(z) {organisation} új jelszavához szükséges kód: {code}. {minutes} percig érvényes. Ne adja át senkinek.',
   'sms.phone': 'A(z) {organisation} telefonszám-megerősítő kódja: {code}. {minutes} percig érvényes.',
+
+  // Hungarian keeps the noun in the singular after a number; what differs is the ending of "valid for …".
+  'duration.for.minute.one': '{count} percig',
+  'duration.for.minute.other': '{count} percig',
+  'duration.for.hour.one': '{count} óráig',
+  'duration.for.hour.other': '{count} óráig',
+  'duration.for.day.one': '{count} napig',
+  'duration.for.day.other': '{count} napig',
+  'duration.in.minute.one': '{count} perc',
+  'duration.in.minute.other': '{count} perc',
 }

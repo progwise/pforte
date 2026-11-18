@@ -1,3 +1,4 @@
+import { ACTIVATION_VALIDITY_MS } from '@progwise/pforte-db/admin'
 import { describe, expect, it } from 'vitest'
 import { createI18n } from '../i18n/index.js'
 import { createMailNotifier, createLogNotifier, NotifierUnavailableError } from './notifier.js'
@@ -84,9 +85,31 @@ describe('mail notifier', () => {
 
   it('sends the activation link', async () => {
     sent.length = 0
-    await notifier.sendActivationLink(user, { url: link.url, expiresAt: new Date(Date.now() + 72 * 3_600_000) })
+    await notifier.sendActivationLink(user, { url: link.url, expiresAt: new Date(Date.now() + ACTIVATION_VALIDITY_MS) })
     expect(sent[0]!.text).toContain(link.url)
-    expect(sent[0]!.text).toContain('72 hours')
+    expect(sent[0]!.text).toContain('The link is valid for 7 days.')
+  })
+
+  it.each([
+    ['en', 'The link is valid for 7 days.'],
+    ['de', 'Der Link ist 7 Tage gültig.'],
+    ['fr', 'Le lien est valable 7 jours.'],
+    ['hu', 'A hivatkozás 7 napig érvényes.'],
+  ])('says in %s how long the link is valid as a person would, with and without an application', async (language, sentence) => {
+    sent.length = 0
+    const activation = { url: link.url, expiresAt: new Date(Date.now() + ACTIVATION_VALIDITY_MS) }
+    await notifier.sendActivationLink({ ...user, language }, activation)
+    await notifier.sendActivationLink({ ...user, language }, { ...activation, applicationName: 'Partner Portal' })
+    expect(sent.map((mail) => mail.text.includes(sentence))).toEqual([true, true])
+    expect(sent.map((mail) => mail.text)).not.toEqual(expect.arrayContaining([expect.stringContaining('168')]))
+  })
+
+  it('still gives the hours to an activation mail that an installation replaced before the time came in words', async () => {
+    const mails: Mail[] = []
+    const i18n = createI18n({ overrides: { de: { 'mail.activation.text': 'Ihr Link: {url}\n\nEr gilt {hours} Stunden.' } } })
+    const replaced = createMailNotifier({ mailer: { send: async (mail) => void mails.push(mail) }, organisation: 'Example Inc.', i18n })
+    await replaced.sendActivationLink({ ...user, language: 'de' }, { url: link.url, expiresAt: new Date(Date.now() + ACTIVATION_VALIDITY_MS) })
+    expect(mails[0]!.text).toBe(`Ihr Link: ${link.url}\n\nEr gilt 168 Stunden.`)
   })
 
   it('names the application in the activation e-mail when there is one, in the language of the user', async () => {

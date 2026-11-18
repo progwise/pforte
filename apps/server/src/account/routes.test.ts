@@ -493,6 +493,7 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
     it('sends a code to a user who can sign in, and says the same to everyone else', async () => {
       const user = await activated()
       const known = await requestReset(user.email)
+      expect(known.body).toContain('A code is valid for 10 minutes.')
       expect(h.notifications).toEqual([expect.objectContaining({ kind: 'reset-code', user: expect.objectContaining({ email: user.email }) })])
       expect(resetCode(user.email)).toMatch(/^\d{6}$/)
 

@@ -2,6 +2,7 @@ import { endSessions, listClients, listDevices, listSignInEvents, listUserSessio
 import { CodeLimitError } from '@progwise/pforte-db/codes'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { ACR_SECOND_FACTOR } from '../auth/assurance.js'
+import { waitValues } from '../i18n/duration.js'
 import type { MessageKey } from '../i18n/index.js'
 import { NotifierUnavailableError } from '../notifications/notifier.js'
 import { browserLabel } from '../ui/browser-label.js'
@@ -209,7 +210,9 @@ ${list}
     if (!requireRecentSignIn(reply, session, PASSWORD)) return reply
 
     const where = { ip: request.ip, userAgent: request.headers['user-agent'] }
-    const waitMessage = (seconds: number) => ({ kind: 'error' as const, key: 'account.password.wait' as const, values: { minutes: Math.max(1, Math.ceil(seconds / 60)) } })
+    // Worded here, in the language the next page is shown in: a time in words cannot travel as a value of the message.
+    const { t } = viewFor(request, user)
+    const waitMessage = (seconds: number) => ({ kind: 'error' as const, text: t('account.password.wait', waitValues(seconds)) })
 
     // The same limit as on the page for a forgotten password: this is that request, made by somebody we know.
     const wait = await limiter.resetRequest(user.email, request.ip)

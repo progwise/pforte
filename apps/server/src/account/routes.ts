@@ -1,7 +1,7 @@
 import formbody from '@fastify/formbody'
 import { hash } from '@node-rs/argon2'
 import type { Database } from '@progwise/pforte-db'
-import { checkCode, CodeLimitError, issueCode, markEmailVerified } from '@progwise/pforte-db/codes'
+import { checkCode, CODE_LIFETIME_MS, CodeLimitError, issueCode, markEmailVerified } from '@progwise/pforte-db/codes'
 import { closePasskeyOffer, confirmPhone, continuePasskeyOffer, findPasskeyOffer, getClient, LifecycleError, requestActivationLink } from '@progwise/pforte-db/admin'
 import { findActiveUserById } from '@progwise/pforte-db/oidc'
 import { completeActivation, completePasswordReset, findPendingActivation } from '@progwise/pforte-db/credentials'
@@ -15,6 +15,7 @@ import type { SendPasswordResetCode } from '../auth/password-reset.js'
 import { newDeviceCookie } from '../interaction/device-cookie.js'
 import { createPhoneReminder } from '../interaction/phone-reminder.js'
 import { readCookie, setCookieHeader, sign, unsign } from '../interaction/signed-cookie.js'
+import { validity } from '../i18n/duration.js'
 import { parseAcceptLanguage } from '../i18n/index.js'
 import { type Notifier, NotifierUnavailableError } from '../notifications/notifier.js'
 import type { Ui } from '../ui/index.js'
@@ -440,7 +441,7 @@ export const accountRoutes =
           }
         }),
       )
-      return html(reply, 200, view.resetCode({ email, clientId, notice: view.t('reset.sent') }))
+      return html(reply, 200, view.resetCode({ email, clientId, notice: view.t('reset.sent', { validity: validity(CODE_LIFETIME_MS) }) }))
     })
 
     app.get<{ Querystring: { email?: string; lang?: string; client_id?: string } }>('/reset/code', async (request, reply) =>

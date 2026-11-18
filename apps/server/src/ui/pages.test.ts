@@ -125,4 +125,13 @@ describe('pages', () => {
     expect(pages.for('de').code({ uid: 'u', channel: 'email', sentTo: 'a***@b.c' })).toContain('per E-Mail an a***@b.c')
     expect(pages.for('fr').code({ uid: 'u', channel: 'sms', sentTo: '+49•78' })).toContain('par SMS')
   })
+
+  it('say how long the code is valid, in every language', () => {
+    const sentence = (language: string, channel: 'email' | 'sms') => pages.for(language).code({ uid: 'u', channel, sentTo: 'x' })
+    expect(sentence('en', 'email')).toContain('It is valid for 10 minutes.')
+    expect(sentence('en', 'sms')).toContain('It is valid for 10 minutes.')
+    expect(sentence('de', 'email')).toContain('Er ist 10 Minuten gültig.')
+    expect(sentence('fr', 'sms')).toContain('Il est valable 10 minutes.')
+    expect(sentence('hu', 'email')).toContain('A kód 10 percig érvényes.')
+  })
 })

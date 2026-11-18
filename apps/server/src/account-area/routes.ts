@@ -8,7 +8,7 @@ import type { LoginAudit } from '../auth/login-audit.js'
 import type { SendPasswordResetCode } from '../auth/password-reset.js'
 import type { RateLimiter } from '../auth/rate-limiter.js'
 import { parseAcceptLanguage } from '../i18n/index.js'
-import type { MessageKey, Values } from '../i18n/index.js'
+import type { MessageKey, Translate, Values } from '../i18n/index.js'
 import type { Notifier } from '../notifications/notifier.js'
 import type { ClientLogouts } from '../oidc/client-logouts.js'
 import { createFlash, type Flash } from '../own-login/flash.js'
@@ -72,7 +72,8 @@ export const accountAreaRoutes =
     /** The pages in the person's own language once we know who they are, in the browser's before that. */
     const viewFor = (request: FastifyRequest, user?: Pick<AccountUser, 'language'>) => {
       const view = ui.pages.for(ui.i18n.pick(user?.language, acceptedLanguages(request)))
-      return { view, language: view.language, t: (key: MessageKey, values?: Values) => view.t(key, values) }
+      const t: Translate = (key, values) => view.t(key, values)
+      return { view, language: view.language, t }
     }
 
     app.addHook(
@@ -245,7 +246,7 @@ ${fact('account.profile.language', languageName)}
 /** What the pages of the area share: who the person is, how a page is drawn, and the step-up before a change. */
 export interface AccountContext extends AccountAreaDependencies {
   gate: ReturnType<typeof createAccountGate>
-  viewFor: (request: FastifyRequest, user?: Pick<AccountUser, 'language'>) => { view: PageSet; language: string; t: (key: MessageKey, values?: Values) => string }
+  viewFor: (request: FastifyRequest, user?: Pick<AccountUser, 'language'>) => { view: PageSet; language: string; t: Translate }
   page: (request: FastifyRequest, reply: FastifyReply, user: AccountUser, current: string, title: string, content: string) => string
   redirectWith: (reply: FastifyReply, to: string, message: Flash) => FastifyReply
   requireRecentSignIn: (reply: FastifyReply, session: AccountSession, back: string) => boolean

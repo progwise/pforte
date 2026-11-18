@@ -24,8 +24,8 @@ export const en = {
   'login.wrong': 'The e-mail or password is not correct.',
 
   'code.title': 'Enter your code',
-  'code.sentEmail': 'We sent a 6-digit code by e-mail to {to}. It is valid for 10 minutes.',
-  'code.sentSms': 'We sent a 6-digit code by SMS to {to}. It is valid for 10 minutes.',
+  'code.sentEmail': 'We sent a 6-digit code by e-mail to {to}. It is valid for {validity}.',
+  'code.sentSms': 'We sent a 6-digit code by SMS to {to}. It is valid for {validity}.',
   'code.remember': 'Remember this device for 90 days, so I am not asked for a code here again',
   'code.submit': 'Continue',
   'code.useEmail': 'Send the code by e-mail instead',
@@ -38,11 +38,11 @@ export const en = {
   'code.newOnItsWay': 'A new code is on its way.',
   'code.badOrExpired': 'The code is not correct or has expired. You can ask for a new one below.',
   'code.cooldown': 'A code was sent a moment ago. You can ask for a new one in {seconds} seconds.',
-  'code.tooMany': 'Too many codes were requested. Please try again in {minutes} minutes.',
+  'code.tooMany': 'Too many codes were requested. Please try again in {wait}.',
   'code.tooManyTitle': 'Too many codes',
 
   'limit.title': 'Too many attempts',
-  'limit.text': 'There were too many attempts from your network or for this address. Please try again in {minutes} minutes.',
+  'limit.text': 'There were too many attempts from your network or for this address. Please try again in {wait}.',
 
   'logout.title': 'Sign out?',
   'logout.text': 'Do you want to sign out of {host}?',
@@ -87,7 +87,7 @@ export const en = {
   'reset.intro': 'Enter your e-mail address. We send you a code or a link to choose a password.',
   'reset.send': 'Send',
   'reset.noEmail': 'Please enter your e-mail address.',
-  'reset.sent': 'If there is an account for this address, we have sent a message to it: a code to enter below, or a link to choose your password. A code is valid for 10 minutes.',
+  'reset.sent': 'If there is an account for this address, we have sent a message to it: a code to enter below, or a link to choose your password. A code is valid for {validity}.',
   'reset.codeTitle': 'Choose a new password',
   'reset.codeSubmit': 'Change my password',
   'reset.doneTitle': 'Password changed',
@@ -112,10 +112,10 @@ export const en = {
     'Hello {firstName},\n\nyour sign-in code is {code}. It is valid for {minutes} minutes.\n\nIf you did not try to sign in, do not share this code with anyone and tell your administration.\n',
   'mail.activation.subject': 'Activate your account at {organisation}',
   'mail.activation.text':
-    'Hello {firstName},\n\nan account was created for you at {organisation}. Open this link to choose your password:\n\n{url}\n\nThe link is valid for {hours} hours. If you did not expect this message, you can ignore it.\n',
+    'Hello {firstName},\n\nan account was created for you at {organisation}. Open this link to choose your password:\n\n{url}\n\nThe link is valid for {validity}. If you did not expect this message, you can ignore it.\n',
   'mail.activationFor.subject': 'Activate your account for {application}',
   'mail.activationFor.text':
-    'Hello {firstName},\n\nan account was created for you at {organisation} to sign in to {application}. Open this link to choose your password:\n\n{url}\n\nThe link is valid for {hours} hours. If you did not expect this message, you can ignore it.\n',
+    'Hello {firstName},\n\nan account was created for you at {organisation} to sign in to {application}. Open this link to choose your password:\n\n{url}\n\nThe link is valid for {validity}. If you did not expect this message, you can ignore it.\n',
   'continue.button': 'Continue to {name}',
   'mail.resetCode.subject': 'Choose a new password for {organisation}',
   'mail.resetCode.text':
@@ -205,7 +205,7 @@ export const en = {
   'account.password.title': 'Change your password',
   'account.password.help': 'You get a code, by SMS if your phone number is confirmed and by e-mail otherwise. On the next page you enter it and choose a new password. After that you are signed out everywhere and sign in again with the new password.',
   'account.password.button': 'Send me a code',
-  'account.password.wait': 'A code was asked for too often. Please try again in {minutes} minutes.',
+  'account.password.wait': 'A code was asked for too often. Please try again in {wait}.',
   'account.password.unavailable': 'The code could not be sent. Please try again later.',
   'account.stepUp.again': 'For this you had to sign in again. Now repeat what you wanted to do.',
   'account.passkeys.title': 'Passkeys',
@@ -237,6 +237,16 @@ export const en = {
   'sms.reset':
     '{code} is your code to choose a new password for {organisation}. Valid for {minutes} minutes. Do not share it.',
   'sms.phone': '{code} is your code to confirm this phone number for {organisation}. Valid for {minutes} minutes.',
+
+  // A time in words, as the texts above get it. `for` is the form of "valid for …", `in` the one of "again in …".
+  'duration.for.minute.one': '{count} minute',
+  'duration.for.minute.other': '{count} minutes',
+  'duration.for.hour.one': '{count} hour',
+  'duration.for.hour.other': '{count} hours',
+  'duration.for.day.one': '{count} day',
+  'duration.for.day.other': '{count} days',
+  'duration.in.minute.one': '{count} minute',
+  'duration.in.minute.other': '{count} minutes',
 } as const
 
 export type MessageKey = keyof typeof en

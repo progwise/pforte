@@ -33,7 +33,23 @@ describe('locale overrides', () => {
     expect(loadLocaleOverrides(folderWith({ 'fr.json': '{"login.submit":"Entrer"}' })).warnings).toEqual([])
   })
 
+  it('still reads a text that states a time as it did before the time came in words, or writes it out itself', () => {
+    const texts = {
+      'mail.activation.text': 'Guten Tag {firstName}, Ihr Link für {organisation}: {url}. Er gilt {hours} Stunden.',
+      'mail.activationFor.text': 'Guten Tag {firstName}, Ihr Link für {application} bei {organisation}: {url}. Er gilt eine Woche.',
+      'limit.text': 'Zu viele Versuche. Weiter in {minutes} Min.',
+      'code.tooMany': 'Zu viele Codes. Weiter in {wait}.',
+      'reset.sent': 'Wir haben eine Nachricht gesendet. Ein Code gilt 10 Minuten.',
+      'duration.for.day.other': '{count} Tage lang',
+    }
+    expect(loadLocaleOverrides(folderWith({ 'de.json': JSON.stringify(texts) })).overrides).toEqual({ de: texts })
+  })
+
   it.each([
+    ['de.json', '{"mail.activation.text":"Guten Tag {firstName}, Ihr Link für {organisation} gilt {validity}."}', /must contain \{url\}/],
+    ['de.json', '{"limit.text":"Weiter in {hours} Stunden."}', /uses \{hours\}, which this text does not have/],
+    ['de.json', '{"reset.sent":"Ein Code gilt {minutes} Minuten."}', /uses \{minutes\}, which this text does not have/],
+    ['de.json', '{"duration.for.day.other":"Tage"}', /must contain \{count\}/],
     ['Deutsch.json', '{}', /must be a language code/],
     ['de.json', '{oops', /not valid JSON/],
     ['de.json', '["a"]', /must be a JSON object/],

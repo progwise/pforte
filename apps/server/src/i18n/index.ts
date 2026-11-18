@@ -13,6 +13,18 @@ export type MessageKey = CoreKey | AdminKey
 
 export type Values = Record<string, string | number>
 
+/** A text in one language: `view.t` of a page, or `i18n.text` with the language filled in. */
+export type Translate = (key: MessageKey, values?: TextValues) => string
+
+/**
+ * A value that is made of texts itself, such as a time in words (see `duration.ts`). It gets the texts of the language
+ * the sentence around it comes from, so a sentence that falls back to English is not filled with words of another language.
+ */
+export type Worded = (t: Translate) => string
+
+/** What a text is filled with. Only plain `Values` can travel, in a cookie for instance; a `Worded` is worded where the text is made. */
+export type TextValues = Record<string, string | number | Worded>
+
 /** The languages that come with pforte. More are added by files in the branding folder. */
 export const BUILT_IN: Record<string, Catalog> = { en, de, fr, hu }
 
@@ -45,7 +57,7 @@ export interface I18n {
   /** The first of the candidates that pforte speaks (`fr-CH` counts as `fr`), or the default language. */
   pick(...candidates: (string | string[] | undefined)[]): string
   /** A text in a language, with `{name}` filled in. Falls back to English, so a text is never missing. */
-  text(language: string, key: MessageKey, values?: Values): string
+  text(language: string, key: MessageKey, values?: TextValues): string
 }
 
 export interface I18nOptions {
@@ -54,8 +66,12 @@ export interface I18nOptions {
   defaultLanguage?: string
 }
 
-const fill = (template: string, values: Values) =>
-  template.replace(/\{(\w+)\}/g, (placeholder, name: string) => (name in values ? String(values[name]) : placeholder))
+const fill = (template: string, values: TextValues, t: Translate) =>
+  template.replace(/\{(\w+)\}/g, (placeholder, name: string) => {
+    if (!Object.hasOwn(values, name)) return placeholder
+    const value = values[name]!
+    return typeof value === 'function' ? value(t) : String(value)
+  })
 
 export const createI18n = ({ overrides = {}, defaultLanguage = 'en' }: I18nOptions = {}): I18n => {
   const catalogs = new Map<string, Partial<Record<MessageKey, string>>>()
@@ -63,6 +79,13 @@ export const createI18n = ({ overrides = {}, defaultLanguage = 'en' }: I18nOptio
     catalogs.set(language.toLowerCase(), { ...BUILT_IN[language], ...ADMIN[language], ...overrides[language] })
   }
   if (!catalogs.has(defaultLanguage.toLowerCase())) throw new Error(`The default language "${defaultLanguage}" has no texts`)
+
+  /** A text of the language that has it: the one asked for, its base (`fr-CH` → `fr`), or built-in English, for which `undefined` stands. */
+  const textIn = (language: string | undefined, key: MessageKey, values: TextValues): string => {
+    const source = language === undefined ? undefined : [language.toLowerCase(), baseOf(language)].find((tag) => catalogs.get(tag)?.[key] !== undefined)
+    const template = source === undefined ? ALL_ENGLISH[key] : catalogs.get(source)![key]!
+    return fill(template, values, (nestedKey, nestedValues = {}) => textIn(source, nestedKey, nestedValues))
+  }
 
   return {
     languages: [...catalogs.keys()],
@@ -76,9 +99,6 @@ export const createI18n = ({ overrides = {}, defaultLanguage = 'en' }: I18nOptio
       }
       return defaultLanguage.toLowerCase()
     },
-    text(language, key, values = {}) {
-      const template = catalogs.get(language.toLowerCase())?.[key] ?? catalogs.get(baseOf(language))?.[key] ?? ALL_ENGLISH[key]
-      return fill(template, values)
-    },
+    text: (language, key, values = {}) => textIn(language, key, values),
   }
 }
