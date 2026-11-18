@@ -5,8 +5,9 @@ speaks four languages out of the box. Both are set with one folder, `BRANDING_DI
 
 ```
 branding/
-  brand.json        name, logo, colours, corner radius, fonts, footer links
+  brand.json        name, logos, colours, corner radius, fonts, footer links
   logo.svg          the logo
+  logo-small.svg    a second, small logo, if the logo is a wide wordmark
   fonts/            font files, if you use your own fonts
   locales/          texts: replace some, or add a language (see "Languages and texts" below)
 ```
@@ -24,6 +25,7 @@ Every entry is optional. This one shows them all:
 {
   "name": "Example Inc.",
   "logo": "logo.svg",
+  "logoSmall": "logo-small.svg",
   "radius": "16px",
   "colors": {
     "background": "#f6f3ec",
@@ -60,7 +62,8 @@ Every entry is optional. This one shows them all:
 | Entry | Meaning |
 | --- | --- |
 | `name` | Shown above the pages as text, or as the description of the logo. Also named in e-mails and SMS (instead of `ORGANISATION_NAME`). |
-| `logo` | `.svg`, `.png`, `.jpg` or `.webp`, up to 512 KB. Shown at most 12 rem wide and 4 rem high, and as the icon of the browser tab. In the bar of the administration and of the [account pages](account.md) it is at most 2.5 rem high, and where the bar is one line (on a screen up to 1,200 pixels wide) at most a third of the bar wide: a wide wordmark gets small there, a square mark does not. Without a logo that icon is pforte's signet, in the colours of your main button; with neither a logo nor a `name`, the signet is shown above the pages as well. |
+| `logo` | `.svg`, `.png`, `.jpg` or `.webp`, up to 512 KB. Shown on the card of the sign-in, code, activation and password pages, at most 12 rem wide and 4 rem high: a wordmark is right there. It is also the logo of the bar of the administration and of the [account pages](account.md), at most 2.5 rem high, and the icon of the browser tab, unless there is a `logoSmall`. Without a logo that icon is pforte's signet, in the colours of your main button; with neither a logo nor a `name`, the signet is shown above the pages as well. |
+| `logoSmall` | A second logo for the narrow places, with the rules of `logo`; it needs a `logo`. It is for a mark that works small: a signet, or a signet with a short label beside it. It does not have to be square. It is shown where the bar is one line (on a screen up to 1,200 pixels wide), at most 2.5 rem high and a third of the bar wide, and as the icon of the browser tab. The wide bar and the cards keep the `logo`. Without it the `logo` is used everywhere: a wide wordmark is then a thin strip in the one-line bar and in the tab, a square mark is not. |
 | `radius` | Corner radius of the card, like `16px` or `1rem`, up to 32px. Fields and buttons are two thirds of it. |
 | `colors` | Hex colours. `primary` and `primaryText` are the main button, `link` the links and secondary buttons, `muted` hints and footer links. What you leave out stays neutral. |
 | `fonts.body` | Text, fields and hints. |

@@ -15,6 +15,15 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   activation link: the one an administrator or an application sends, the one a person asks for themselves, and the
   one of the first administrator. The mail states the time that applies. A change applies to links sent from then on
   ([configuration](docs/configuration.md)).
+- **A second, small logo for the narrow places: `logoSmall` in `brand.json`.** A branding folder had one `logo` for the
+  card of the sign-in pages, for the bar and for the tab of the browser. A wide wordmark is right on the card, but in
+  the one-line bar it is a thin strip that still takes a third of the width, and in the tab it cannot be read. With
+  `logoSmall` (a signet, or a signet with a short label; the file types and the size limit of `logo`) the one-line bar
+  and the tab of the browser show the small logo, and the cards and the wide bar keep the `logo`. The browser loads
+  the one it shows, without script. **Without a `logoSmall` nothing changes.** One thing to know: `brand.json`
+  refuses entries it does not know, so a folder with `logoSmall` stops pforte 0.3.1 and earlier at the start. Add the
+  entry after the update, not before
+  ([branding](docs/branding-and-languages.md#branding-brandjson), [#93](https://github.com/progwise/pforte/issues/93)).
 
 ### Fixed
 

@@ -50,6 +50,43 @@ describe('pages with a theme', () => {
     expect(ui.pages.for('en').manage({ title: 'Users', nav: [], sectionsLabel: 'Sections', content: '' })).toContain(icon)
   })
 
+  describe('and a second, small logo', () => {
+    const small = '/brand/0123456789/mark.svg'
+    const two = createUi({ theme: { ...theme, logoSmallUrl: small, iconUrl: small } })
+    const area = two.pages.for('en').manage({ title: 'Users', nav: [], sectionsLabel: 'Sections', content: '' })
+    const LOGO = `<img class="logo" src="${theme.logoUrl}" alt="Example &lt;Inc.&gt;">`
+
+    it('keep the logo on the card of the sign-in, the code, the activation and the password pages, at every width', () => {
+      const pages = two.pages.for('en')
+      for (const card of [pages.login({ uid: 'u1' }), pages.code({ uid: 'u1', channel: 'email', sentTo: 'a@b.c' }), pages.activation({ token: 't', email: 'a@b.c' }), pages.forgotPassword({}), pages.resetCode({ email: 'a@b.c' }), pages.notice('Title', 'Text')]) {
+        expect(card).toContain(LOGO)
+        expect(card).not.toContain('<picture>')
+        expect(card).not.toContain(`src="${small}"`)
+        expect(card).not.toContain(`srcset="${small}"`)
+      }
+    })
+
+    it('let the browser pick in the bar: the small one where the bar is one line, the logo where it is wide', () => {
+      expect(area).toContain(`<header class="bar">\n<picture><source media="(max-width: 75rem)" srcset="${small}">${LOGO}</picture>\n<nav class="sections"`)
+      // The same width as the one-line bar of the stylesheet, and one image with one description.
+      expect(area).toMatch(/@media \(max-width: 75rem\) \{\n {2}\.bar \{ position: relative; flex-wrap: nowrap;/)
+      expect(area.match(/<img/g)).toHaveLength(1)
+      expect(area).not.toContain('<script')
+    })
+
+    it('show the small one in the browser tab, on every page', () => {
+      const icon = `<link rel="icon" href="${small}">`
+      expect(area).toContain(icon)
+      expect(two.pages.for('en').login({ uid: 'u1' })).toContain(icon)
+    })
+
+    it('have one logo in the bar, and no picture, where there is no small one', () => {
+      const one = ui.pages.for('en').manage({ title: 'Users', nav: [], sectionsLabel: 'Sections', content: '' })
+      expect(one).toContain(`<header class="bar">\n${LOGO}\n<nav class="sections"`)
+      expect(one).not.toContain('<picture>')
+    })
+  })
+
   it('show only the name where there is no logo', () => {
     const nameOnly = createUi({ theme: { ...theme, logoUrl: undefined } }).pages.for('en').login({ uid: 'u1' })
     expect(nameOnly).toContain('<p class="brand">Example &lt;Inc.&gt;</p>')
