@@ -195,6 +195,23 @@ describe('TRUST_PROXY', () => {
   })
 })
 
+describe('ACTIVATION_LINK_DAYS', () => {
+  it('is seven days unless set', () => {
+    expect(loadConfig(validEnv).activationLinkDays).toBe(7)
+    expect(loadConfig({ ...validEnv, ACTIVATION_LINK_DAYS: ' ' }).activationLinkDays).toBe(7)
+  })
+
+  it('can be changed, from one day to thirty', () => {
+    expect(loadConfig({ ...validEnv, ACTIVATION_LINK_DAYS: '1' }).activationLinkDays).toBe(1)
+    expect(loadConfig({ ...validEnv, ACTIVATION_LINK_DAYS: ' 14 ' }).activationLinkDays).toBe(14)
+    expect(loadConfig({ ...validEnv, ACTIVATION_LINK_DAYS: '30' }).activationLinkDays).toBe(30)
+  })
+
+  it.each(['a week', '0', '-3', '1.5', '31'])('refuses %s', (value) => {
+    expect(() => loadConfig({ ...validEnv, ACTIVATION_LINK_DAYS: value })).toThrow('ACTIVATION_LINK_DAYS must be a number of days from 1 to 30')
+  })
+})
+
 describe('AUDIT_LOGIN_RETENTION_DAYS', () => {
   it('is 180 days unless set', () => {
     expect(loadConfig(validEnv).loginAuditRetentionDays).toBe(180)

@@ -8,6 +8,14 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
 
 ## Unreleased
 
+### Added
+
+- **How long an activation link works is a setting.** It was seven days and could not be changed. `ACTIVATION_LINK_DAYS`
+  takes a number of days from 1 to 30; without it the seven days stay, so nothing needs doing. It applies to every
+  activation link: the one an administrator or an application sends, the one a person asks for themselves, and the
+  one of the first administrator. The mail states the time that applies. A change applies to links sent from then on
+  ([configuration](docs/configuration.md)).
+
 ### Fixed
 
 - **The activation mail says "7 days", not "168 hours".** The two activation mails stated how long the link is valid as

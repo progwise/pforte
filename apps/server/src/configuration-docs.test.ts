@@ -54,6 +54,7 @@ describe('the configuration reference', () => {
     expect(documentation).toMatch(/\| `PORT` \| `3300`/)
     expect(documentation).toMatch(/\| `TIME_ZONE` \| `UTC`/)
     expect(documentation).toMatch(/\| `AUDIT_LOGIN_RETENTION_DAYS` \| `180`/)
+    expect(documentation).toMatch(/\| `ACTIVATION_LINK_DAYS` \| `7`/)
     expect(documentation).toMatch(/\| `MIGRATE_ON_START` \| `true`/)
   })
 })

@@ -27,6 +27,8 @@ export interface Config {
    * On by default; turn it off when people should only get their link when an administrator invites them.
    */
   selfServiceActivation: boolean
+  /** How many days an activation link works, counted from when it is sent. */
+  activationLinkDays: number
   /** Named in e-mails. */
   organisationName: string
   /** A folder with texts that replace or add to the built-in ones (`locales/<language>.json`). */
@@ -226,6 +228,13 @@ const parseRetention = (value: string | undefined) => {
   return days
 }
 
+const parseActivationLinkDays = (value: string | undefined) => {
+  if (value === undefined || value.trim() === '') return 7
+  const days = Number(value)
+  if (!Number.isInteger(days) || days < 1 || days > 30) throw new Error('ACTIVATION_LINK_DAYS must be a number of days from 1 to 30')
+  return days
+}
+
 const parseBootstrapAdmin = (value: string | undefined) => {
   const email = value?.trim().toLowerCase()
   if (!email) return undefined
@@ -251,6 +260,7 @@ export const loadConfig = (env: Env = process.env): Config => ({
   jwks: parseJwks(requireSecret(env, 'JWKS', '; generate them with `pforte keys`, or run pnpm dev:keys for development')),
   allowPrivateAddresses: env.OUTBOUND_ALLOW_PRIVATE_ADDRESSES === 'true',
   selfServiceActivation: env.SELF_SERVICE_ACTIVATION?.trim().toLowerCase() !== 'false',
+  activationLinkDays: parseActivationLinkDays(env.ACTIVATION_LINK_DAYS),
   organisationName: env.ORGANISATION_NAME?.trim() || 'pforte',
   brandingDir: env.BRANDING_DIR?.trim() || undefined,
   defaultLanguage: env.DEFAULT_LANGUAGE?.trim().toLowerCase() || 'en',

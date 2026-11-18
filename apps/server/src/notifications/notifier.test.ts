@@ -104,6 +104,16 @@ describe('mail notifier', () => {
     expect(sent.map((mail) => mail.text)).not.toEqual(expect.arrayContaining([expect.stringContaining('168')]))
   })
 
+  it.each([
+    [1, 'The link is valid for 24 hours.'],
+    [2, 'The link is valid for 2 days.'],
+    [30, 'The link is valid for 30 days.'],
+  ])('says how long a link of %d days is valid', async (days, sentence) => {
+    sent.length = 0
+    await notifier.sendActivationLink(user, { url: link.url, expiresAt: new Date(Date.now() + days * 86_400_000) })
+    expect(sent[0]!.text).toContain(sentence)
+  })
+
   it('still gives the hours to an activation mail that an installation replaced before the time came in words', async () => {
     const mails: Mail[] = []
     const i18n = createI18n({ overrides: { de: { 'mail.activation.text': 'Ihr Link: {url}\n\nEr gilt {hours} Stunden.' } } })

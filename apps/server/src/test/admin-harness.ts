@@ -26,6 +26,8 @@ const COOKIE_KEYS = ['k'.repeat(40)]
 /** A seeded test database with the whole app (provider, login and admin API) on top of it. */
 export const createAdminHarness = async ({
   selfServiceActivation = true,
+  /** `ACTIVATION_LINK_DAYS` in milliseconds; the seven days of the default if not given. */
+  activationValidityMs = undefined as number | undefined,
   allowPrivateAddresses = false,
   logoutPausesMs = [10, 10],
   /** The address pforte believes it has. A test with a real browser gives the one it listens on. */
@@ -77,6 +79,7 @@ export const createAdminHarness = async ({
       codeSecrets: deriveCodeSecrets(COOKIE_KEYS),
       notifier,
       selfServiceActivation,
+      activationValidityMs,
       cookieKeys: COOKIE_KEYS,
       secure: issuer.startsWith('https:'),
       issuer,
@@ -94,6 +97,7 @@ export const createAdminHarness = async ({
       sendPasswordResetCode,
       limiter,
       allowPrivateAddresses,
+      activationValidityMs,
       clientLogouts,
       codeSecrets: deriveCodeSecrets(COOKIE_KEYS),
     },

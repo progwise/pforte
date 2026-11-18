@@ -82,7 +82,8 @@ What to know:
 ### A new person must be activated
 
 A person you create has the status `created`: they cannot sign in yet. `POST /admin/users/{id}/activate` sends them an e-mail with a
-link, where they choose their password (`{"activation": {"linkSent": true, "expiresAt": "…"}}`; the link is valid for a week, and a new
+link, where they choose their password (`{"activation": {"linkSent": true, "expiresAt": "…"}}`; the link is valid for seven days unless
+[`ACTIVATION_LINK_DAYS`](configuration.md) says otherwise, and a new
 call replaces it). Do it for new people; in the administration the same is the button *Send activation link* on the person's page.
 For a deactivated person who already has a password, the same call makes them active again, without a link.
 

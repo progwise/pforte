@@ -12,11 +12,14 @@ export const bootstrapAdministrator = async ({
   email,
   notifier,
   issuer,
+  activationValidityMs,
 }: {
   db: Database
   email: string
   notifier: Pick<Notifier, 'sendActivationLink'>
   issuer: string
+  /** How long the link works (`ACTIVATION_LINK_DAYS`); seven days if not given. */
+  activationValidityMs?: number
 }) => {
   // The administration is what this account is for: the mail says so, and the page after choosing the password leads there.
   const result = await ensureAdministrator(
@@ -24,7 +27,7 @@ export const bootstrapAdministrator = async ({
     email,
     (user, activation) =>
       notifier.sendActivationLink(user, { url: `${issuer}/activate?token=${encodeURIComponent(activation.token)}`, expiresAt: activation.expiresAt, applicationName: ADMIN_UI_NAME }),
-    { clientId: ADMIN_UI_CLIENT_ID },
+    { clientId: ADMIN_UI_CLIENT_ID, validityMs: activationValidityMs },
   )
   if (result.outcome === 'exists') return undefined
   const sent = result.activation ? ' The link to choose a password was sent to that address.' : ''

@@ -46,6 +46,8 @@ export interface LifecycleDependencies {
   limiter: RateLimiter
   /** The public address of pforte, used to build the activation link. */
   issuer: string
+  /** How long an activation link works; seven days if not given. */
+  activationValidityMs?: number
   /** Tells the applications of a user whose sessions were ended. */
   clientLogouts: ClientLogouts
   /** The secrets that sign one-time codes (see `deriveCodeSecrets`). */
@@ -54,7 +56,7 @@ export interface LifecycleDependencies {
 
 /** Lock, unlock, activate, deactivate, reset the password and end the sessions of a user. */
 export const lifecycleRoutes =
-  ({ db, auth, notifier, sendPasswordResetCode, limiter, issuer, clientLogouts, codeSecrets }: LifecycleDependencies) =>
+  ({ db, auth, notifier, sendPasswordResetCode, limiter, issuer, activationValidityMs, clientLogouts, codeSecrets }: LifecycleDependencies) =>
   async (instance: FastifyInstance) => {
     const app = instance.withTypeProvider<ZodTypeProvider>()
     const onRequest = auth.require('directory', 'admin')
@@ -187,7 +189,7 @@ export const lifecycleRoutes =
           if (clientId && !client) return problem(reply, 400, 'Invalid request', `There is no client "${clientId}".`)
           const result = await db.transaction(async (tx) => {
             const found = await findUserById(tx, request.params.id)
-            return found ? activateUser(tx, requestContext(request), found, { clientId: client?.clientId }) : undefined
+            return found ? activateUser(tx, requestContext(request), found, { clientId: client?.clientId, validityMs: activationValidityMs }) : undefined
           })
           if (!result) return noUser(reply)
 
