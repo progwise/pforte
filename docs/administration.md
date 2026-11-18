@@ -80,6 +80,13 @@ administration ends with the button *Continue to Administration*. A second one, 
   deleting, resetting the password and signing out everywhere end the person's sessions at pforte and tell the applications
   that have a back-channel logout address to end theirs ([signing out](integrating-a-client.md#signing-out)). The last administrator cannot
   be locked, deactivated, deleted or demoted, and nobody can do these to themselves; the page says so.
+- **Where the person is going.** The page that sends the activation link, and the one that resets a password, ask for
+  the **application** the person uses: the applications that have a start address
+  ([registering one](integrating-a-client.md#register-your-application)). The mail with the activation link then names
+  it, and the last page the person sees has a button that leads on to it. With exactly one such application it is
+  chosen already; with several you choose, or leave it at "No application". Without a choice the last page leads on
+  only where there is exactly one application, and otherwise says that the person can sign in now. For somebody who
+  has the admin right the page does not ask: their way leads to the administration.
 - **Signed in** shows the browsers where the person is signed in (with their applications, and whether a code was entered
   or a passkey used)
   and the applications that stay signed in without a browser because they hold a refresh token, such as an app on a phone.

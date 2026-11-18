@@ -77,8 +77,11 @@ export const de: Catalog = {
   'activate.invalidTitle': 'Link ungültig',
   'activate.invalid':
     'Dieser Link ist nicht mehr gültig. Er wurde vielleicht schon verwendet oder ist abgelaufen. Bitten Sie Ihre Administration um einen neuen.',
+  'activate.invalidSelf':
+    'Dieser Link ist nicht mehr gültig. Er wurde vielleicht schon verwendet oder ist abgelaufen. Einen neuen können Sie auf der Seite „Passwort festlegen oder zurücksetzen“ selbst anfordern.',
   'activate.doneTitle': 'Ihr Konto ist aktiv',
   'activate.done': 'Ihr Passwort ist gesetzt. Sie können sich jetzt in der Anwendung anmelden, von der Sie gekommen sind.',
+  'activate.doneNoApplication': 'Ihr Passwort ist gesetzt. Sie können sich jetzt anmelden.',
 
   'reset.title': 'Passwort festlegen oder zurücksetzen',
   'reset.intro': 'Geben Sie Ihre E-Mail-Adresse ein. Wir senden Ihnen einen Code oder einen Link, mit dem Sie ein Passwort wählen.',
@@ -104,6 +107,7 @@ export const de: Catalog = {
   'phone.doneTitle': 'Telefonnummer bestätigt',
   'phone.done':
     'Ihr Konto ist aktiv und Ihre Anmeldecodes kommen per SMS. Sie können sich jetzt in der Anwendung anmelden, von der Sie gekommen sind.',
+  'phone.doneNoApplication': 'Ihr Konto ist aktiv und Ihre Anmeldecodes kommen per SMS. Sie können sich jetzt anmelden.',
 
   'mail.loginCode.subject': 'Ihr Anmeldecode für {organisation}',
   'mail.loginCode.text':

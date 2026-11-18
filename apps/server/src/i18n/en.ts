@@ -80,8 +80,11 @@ export const en = {
   'activate.invalidTitle': 'Link not valid',
   'activate.invalid':
     'This link is not valid any more. It may have been used already or have expired. Ask your administration for a new one.',
+  'activate.invalidSelf':
+    'This link is not valid any more. It may have been used already or have expired. You can ask for a new one yourself on the page "Set or reset your password".',
   'activate.doneTitle': 'Your account is active',
   'activate.done': 'Your password is set. You can now sign in from the application you came from.',
+  'activate.doneNoApplication': 'Your password is set. You can sign in now.',
 
   'reset.title': 'Set or reset your password',
   'reset.intro': 'Enter your e-mail address. We send you a code or a link to choose a password.',
@@ -106,6 +109,7 @@ export const en = {
   'phone.doneTitle': 'Phone number confirmed',
   'phone.done':
     'Your account is active and your sign-in codes will come by SMS. You can now sign in from the application you came from.',
+  'phone.doneNoApplication': 'Your account is active and your sign-in codes will come by SMS. You can sign in now.',
 
   'mail.loginCode.subject': 'Your sign-in code for {organisation}',
   'mail.loginCode.text':

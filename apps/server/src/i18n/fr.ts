@@ -77,8 +77,11 @@ export const fr: Catalog = {
   'activate.invalidTitle': 'Lien non valable',
   'activate.invalid':
     "Ce lien n'est plus valable. Il a peut-être déjà été utilisé ou a expiré. Demandez-en un nouveau à votre administration.",
+  'activate.invalidSelf':
+    "Ce lien n'est plus valable. Il a peut-être déjà été utilisé ou a expiré. Vous pouvez en demander un nouveau vous-même sur la page « Définir ou réinitialiser votre mot de passe ».",
   'activate.doneTitle': 'Votre compte est actif',
   'activate.done': "Votre mot de passe est défini. Vous pouvez maintenant vous connecter depuis l'application d'où vous venez.",
+  'activate.doneNoApplication': 'Votre mot de passe est défini. Vous pouvez maintenant vous connecter.',
 
   'reset.title': 'Définir ou réinitialiser votre mot de passe',
   'reset.intro': 'Saisissez votre adresse e-mail. Nous vous envoyons un code ou un lien pour choisir un mot de passe.',
@@ -105,6 +108,7 @@ export const fr: Catalog = {
   'phone.doneTitle': 'Numéro de téléphone confirmé',
   'phone.done':
     "Votre compte est actif et vos codes de connexion arriveront par SMS. Vous pouvez maintenant vous connecter depuis l'application d'où vous venez.",
+  'phone.doneNoApplication': 'Votre compte est actif et vos codes de connexion arriveront par SMS. Vous pouvez maintenant vous connecter.',
 
   'mail.loginCode.subject': 'Votre code de connexion pour {organisation}',
   'mail.loginCode.text':

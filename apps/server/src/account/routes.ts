@@ -2,7 +2,7 @@ import formbody from '@fastify/formbody'
 import { hash } from '@node-rs/argon2'
 import type { Database } from '@progwise/pforte-db'
 import { checkCode, CODE_LIFETIME_MS, CodeLimitError, issueCode, markEmailVerified } from '@progwise/pforte-db/codes'
-import { closePasskeyOffer, confirmPhone, continuePasskeyOffer, findPasskeyOffer, getClient, LifecycleError, requestActivationLink } from '@progwise/pforte-db/admin'
+import { closePasskeyOffer, confirmPhone, continuePasskeyOffer, findOnlyStartApplication, findPasskeyOffer, getClient, LifecycleError, requestActivationLink } from '@progwise/pforte-db/admin'
 import { findActiveUserById } from '@progwise/pforte-db/oidc'
 import { completeActivation, completePasswordReset, findPendingActivation } from '@progwise/pforte-db/credentials'
 import { findUserByEmail } from '@progwise/pforte-db/users'
@@ -119,19 +119,38 @@ export const accountRoutes =
       return problem && view.t(problem.key, problem.values)
     }
 
-    const invalidLink = (reply: FastifyReply, view: PageSet) =>
-      html(reply, 400, view.notice(view.t('activate.invalidTitle'), view.t('activate.invalid')))
     /**
-     * The button that leads on to the application, if the client is known and has a start address. Only the address
-     * registered for the client is ever linked, never one that came with the request.
+     * A link that was used or has expired. Where people may ask for a link themselves, the page leads to where
+     * they do: the same page gives somebody who has a password already a new one.
      */
-    const continueTo = async (view: PageSet, clientId?: string) => {
-      const client = clientId ? await getClient(db, clientId) : undefined
-      return client?.clientUri ? { href: client.clientUri, label: view.t('continue.button', { name: client.name }) } : undefined
+    const invalidLink = (reply: FastifyReply, view: PageSet) =>
+      html(
+        reply,
+        400,
+        selfServiceActivation
+          ? view.notice(view.t('activate.invalidTitle'), view.t('activate.invalidSelf'), { href: `/reset?lang=${encodeURIComponent(view.language)}`, label: view.t('reset.title') })
+          : view.notice(view.t('activate.invalidTitle'), view.t('activate.invalid')),
+      )
+    /**
+     * Where the last page leads on to. `clientId` is the application the link or the page named: the person is on
+     * their way to it (`named`), and the button leads to its start address if it has one. Where nothing was named,
+     * the button leads to the only application there is, if there is exactly one. Only an address registered for a
+     * client is ever linked, never one that came with the request.
+     */
+    const wayOn = async (view: PageSet, clientId?: string) => {
+      const named = clientId ? await getClient(db, clientId) : undefined
+      const application = named ?? (await findOnlyStartApplication(db))
+      return { named: Boolean(named), action: application?.clientUri ? { href: application.clientUri, label: view.t('continue.button', { name: application.name }) } : undefined }
     }
-    const activeAccount = async (view: PageSet, clientId?: string) =>
-      view.notice(view.t('activate.doneTitle'), view.t('activate.done'), await continueTo(view, clientId))
-    const confirmedPhone = async (view: PageSet, clientId?: string) => view.notice(view.t('phone.doneTitle'), view.t('phone.done'), await continueTo(view, clientId))
+    // Somebody who came by a mail that names no application did not come from one: the text does not say so.
+    const activeAccount = async (view: PageSet, clientId?: string) => {
+      const { named, action } = await wayOn(view, clientId)
+      return view.notice(view.t('activate.doneTitle'), view.t(named ? 'activate.done' : 'activate.doneNoApplication'), action)
+    }
+    const confirmedPhone = async (view: PageSet, clientId?: string) => {
+      const { named, action } = await wayOn(view, clientId)
+      return view.notice(view.t('phone.doneTitle'), view.t(named ? 'phone.done' : 'phone.doneNoApplication'), action)
+    }
 
     /**
      * The activation page. Its script only finds out whether this device can make a passkey, for the offer that may follow.
@@ -413,8 +432,10 @@ export const accountRoutes =
           // Somebody who has no password yet gets a new activation link instead of a code.
           if (user?.status === 'created' && selfServiceActivation) {
             try {
-              // The application the person came from, if it is a registered one: the mail names it and the page ends with a button to it.
-              const client = clientId ? await getClient(db, clientId) : undefined
+              // The application the person came from, if it is a registered one: the mail names it and the page ends
+              // with a button to it. Somebody who came from none keeps the one of the link they had: an administrator
+              // chose it, and asking for a new link, as the page of an expired one says to, must not lose it.
+              const client = (clientId ? await getClient(db, clientId) : undefined) ?? (user.activationClientId ? await getClient(db, user.activationClientId) : undefined)
               const result = await db.transaction((tx) =>
                 requestActivationLink(tx, { actor: { type: 'user', id: user.id }, ...where }, user, { clientId: client?.clientId, validityMs: activationValidityMs }),
               )
@@ -497,6 +518,6 @@ export const accountRoutes =
           else throw error
         }
       })
-      return html(reply, 200, view.notice(view.t('reset.doneTitle'), view.t('reset.done'), await continueTo(view, clientId)))
+      return html(reply, 200, view.notice(view.t('reset.doneTitle'), view.t('reset.done'), (await wayOn(view, clientId)).action))
     })
   }

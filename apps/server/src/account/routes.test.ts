@@ -177,6 +177,77 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
       expect((await form('GET', `/activate?token=${token}`)).statusCode).toBe(400)
     })
 
+    it('leads from a link that was used or has expired to the page where a new one can be asked for', async () => {
+      const { token } = await invited()
+      await form('POST', '/activate', { token, password: GOOD, confirm: GOOD })
+      const BUTTON = '<a class="button" href="/reset?lang=en">Set or reset your password</a>'
+
+      for (const refused of [await form('GET', `/activate?token=${token}`), await form('POST', '/activate', { token, password: GOOD, confirm: GOOD }), await form('GET', '/activate?token=never-sent')]) {
+        expect(refused.statusCode).toBe(400)
+        expect(refused.body).toContain('<h1>Link not valid</h1>')
+        expect(refused.body).toContain('It may have been used already or have expired. You can ask for a new one yourself on the page')
+        expect(refused.body).toContain(BUTTON)
+        expect(refused.body).not.toContain('Ask your administration')
+      }
+      // The page it leads to is in the language of this one.
+      const german = await form('GET', '/activate?token=never-sent&lang=de')
+      expect(german.body).toContain('<a class="button" href="/reset?lang=de">Passwort festlegen oder zurücksetzen</a>')
+      expect((await form('GET', '/reset?lang=de')).body).toContain('<h1>Passwort festlegen oder zurücksetzen</h1>')
+    })
+
+    it('gives somebody whose link has expired a new one from that page', async () => {
+      const expired = await invited()
+      await h.database.pool.query(`update users set activation_expires_at = now() - interval '1 minute' where id = $1`, [expired.id])
+      expect((await form('GET', `/activate?token=${expired.token}`)).body).toContain('href="/reset?lang=en"')
+
+      await form('POST', '/reset', { email: expired.email })
+      await h.settle()
+      const again = tokenOf(h.notifications.findLast((n) => n.kind === 'activation')!.url!)
+      expect(again).not.toBe(expired.token)
+      expect((await form('POST', '/activate', { token: again, password: GOOD, confirm: GOOD })).body).toContain('<h1>Your account is active</h1>')
+    })
+
+    it('keeps the application of the link that expired for the new one, so the person still has a way on', async () => {
+      // Two applications have a start address here: nothing but the link says which one the person is going to.
+      const invite = async (clientId?: string) => {
+        const user = await invited()
+        if (clientId) {
+          await h.api('POST', `/users/${user.id}/activate`, { body: { clientId } })
+          user.token = tokenOf(h.notifications.findLast((n) => n.kind === 'activation')!.url!)
+        }
+        await h.database.pool.query(`update users set activation_expires_at = now() - interval '1 minute' where id = $1`, [user.id])
+        expect((await form('GET', `/activate?token=${user.token}`)).body).toContain('href="/reset?lang=en"')
+        h.notifications.length = 0
+        return user
+      }
+      const askAgain = async (email: string, client_id?: string) => {
+        await h.database.pool.query('delete from rate_limits')
+        await form('POST', '/reset', { email, ...(client_id ? { client_id } : {}) })
+        await h.settle()
+        const mail = h.notifications.findLast((n) => n.kind === 'activation')!
+        return { applicationName: mail.applicationName, done: await form('POST', '/activate', { token: tokenOf(mail.url!), password: GOOD, confirm: GOOD }) }
+      }
+      const WEB_BUTTON = '<a class="button" href="http://localhost:3400/">Continue to Demo web app (public client)</a>'
+
+      // The link named an application, the page of the expired link names none.
+      const named = await invite('demo-web')
+      const kept = await askAgain(named.email)
+      expect(kept.applicationName).toBe('Demo web app (public client)')
+      expect(kept.done.body).toContain(WEB_BUTTON)
+      expect((await h.audit('user.activation.request', named.id)).at(-1).details).toMatchObject({ self: true, clientId: 'demo-web' })
+
+      // Somebody who asks from the sign-in page of another application is on their way to that one.
+      const moved = await askAgain((await invite('demo-web')).email, 'demo-backend')
+      expect(moved.applicationName).toBe('Demo backend (confidential client)')
+      expect(moved.done.body).toContain('Continue to Demo backend (confidential client)')
+
+      // An application that is not registered changes nothing, and a link that named none still names none.
+      expect((await askAgain((await invite('demo-web')).email, 'nobody')).done.body).toContain(WEB_BUTTON)
+      const open = await askAgain((await invite()).email)
+      expect(open.applicationName).toBeUndefined()
+      expect(open.done.body).not.toContain('Continue to')
+    })
+
     it('refuses an expired link, and a link replaced by a newer one', async () => {
       const expired = await invited()
       await h.database.pool.query(`update users set activation_expires_at = now() - interval '1 minute' where id = $1`, [expired.id])
@@ -481,6 +552,110 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
     })
   })
 
+  // Somebody who came by a mail that names no application: an activation link the administration sent without one,
+  // or a reset that did not begin at an application.
+  describe('the way on where no application was named', () => {
+    const CAME_FROM = 'the application you came from'
+    const WEB_BUTTON = '<a class="button" href="http://localhost:3400/">Continue to Demo web app (public client)</a>'
+
+    /** Runs with only these applications having a start address, and puts the others back. */
+    const withStartApplications = async (clientIds: string[], run: () => Promise<void>) => {
+      const { rows } = await h.database.pool.query(`select client_id, client_uri from clients where system = false and client_uri is not null`)
+      await h.database.pool.query(`update clients set client_uri = null where system = false and not (client_id = any($1))`, [clientIds])
+      try {
+        await run()
+      } finally {
+        for (const row of rows) await h.database.pool.query(`update clients set client_uri = $2 where client_id = $1`, [row.client_id, row.client_uri])
+      }
+    }
+    const activate = async (clientId?: string) => {
+      const email = `account${++counter}@example.com`
+      const created = (await h.api('POST', '/users', { body: { email, firstName: 'Ada', lastName: 'Lovelace' } })).json()
+      await h.api('POST', `/users/${created.id}/activate`, { body: clientId ? { clientId } : undefined })
+      const token = tokenOf(h.notifications.findLast((n) => n.kind === 'activation')!.url!)
+      h.notifications.length = 0
+      return { id: created.id as string, email, done: () => form('POST', '/activate', { token, password: GOOD, confirm: GOOD }) }
+    }
+
+    it('leads on to the only application that has a start address, and does not say the person came from it', async () => {
+      await withStartApplications(['demo-web'], async () => {
+        const done = await (await activate()).done()
+        expect(done.statusCode).toBe(200)
+        expect(done.body).toContain('<h1>Your account is active</h1>')
+        expect(done.body).toContain('<p>Your password is set. You can sign in now.</p>')
+        expect(done.body).toContain(WEB_BUTTON)
+        expect(done.body).not.toContain(CAME_FROM)
+      })
+    })
+
+    it('does so after the confirmation of the phone number as well, taken or skipped', async () => {
+      const sms = h.notifier.smsAvailable
+      h.notifier.smsAvailable = true
+      try {
+        await withStartApplications(['demo-web'], async () => {
+          const user = await activate()
+          await h.database.pool.query(`update users set phone = '+4915112345678' where id = $1`, [user.id])
+          const password = await user.done()
+          expect(password.body).toContain('action="/activate/phone"')
+          const cookie = String(password.headers['set-cookie']).split(';')[0]!
+
+          const skipped = await browser().request('POST', '/activate/phone/skip', { headers: { cookie } })
+          expect(skipped.body).toContain('<p>Your password is set. You can sign in now.</p>')
+          expect(skipped.body).toContain(WEB_BUTTON)
+
+          const confirmed = await browser().request('POST', '/activate/phone', { form: { code: h.lastPhoneCode(user.email)! }, headers: { cookie } })
+          expect(confirmed.body).toContain('<h1>Phone number confirmed</h1>')
+          expect(confirmed.body).toContain('<p>Your account is active and your sign-in codes will come by SMS. You can sign in now.</p>')
+          expect(confirmed.body).toContain(WEB_BUTTON)
+          expect(confirmed.body).not.toContain(CAME_FROM)
+        })
+      } finally {
+        h.notifier.smsAvailable = sms
+      }
+    })
+
+    it('does so after a password reset that named no application', async () => {
+      await withStartApplications(['demo-web'], async () => {
+        const user = await activated()
+        await requestReset(user.email)
+        const done = await form('POST', '/reset/code', { email: user.email, code: resetCode(user.email), password: 'a brand new password', confirm: 'a brand new password' })
+        expect(done.body).toContain('<h1>Password changed</h1>')
+        expect(done.body).toContain(WEB_BUTTON)
+      })
+    })
+
+    it('has no button where several applications have a start address, and a text that names none', async () => {
+      const done = await (await activate()).done()
+      expect(done.body).toContain('<p>Your password is set. You can sign in now.</p>')
+      expect(done.body).not.toContain('Continue to')
+      expect(done.body).not.toContain(CAME_FROM)
+    })
+
+    it('has no button where no application has one: the administration and the account pages do not count', async () => {
+      await withStartApplications([], async () => {
+        const own = await h.database.pool.query(`select client_id from clients where system = true and client_uri is not null order by client_id`)
+        expect(own.rows.map((row) => row.client_id)).toEqual(['pforte-account-ui', 'pforte-admin-ui'])
+        const done = await (await activate()).done()
+        expect(done.body).toContain('<p>Your password is set. You can sign in now.</p>')
+        expect(done.body).not.toContain('Continue to')
+      })
+    })
+
+    it('leaves a person who was invited to an application with it: the text says so, and nothing else is offered', async () => {
+      await h.api('POST', '/clients', { body: { clientId: 'quiet-app', name: 'Quiet', type: 'public', redirectUris: ['https://quiet.example.com/cb'] } })
+      await withStartApplications(['demo-web'], async () => {
+        // The application the person was invited to has a start address: the button leads there.
+        const web = await (await activate('demo-web')).done()
+        expect(web.body).toContain(`<p>Your password is set. You can now sign in from ${CAME_FROM}.</p>`)
+        expect(web.body).toContain(WEB_BUTTON)
+        // It has none: there is no button, and not one to another application either.
+        const quiet = await (await activate('quiet-app')).done()
+        expect(quiet.body).toContain(CAME_FROM)
+        expect(quiet.body).not.toContain('Continue to')
+      })
+    })
+  })
+
   describe('forgotten password', () => {
     it('is linked from the login page', async () => {
       const b = browser()
@@ -559,13 +734,15 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
         expect(h.backgroundErrors).toEqual([])
       })
 
-      it('forgets an earlier invitation\'s application when the person asks without one', async () => {
+      // Until 0.3.2 a request without an application forgot the one of the earlier link. The page of an expired
+      // link now sends people here without one, and they would lose what an administrator chose for them.
+      it('keeps the application of the earlier link when the person asks without one', async () => {
         const person = await invited()
         await requestResetFor(person.email, 'demo-web')
         await requestResetFor(person.email)
         const mail = h.notifications.findLast((n) => n.kind === 'activation')!
-        expect(mail.applicationName).toBeUndefined()
-        expect((await form('POST', '/activate', { token: tokenOf(mail.url!), password: GOOD, confirm: GOOD })).body).not.toContain('Continue to')
+        expect(mail.applicationName).toBe('Demo web app (public client)')
+        expect((await form('POST', '/activate', { token: tokenOf(mail.url!), password: GOOD, confirm: GOOD })).body).toContain('Continue to Demo web app (public client)')
       })
 
       it('is recorded as a request of the person themselves, without the link', async () => {
@@ -1050,5 +1227,14 @@ describe.skipIf(!hasDatabase)('activation by request, switched off', () => {
     await h.settle()
     expect(response.statusCode).toBe(200)
     expect(h.notifications).toEqual([])
+  })
+
+  it('sends somebody with a link that was used or has expired to the administration, as nothing else gives them a new one', async () => {
+    const refused = await new Browser(h.app).request('GET', '/activate?token=never-sent')
+    expect(refused.statusCode).toBe(400)
+    expect(refused.body).toContain('<h1>Link not valid</h1>')
+    expect(refused.body).toContain('Ask your administration for a new one.')
+    expect(refused.body).not.toContain('href="/reset')
+    expect(refused.body).not.toContain('class="button"')
   })
 })

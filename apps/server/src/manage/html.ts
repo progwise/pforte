@@ -29,13 +29,14 @@ export const select = (options: {
   label: string
   value?: string
   choices: { value: string; label: string }[]
+  hint?: string
 }) => {
-  const { id, name = id, label, value = '', choices } = options
+  const { id, name = id, label, value = '', choices, hint } = options
   return `<div>
 <label for="${escapeHtml(id)}">${escapeHtml(label)}</label>
 <select id="${escapeHtml(id)}" name="${escapeHtml(name)}">
 ${choices.map((choice) => `<option value="${escapeHtml(choice.value)}"${choice.value === value ? ' selected' : ''}>${escapeHtml(choice.label)}</option>`).join('\n')}
-</select>
+</select>${hint ? `\n<small class="muted">${escapeHtml(hint)}</small>` : ''}
 </div>`
 }
 

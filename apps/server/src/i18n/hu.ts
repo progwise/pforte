@@ -77,8 +77,11 @@ export const hu: Catalog = {
   'activate.invalidTitle': 'Érvénytelen hivatkozás',
   'activate.invalid':
     'Ez a hivatkozás már nem érvényes. Lehet, hogy már felhasználták, vagy lejárt. Kérjen újat az adminisztrációtól.',
+  'activate.invalidSelf':
+    'Ez a hivatkozás már nem érvényes. Lehet, hogy már felhasználták, vagy lejárt. Újat a „Jelszó beállítása vagy visszaállítása” oldalon kérhet.',
   'activate.doneTitle': 'A fiókja aktív',
   'activate.done': 'A jelszava beállítva. Most már bejelentkezhet abból az alkalmazásból, ahonnan érkezett.',
+  'activate.doneNoApplication': 'A jelszava beállítva. Most már bejelentkezhet.',
 
   'reset.title': 'Jelszó beállítása vagy visszaállítása',
   'reset.intro': 'Adja meg az e-mail-címét. Küldünk egy kódot vagy egy hivatkozást, amellyel jelszót választhat.',
@@ -103,6 +106,7 @@ export const hu: Catalog = {
   'phone.doneTitle': 'A telefonszám megerősítve',
   'phone.done':
     'A fiókja aktív, és a bejelentkezési kódok SMS-ben érkeznek. Most már bejelentkezhet abból az alkalmazásból, ahonnan érkezett.',
+  'phone.doneNoApplication': 'A fiókja aktív, és a bejelentkezési kódok SMS-ben érkeznek. Most már bejelentkezhet.',
 
   'mail.loginCode.subject': 'Bejelentkezési kódja: {organisation}',
   'mail.loginCode.text':

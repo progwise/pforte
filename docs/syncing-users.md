@@ -99,7 +99,9 @@ curl -X POST "$PFORTE/admin/users/$ID/activate" -H "authorization: Bearer $TOKEN
 client has a *start address* (see [integrating an application](integrating-a-client.md)). The same button ends a password reset
 that began on the sign-in page of that application, and one that you start: `POST /admin/users/{id}/reset-password` takes the same
 optional `clientId`, and the link in the mail with the code then leads to a page that ends with the button. Without a `clientId`
-nothing changes: the page only says to sign in from the application you came from.
+the page leads on to your application if it is the only one with a start address. With none or several it cannot
+tell, has no button and says that the person can sign in now. In the administration the page that sends the link or
+starts the reset [asks for the application](administration.md#users).
 
 **Rolling out to many people.** Sending thousands of links at once is rarely what you want. There are two ways, and you can mix them:
 
@@ -109,10 +111,17 @@ nothing changes: the page only says to sign in from the application you came fro
   for an address pforte does not know, and a reset code for a person who can sign in. The page answers the same in every case, so
   nobody can find out who has an account. A request counts against the same limits as a reset code, and is recorded in the audit
   log as `user.activation.request` (done by the person themselves). It never reaches a locked or deactivated person. When the person
-  came from the sign-in page of an application, the mail names it and the last page leads on to its start address, as with `clientId` above.
+  came from the sign-in page of an application, the mail names it and the last page leads on to its start address, as with `clientId` above. Somebody who asks without
+  coming from an application keeps the application of the link they had, so a link you sent with a `clientId` is replaced by one
+  that names the same application.
 
 If people may only come in when you invite them (a staged roll-out), set `SELF_SERVICE_ACTIVATION=false` (see the
 [configuration](configuration.md)): the page then sends nothing to somebody without a password.
+
+**A link that was used or has expired** opens a page that says so. It leads to *Set or reset your password*, where the
+person asks for a new link themselves, or resets the password they have chosen meanwhile. With
+`SELF_SERVICE_ACTIVATION=false` that page would send them nothing, so the text asks them to turn to the administration
+and there is no button.
 
 ## People who are no longer in the source
 
