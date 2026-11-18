@@ -207,6 +207,47 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
       expect((await form('POST', '/activate', { token: again, password: GOOD, confirm: GOOD })).body).toContain('<h1>Your account is active</h1>')
     })
 
+    it('keeps the application of the link that expired for the new one, so the person still has a way on', async () => {
+      // Two applications have a start address here: nothing but the link says which one the person is going to.
+      const invite = async (clientId?: string) => {
+        const user = await invited()
+        if (clientId) {
+          await h.api('POST', `/users/${user.id}/activate`, { body: { clientId } })
+          user.token = tokenOf(h.notifications.findLast((n) => n.kind === 'activation')!.url!)
+        }
+        await h.database.pool.query(`update users set activation_expires_at = now() - interval '1 minute' where id = $1`, [user.id])
+        expect((await form('GET', `/activate?token=${user.token}`)).body).toContain('href="/reset?lang=en"')
+        h.notifications.length = 0
+        return user
+      }
+      const askAgain = async (email: string, client_id?: string) => {
+        await h.database.pool.query('delete from rate_limits')
+        await form('POST', '/reset', { email, ...(client_id ? { client_id } : {}) })
+        await h.settle()
+        const mail = h.notifications.findLast((n) => n.kind === 'activation')!
+        return { applicationName: mail.applicationName, done: await form('POST', '/activate', { token: tokenOf(mail.url!), password: GOOD, confirm: GOOD }) }
+      }
+      const WEB_BUTTON = '<a class="button" href="http://localhost:3400/">Continue to Demo web app (public client)</a>'
+
+      // The link named an application, the page of the expired link names none.
+      const named = await invite('demo-web')
+      const kept = await askAgain(named.email)
+      expect(kept.applicationName).toBe('Demo web app (public client)')
+      expect(kept.done.body).toContain(WEB_BUTTON)
+      expect((await h.audit('user.activation.request', named.id)).at(-1).details).toMatchObject({ self: true, clientId: 'demo-web' })
+
+      // Somebody who asks from the sign-in page of another application is on their way to that one.
+      const moved = await askAgain((await invite('demo-web')).email, 'demo-backend')
+      expect(moved.applicationName).toBe('Demo backend (confidential client)')
+      expect(moved.done.body).toContain('Continue to Demo backend (confidential client)')
+
+      // An application that is not registered changes nothing, and a link that named none still names none.
+      expect((await askAgain((await invite('demo-web')).email, 'nobody')).done.body).toContain(WEB_BUTTON)
+      const open = await askAgain((await invite()).email)
+      expect(open.applicationName).toBeUndefined()
+      expect(open.done.body).not.toContain('Continue to')
+    })
+
     it('refuses an expired link, and a link replaced by a newer one', async () => {
       const expired = await invited()
       await h.database.pool.query(`update users set activation_expires_at = now() - interval '1 minute' where id = $1`, [expired.id])
@@ -693,13 +734,15 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
         expect(h.backgroundErrors).toEqual([])
       })
 
-      it('forgets an earlier invitation\'s application when the person asks without one', async () => {
+      // Until 0.3.2 a request without an application forgot the one of the earlier link. The page of an expired
+      // link now sends people here without one, and they would lose what an administrator chose for them.
+      it('keeps the application of the earlier link when the person asks without one', async () => {
         const person = await invited()
         await requestResetFor(person.email, 'demo-web')
         await requestResetFor(person.email)
         const mail = h.notifications.findLast((n) => n.kind === 'activation')!
-        expect(mail.applicationName).toBeUndefined()
-        expect((await form('POST', '/activate', { token: tokenOf(mail.url!), password: GOOD, confirm: GOOD })).body).not.toContain('Continue to')
+        expect(mail.applicationName).toBe('Demo web app (public client)')
+        expect((await form('POST', '/activate', { token: tokenOf(mail.url!), password: GOOD, confirm: GOOD })).body).toContain('Continue to Demo web app (public client)')
       })
 
       it('is recorded as a request of the person themselves, without the link', async () => {

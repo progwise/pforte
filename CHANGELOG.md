@@ -77,7 +77,8 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
     "You can sign in now" and no longer speaks of an application the person came from.
   - **A link that was used or has expired leads on as well.** Its page said "Ask your administration for a new one"
     and had nothing to press. It now leads to "Set or reset your password", where the person asks for a new link
-    themselves. With `SELF_SERVICE_ACTIVATION=false` it stays as it was.
+    themselves. The new link keeps the application of the one it replaces. With `SELF_SERVICE_ACTIVATION=false` the
+    page stays as it was.
 
   **Nothing needs doing.** To have the button, give your application a start address. New texts, for an
   installation with a `locales` folder: `activate.doneNoApplication`, `phone.doneNoApplication` and

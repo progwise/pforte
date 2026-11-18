@@ -432,8 +432,10 @@ export const accountRoutes =
           // Somebody who has no password yet gets a new activation link instead of a code.
           if (user?.status === 'created' && selfServiceActivation) {
             try {
-              // The application the person came from, if it is a registered one: the mail names it and the page ends with a button to it.
-              const client = clientId ? await getClient(db, clientId) : undefined
+              // The application the person came from, if it is a registered one: the mail names it and the page ends
+              // with a button to it. Somebody who came from none keeps the one of the link they had: an administrator
+              // chose it, and asking for a new link, as the page of an expired one says to, must not lose it.
+              const client = (clientId ? await getClient(db, clientId) : undefined) ?? (user.activationClientId ? await getClient(db, user.activationClientId) : undefined)
               const result = await db.transaction((tx) =>
                 requestActivationLink(tx, { actor: { type: 'user', id: user.id }, ...where }, user, { clientId: client?.clientId, validityMs: activationValidityMs }),
               )
