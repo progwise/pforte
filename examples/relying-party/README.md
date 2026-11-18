@@ -37,6 +37,7 @@ with the redirect `http://localhost:3400/callback`.
 | `ISSUER` | `http://localhost:3300` | Where pforte runs |
 | `CLIENT_ID` | `demo-web` | The client registered in pforte |
 | `PORT` | `3400` | Port of this application |
+| `UI_LOCALES` | none | The language the application asks pforte's pages to be in, for example `de` or `fr hu`. Sent as `ui_locales` with the sign-in and with the sign-out. Without it pforte chooses by the person and the browser |
 | `BASE_URL` | `http://localhost:<PORT>` | The address people reach it under, if that is not where it listens (behind a proxy). The redirect URI of the client registration is `<BASE_URL>/callback` |
 
 `demo-web` is a public client (no secret). Plain `http` for the issuer is accepted only for

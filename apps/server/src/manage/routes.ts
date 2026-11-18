@@ -2,6 +2,7 @@ import formbody from '@fastify/formbody'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import type { MessageKey, Values } from '../i18n/index.js'
 import { sign } from '../interaction/signed-cookie.js'
+import { createLogoutLanguage } from '../oidc/logout-language.js'
 import { safeNext } from '../own-login/oidc.js'
 import { createOwnSignIn } from '../own-login/sign-in.js'
 import { refuseForeignPosts } from '../security/origin-check.js'
@@ -32,6 +33,7 @@ export const manageRoutes =
     const ctx = createManageContext(app, dependencies)
     const { acceptedLanguages, viewFor, cookie, sessionOf, requireSession, page } = ctx
     const callApi = ctx.callApi
+    const logoutLanguage = createLogoutLanguage({ cookieKeys, secure: issuer.startsWith('https:') })
 
     app.addHook(
       'onRequest',
@@ -41,16 +43,18 @@ export const manageRoutes =
       }),
     )
 
-    /** A page for somebody who has no session: what the sign-in or the sign-out came to, and the button that leads on. */
+    /**
+     * A page for somebody who has no session: what the sign-in or the sign-out came to, and the button that leads on.
+     * In the browser's language, unless the way here left one behind (`language`).
+     */
     const publicPage = (
       request: FastifyRequest,
       titleKey: MessageKey,
       textKey: MessageKey,
-      values?: Values,
-      action: { href: string; label: MessageKey } = { href: `${MANAGE_PATH}/login`, label: 'manage.signIn' },
+      { values, action = { href: `${MANAGE_PATH}/login`, label: 'manage.signIn' }, language }: { values?: Values; action?: { href: string; label: MessageKey }; language?: string } = {},
     ) => {
-      const { view, t } = viewFor(request)
-      return view.notice(t(titleKey), t(textKey, values), { href: action.href, label: t(action.label) })
+      const view = ui.pages.for(ui.i18n.pick(language, acceptedLanguages(request)))
+      return view.notice(view.t(titleKey), view.t(textKey, values), { href: action.href, label: view.t(action.label) })
     }
 
     // --- Signing in: pforte's own login, as any application, and always with the second factor
@@ -81,7 +85,7 @@ export const manageRoutes =
           .type('text/html')
           .header('Set-Cookie', signIn.clearCookie())
           .send(
-            publicPage(request, 'manage.notAdmin.title', 'manage.notAdmin.text', { name: claims.name ?? claims.email ?? '' }, { href: `${MANAGE_PATH}/login?${other}`, label: 'manage.notAdmin.other' }),
+            publicPage(request, 'manage.notAdmin.title', 'manage.notAdmin.text', { values: { name: claims.name ?? claims.email ?? '' }, action: { href: `${MANAGE_PATH}/login?${other}`, label: 'manage.notAdmin.other' } }),
           )
       }
       if (who.statusCode !== 200) return failed(request, reply, 502)
@@ -112,8 +116,13 @@ export const manageRoutes =
     })
 
     // Only says so. The cookie was removed by the POST above, which another site cannot send; a page that removed
-    // it too would let any link on any site end the session.
-    app.get(`${MANAGE_PATH}/signed-out`, async (request, reply) => reply.type('text/html').send(publicPage(request, 'manage.signedOut.title', 'manage.signedOut.text')))
+    // it too would let any link on any site end the session. In the language of the question pforte asked on the
+    // way here, which was the administrator's own.
+    app.get(`${MANAGE_PATH}/signed-out`, async (request, reply) => {
+      const language = logoutLanguage.read(request.headers.cookie)
+      if (language) reply.header('Set-Cookie', logoutLanguage.forget())
+      return reply.type('text/html').send(publicPage(request, 'manage.signedOut.title', 'manage.signedOut.text', { language }))
+    })
 
     // --- Start page
 

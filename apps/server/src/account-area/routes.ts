@@ -11,6 +11,7 @@ import { parseAcceptLanguage } from '../i18n/index.js'
 import type { MessageKey, Translate, Values } from '../i18n/index.js'
 import type { Notifier } from '../notifications/notifier.js'
 import type { ClientLogouts } from '../oidc/client-logouts.js'
+import { createLogoutLanguage } from '../oidc/logout-language.js'
 import { createFlash, type Flash } from '../own-login/flash.js'
 import { safeNext } from '../own-login/oidc.js'
 import { createOwnSignIn } from '../own-login/sign-in.js'
@@ -68,6 +69,7 @@ export const accountAreaRoutes =
 
     const secure = issuer.startsWith('https:')
     const gate = createAccountGate({ db, cookieKeys, secure })
+    const logoutLanguage = createLogoutLanguage({ cookieKeys, secure })
     const acceptedLanguages = (request: FastifyRequest) => parseAcceptLanguage(request.headers['accept-language'])
     /** The pages in the person's own language once we know who they are, in the browser's before that. */
     const viewFor = (request: FastifyRequest, user?: Pick<AccountUser, 'language'>) => {
@@ -90,12 +92,14 @@ export const accountAreaRoutes =
 
     /**
      * A page for somebody who has no session: what the sign-in or the sign-out came to. A message the last action
-     * left ("you were signed out everywhere") takes the place of the usual text.
+     * left ("you were signed out everywhere") takes the place of the usual text. `language` is the one the way here
+     * left behind, where there is one.
      */
-    const publicPage = (request: FastifyRequest, reply: FastifyReply, titleKey: MessageKey, textKey: MessageKey) => {
+    const publicPage = (request: FastifyRequest, reply: FastifyReply, titleKey: MessageKey, textKey: MessageKey, language?: string) => {
       const message = flash.take(request, reply, cookieKeys, secure)
       // Whoever was just signed out everywhere is still read to in their own language.
-      const { view, t } = viewFor(request, message?.language ? { language: message.language } : undefined)
+      const own = message?.language ?? language
+      const { view, t } = viewFor(request, own ? { language: own } : undefined)
       return view.notice(t(titleKey), message ? flashText(t, message) : t(textKey), { href: `${ACCOUNT_PATH}/login`, label: t('account.signIn') })
     }
 
@@ -199,8 +203,14 @@ export const accountAreaRoutes =
     })
 
     // Only says so. The cookie was removed by the POST above, which another site cannot send; a page that removed
-    // it too would let any link on any site end the session.
-    app.get(`${ACCOUNT_PATH}/signed-out`, async (request, reply) => reply.type('text/html').send(publicPage(request, reply, 'account.signedOut.title', 'account.signedOut.text')))
+    // it too would let any link on any site end the session. In the language of the question pforte asked on the
+    // way here, which was the person's own.
+    app.get(`${ACCOUNT_PATH}/signed-out`, async (request, reply) => {
+      const language = logoutLanguage.read(request.headers.cookie)
+      const page = publicPage(request, reply, 'account.signedOut.title', 'account.signedOut.text', language)
+      if (language) reply.header('Set-Cookie', logoutLanguage.forget())
+      return reply.type('text/html').send(page)
+    })
 
     // --- Start page: who am I, read-only. The organisation owns these details, so nothing here changes them. The one
     // thing a person can do is confirm the phone number that is stored, so that codes go to it.

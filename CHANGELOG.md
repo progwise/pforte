@@ -18,6 +18,19 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
 
 ### Fixed
 
+- **The sign-out pages speak the language of the application and of the person.** The question "Sign out
+  completely?" and the page after it followed the browser's language alone: a person who used an application in
+  German on a phone set to English got them in English. They now choose their language as the sign-in pages do:
+  `ui_locales` of the end-session request, else the language of the person who is signed in or whom the
+  `id_token_hint` names, else the browser's, else `DEFAULT_LANGUAGE`. The page after the question is in the language
+  of the question, also where it is the "signed out" page of the account pages or of the administration. **Every
+  application gets the person's language without a change; one that has a language setting of its own should send
+  `ui_locales` with the end-session request, as with the authorization request.** One thing to know: a person whose
+  language was never set has `en`, so their sign-out pages are now English whatever the browser says, as the code
+  page of their sign-in already is. New: the cookie `pforte_logout_language`, which carries the language from the
+  question to the page after it for at most ten minutes. The example application takes `UI_LOCALES` to try the
+  parameter ([which language is used](docs/branding-and-languages.md#which-language-is-used),
+  [signing out](docs/integrating-a-client.md#signing-out), [#90](https://github.com/progwise/pforte/issues/90)).
 - **The activation mail says "7 days", not "168 hours".** The two activation mails stated how long the link is valid as
   a number of hours. They now say it as a person would, in English, German, French and Hungarian: "7 days", "7 Tage",
   "7 jours", "7 napig". The same wording, with a singular, is used wherever pforte states a time in a sentence: the

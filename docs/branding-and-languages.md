@@ -112,13 +112,21 @@ For the pages a person sees, in this order:
 
 1. **`ui_locales`** of the authorization request, if the application sends it. This is the standard OpenID
    Connect parameter: a space-separated list, most preferred first, e.g. `ui_locales=fr hu`. An application
-   that has its own language setting should pass it, so the sign-in pages match the app.
+   that has its own language setting should pass it, so the sign-in pages match the app. The end-session
+   request takes it too, for the pages of a sign-out.
 2. **The user's own language** (`language` of the user: `de`, `fr`, …), once pforte knows who is signing in,
-   that is from the code page on.
+   that is from the code page on. At a sign-out it is the person who is signed in, or the one the
+   `id_token_hint` names.
 3. **The browser's language** (`Accept-Language`).
 4. **The default language** (`DEFAULT_LANGUAGE`, `en` if not set).
 
 A region does not matter: `fr-CH` is French. A language pforte has no texts for is skipped.
+
+The pages of a sign-out are one language from the question ("Sign out completely?") to the page that says how it
+ended, also where that page is the "signed out" page of the [account pages](account.md) or of the
+[administration](administration.md). The request that reaches that last page says nothing about the sign-out, and the
+person may be signed out by then, so the language of the question travels in a cookie
+([`pforte_logout_language`](security.md#cookies)).
 
 Two things work differently on purpose:
 
