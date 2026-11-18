@@ -1,4 +1,4 @@
-import { asc, eq, sql } from 'drizzle-orm'
+import { and, asc, eq, isNotNull, sql } from 'drizzle-orm'
 import { type DatabaseOrTransaction, recordAuditEvent } from '../audit.js'
 import { clientClaimTypes, clients, oidcPayloads } from '../schema/index.js'
 import { AdminError, type Problem } from './errors.js'
@@ -143,6 +143,21 @@ export const listClients = async (db: DatabaseOrTransaction) => {
 export const getClient = async (db: DatabaseOrTransaction, clientId: string) => {
   const [client] = await db.select().from(clients).where(eq(clients.clientId, clientId))
   return client
+}
+
+/**
+ * The application a person is sent on to where nothing says which: the only one an administrator registered that
+ * has a start address. With none or several there is no telling, and the answer is nothing. pforte's own clients,
+ * the account pages and the administration, have a start address too and do not count: they are not where somebody
+ * who activates an account is going.
+ */
+export const findOnlyStartApplication = async (db: DatabaseOrTransaction) => {
+  const applications = await db
+    .select()
+    .from(clients)
+    .where(and(eq(clients.system, false), isNotNull(clients.clientUri)))
+    .limit(2)
+  return applications.length === 1 ? applications[0] : undefined
 }
 
 /** Refuses to change a client that pforte registered itself. */

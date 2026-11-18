@@ -64,6 +64,29 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   question to the page after it for at most ten minutes. The example application takes `UI_LOCALES` to try the
   parameter ([which language is used](docs/branding-and-languages.md#which-language-is-used),
   [signing out](docs/integrating-a-client.md#signing-out), [#90](https://github.com/progwise/pforte/issues/90)).
+- **An activation link sent from the administration ends with a way to the application.** A person who got their
+  link from an administrator chose a password and ended on a page that said to sign in "from the application you
+  came from", with nothing to press: the administration passed an application on only for an administrator. Three
+  things changed:
+  - **The administrator chooses.** The page that sends an activation link, and the one that resets a password, offer
+    the applications that have a start address. With exactly one it is chosen already. The mail names the
+    application and the last page has the button that leads on to it.
+  - **A link that names no application falls back to the only one.** Where exactly one application has a start
+    address, the last page of an activation and of a password reset leads on to it, whoever asked for the link. The
+    administration and the account pages do not count. With none or several there is no button, and the page says
+    "You can sign in now" and no longer speaks of an application the person came from.
+  - **A link that was used or has expired leads on as well.** Its page said "Ask your administration for a new one"
+    and had nothing to press. It now leads to "Set or reset your password", where the person asks for a new link
+    themselves. With `SELF_SERVICE_ACTIVATION=false` it stays as it was.
+
+  **Nothing needs doing.** To have the button, give your application a start address. New texts, for an
+  installation with a `locales` folder: `activate.doneNoApplication`, `phone.doneNoApplication` and
+  `activate.invalidSelf` on the pages, and `manage.confirm.application`, `manage.confirm.application.none`,
+  `manage.confirm.activate.application` and `manage.confirm.resetPassword.application` in the administration. An
+  installation that replaced `activate.done`, `phone.done` or `activate.invalid` sees the built-in text of the new
+  one in the cases above until it replaces that too
+  ([the administration](docs/administration.md#users),
+  [activation](docs/syncing-users.md#a-new-person-must-be-activated), [#91](https://github.com/progwise/pforte/issues/91)).
 - **The bar of the account pages and of the administration is one line on a phone held sideways too.** The one-line
   bar, with the sections as a menu that opens, ended at 640 pixels. A phone held sideways and a tablet held upright are
   wider, so they got the bar of a desk, which wrapped into three rows there and took half of a low screen. The bar is

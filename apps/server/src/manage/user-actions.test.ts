@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { type AdminHarness, createAdminHarness } from '../test/admin-harness.js'
 import { Browser } from '../test/browser.js'
 import { signedInToManage } from '../test/manage-session.js'
+import { NotifierUnavailableError } from '../notifications/notifier.js'
 
 describe.skipIf(!hasDatabase)('the administration: actions on a user', () => {
   let h: AdminHarness
@@ -113,7 +114,7 @@ describe.skipIf(!hasDatabase)('the administration: actions on a user', () => {
       return { page: chosen.body, applicationName }
     }
 
-    // somebody who is no administrator: the administration does not know which application they are going to
+    // somebody who is no administrator, and no application chosen for them: nothing says where they are going
     const person = await invite()
     expect(person.applicationName).toBeUndefined()
     expect(person.page).not.toContain('Continue to')
@@ -154,7 +155,7 @@ describe.skipIf(!hasDatabase)('the administration: actions on a user', () => {
       return { form: page.body, page: chosen.body, clientId }
     }
 
-    // somebody who is no administrator: the administration does not know which application they are going to
+    // somebody who is no administrator, and no application chosen for them: nothing says where they are going
     const person = await reset()
     expect(person.clientId).toBeNull()
     expect(person.page).not.toContain('Continue to')
@@ -165,6 +166,141 @@ describe.skipIf(!hasDatabase)('the administration: actions on a user', () => {
     // The page from the link hands the client on with the form, as the page of "Forgot your password?" does.
     expect(administrator.form).toContain('<input type="hidden" name="client_id" value="pforte-admin-ui">')
     expect(administrator.page).toContain('<a class="button" href="https://localhost:3300/manage">Continue to Administration</a>')
+  })
+
+  describe('the application a person is sent on to', () => {
+    const SELECT = /<select id="clientId" name="clientId">\n([\s\S]*?)\n<\/select>/
+    const optionsOf = (html: string) => SELECT.exec(html)?.[1]?.split('\n')
+    const NONE = '<option value="">No application</option>'
+    const BACKEND = '<option value="demo-backend">Demo backend (confidential client)</option>'
+    const WEB = '<option value="demo-web">Demo web app (public client)</option>'
+    const selected = (option: string) => option.replace('">', '" selected>')
+    const created = () => h.database.pool.query(`update users set status = 'created', password_hash = null where id = $1`, [benId])
+    /** Runs with only these applications having a start address, and puts the others back. */
+    const withStartApplications = async (clientIds: string[], run: () => Promise<void>) => {
+      const { rows } = await h.database.pool.query(`select client_id, client_uri from clients where system = false and client_uri is not null`)
+      await h.database.pool.query(`update clients set client_uri = null where system = false and not (client_id = any($1))`, [clientIds])
+      try {
+        await run()
+      } finally {
+        for (const row of rows) await h.database.pool.query(`update clients set client_uri = $2 where client_id = $1`, [row.client_id, row.client_uri])
+      }
+    }
+    /** What the person gets and ends on: the mail, and the page after choosing the password. */
+    const activation = async () => {
+      const { url, applicationName } = h.notifications.findLast((n) => n.kind === 'activation')!
+      const page = await new Browser(h.app).request('POST', '/activate', {
+        form: { token: new URL(url!).searchParams.get('token')!, password: 'a long enough passphrase', confirm: 'a long enough passphrase' },
+      })
+      expect(page.statusCode, page.body).toBe(200)
+      return { applicationName, page: page.body }
+    }
+
+    it('is asked for with an activation link: the applications that have a start address, and none chosen where there are several', async () => {
+      await created()
+      const page = plain((await get(`/manage/users/${benId}/activate`)).body)
+      expect(page).toContain('<label for="clientId">Application</label>')
+      // Not the administration and the account pages, which have a start address too, nor a client without one.
+      expect(optionsOf(page)).toEqual([selected(NONE), BACKEND, WEB])
+      expect(page).toContain('<small class="muted">The e-mail names the application, and the page after choosing the password leads on to it.</small>')
+    })
+
+    it('is asked for with a password reset as well, in its own words', async () => {
+      const page = plain((await get(`/manage/users/${benId}/reset-password`)).body)
+      expect(optionsOf(page)).toEqual([selected(NONE), BACKEND, WEB])
+      expect(page).toContain('<small class="muted">The page after choosing the new password leads on to the application.</small>')
+    })
+
+    it('is chosen already where there is exactly one, and can still be taken away', async () => {
+      await created()
+      await withStartApplications(['demo-web'], async () => {
+        expect(optionsOf(plain((await get(`/manage/users/${benId}/activate`)).body))).toEqual([NONE, selected(WEB)])
+      })
+    })
+
+    it('is not asked for where no application has a start address', async () => {
+      await created()
+      await withStartApplications([], async () => {
+        const page = plain((await get(`/manage/users/${benId}/activate`)).body)
+        expect(page).toContain('Send the activation link to Ben Keller?')
+        expect(page).not.toContain('<select')
+      })
+    })
+
+    it('is not asked for where the link leads to the administration, nor where nothing leads anywhere', async () => {
+      await created()
+      await h.database.pool.query(`update users set is_admin = true where id = $1`, [benId])
+      expect((await get(`/manage/users/${benId}/activate`)).body).not.toContain('<select')
+      await h.database.pool.query(`update users set is_admin = false, status = 'active', password_hash = 'x' where id = $1`, [benId])
+      for (const action of ['lock', 'deactivate', 'end-sessions', 'delete']) expect((await get(`/manage/users/${benId}/${action}`)).body, action).not.toContain('<select')
+    })
+
+    it('goes into the activation link: the mail names the application and the page at the end leads on to it', async () => {
+      await created()
+      await follow(await post(`/manage/users/${benId}/activate`, { clientId: 'demo-web' }))
+      const { applicationName, page } = await activation()
+      expect(applicationName).toBe('Demo web app (public client)')
+      expect(page).toContain('<a class="button" href="http://localhost:3400/">Continue to Demo web app (public client)</a>')
+      expect((await h.audit('user.activate', benId)).at(-1).details).toMatchObject({ clientId: 'demo-web' })
+    })
+
+    it('can be left open: the mail names nothing, and the page at the end leads on only where there is one application', async () => {
+      await created()
+      await follow(await post(`/manage/users/${benId}/activate`, { clientId: '' }))
+      const several = await activation()
+      expect(several.applicationName).toBeUndefined()
+      expect(several.page).toContain('<p>Your password is set. You can sign in now.</p>')
+      expect(several.page).not.toContain('Continue to')
+
+      await created()
+      await withStartApplications(['demo-web'], async () => {
+        await follow(await post(`/manage/users/${benId}/activate`, { clientId: '' }))
+        const one = await activation()
+        expect(one.applicationName).toBeUndefined()
+        expect(one.page).toContain('<a class="button" href="http://localhost:3400/">Continue to Demo web app (public client)</a>')
+      })
+    })
+
+    it('goes into the link of a password reset, and the page after the new password leads on to it', async () => {
+      await follow(await post(`/manage/users/${benId}/reset-password`, { clientId: 'demo-web' }))
+      const { url, code } = h.notifications.findLast((n) => n.kind === 'reset-code')!
+      expect(new URL(url!).searchParams.get('client_id')).toBe('demo-web')
+      const chosen = await new Browser(h.app).request('POST', '/reset/code', {
+        form: { email: 'ben.keller@example.com', code: code!, password: 'a long enough passphrase', confirm: 'a long enough passphrase', client_id: 'demo-web' },
+      })
+      expect(chosen.body).toContain('<a class="button" href="http://localhost:3400/">Continue to Demo web app (public client)</a>')
+    })
+
+    it('says so and sends nothing where the application does not exist', async () => {
+      await created()
+      const refused = await post(`/manage/users/${benId}/activate`, { clientId: 'nothing-here' })
+      expect(refused.statusCode).toBe(400)
+      expect(refused.body).toContain('There is no client &quot;nothing-here&quot;.')
+      // What was sent is not among the choices, so none is marked: the browser shows the first, "No application".
+      expect(optionsOf(plain(refused.body))).toEqual([NONE, BACKEND, WEB])
+      expect(h.notifications.filter((n) => n.kind === 'activation')).toEqual([])
+    })
+
+    it('keeps what was chosen where the mail could not be sent, so that it need not be chosen again', async () => {
+      await created()
+      h.notifier.failWith = new NotifierUnavailableError('the mail server is down')
+      try {
+        const failed = await post(`/manage/users/${benId}/activate`, { clientId: 'demo-web' })
+        expect(failed.statusCode).toBeGreaterThanOrEqual(500)
+        expect(optionsOf(plain(failed.body))).toEqual([NONE, BACKEND, selected(WEB)])
+      } finally {
+        h.notifier.failWith = undefined
+      }
+    })
+
+    it('stays the administration for an administrator, whatever the form says', async () => {
+      await created()
+      await h.database.pool.query(`update users set is_admin = true where id = $1`, [benId])
+      await follow(await post(`/manage/users/${benId}/activate`, { clientId: 'demo-web' }))
+      const { applicationName, page } = await activation()
+      expect(applicationName).toBe('Administration')
+      expect(page).toContain('<a class="button" href="https://localhost:3300/manage">Continue to Administration</a>')
+    })
   })
 
   it('signs out everywhere and says how much ended', async () => {

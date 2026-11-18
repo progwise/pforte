@@ -3,7 +3,7 @@ import type { MessageKey } from '../i18n/index.js'
 import { escapeHtml } from '../ui/pages.js'
 import { ADMIN_UI_CLIENT_ID, MANAGE_PATH } from './constants.js'
 import type { ManageContext, ManageSession } from './context.js'
-import { badge, field, link } from './html.js'
+import { badge, field, link, select } from './html.js'
 
 const BASE = `${MANAGE_PATH}/users`
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -36,6 +36,12 @@ const isAction = (name: string): name is ActionName => Object.hasOwn(ACTIONS, na
 const DANGEROUS: readonly ActionName[] = ['deactivate', 'delete', 'lock']
 /** The calls of the API that end on a page of pforte, which can lead on to an application (`clientId`). */
 const LEADS_ON: ReadonlySet<string> = new Set(['activate', 'reset-password'])
+/**
+ * The actions for which the administrator says where the person is going: the mail and the page at the end have
+ * nothing else to go by. The text below the choice says what it does.
+ */
+const ASKS_APPLICATION = { activate: 'manage.confirm.activate.application', 'reset-password': 'manage.confirm.resetPassword.application' } as const satisfies Partial<Record<ActionName, MessageKey>>
+const asksApplication = (name: ActionName, user: ActionUser): name is keyof typeof ASKS_APPLICATION => Object.hasOwn(ASKS_APPLICATION, name) && !user.isAdmin
 
 /** `camelCase` of an action name, for the text keys: `reset-password` is `resetPassword`. */
 const textKey = (name: ActionName) => name.replace(/-(\w)/g, (_, letter: string) => letter.toUpperCase())
@@ -63,17 +69,48 @@ export const registerUserActions = (app: FastifyInstance, ctx: ManageContext) =>
       )
   }
 
-  const confirmation = (request: FastifyRequest, reply: FastifyReply, session: ManageSession, user: ActionUser, name: ActionName, problem?: { status: number; text: string; typed?: string }) => {
+  /**
+   * The applications an administrator can send a person on to: registered ones with a start address. The
+   * administration and the account pages have one too and are not offered: nobody is invited to them.
+   */
+  const startApplications = async (request: FastifyRequest, session: ManageSession) => {
+    const response = await api(request, session, { method: 'GET', url: '/clients' })
+    if (response.statusCode !== 200) return []
+    return (response.json().items as { clientId: string; name: string; clientUri: string | null; system: boolean }[]).filter((client) => client.clientUri && !client.system)
+  }
+
+  const confirmation = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+    session: ManageSession,
+    user: ActionUser,
+    name: ActionName,
+    problem?: { status: number; text: string; typed?: string; clientId?: string },
+  ) => {
     const { t } = viewFor(request, session)
     const key = textKey(name)
     const values = { name: fullName(user), email: user.email, status: t(`manage.status.${user.status}`) }
     const possible = (ACTIONS[name].from as readonly Status[]).includes(user.status)
     const title = t(`manage.confirm.${key}.title` as MessageKey, values)
 
+    // With exactly one application it is chosen already, and the administrator may still take it away. With
+    // several none is: the administration does not know which.
+    const applications = possible && asksApplication(name, user) ? await startApplications(request, session) : []
+    const application =
+      applications.length > 0 && asksApplication(name, user)
+        ? select({
+            id: 'clientId',
+            label: t('manage.confirm.application'),
+            value: problem ? (problem.clientId ?? '') : applications.length === 1 ? applications[0]!.clientId : '',
+            choices: [{ value: '', label: t('manage.confirm.application.none') }, ...applications.map((client) => ({ value: client.clientId, label: client.name }))],
+            hint: t(ASKS_APPLICATION[name], values),
+          })
+        : ''
+
     const body = possible
       ? `<p>${escapeHtml(t(`manage.confirm.${key}.text` as MessageKey, values))}</p>
 <form class="fields" method="post" action="${BASE}/${user.id}/${name}">
-${name === 'delete' ? field({ id: 'confirmEmail', type: 'email', label: t('manage.confirm.delete.type', values), value: problem?.typed ?? '', required: true }) : ''}
+${name === 'delete' ? field({ id: 'confirmEmail', type: 'email', label: t('manage.confirm.delete.type', values), value: problem?.typed ?? '', required: true }) : application}
 <div class="submit"><button type="submit">${escapeHtml(t(ACTIONS[name].label))}</button> ${link(`${BASE}/${user.id}`, t('manage.cancel'), 'button secondary')}</div>
 </form>`
       : `<p>${escapeHtml(t('manage.confirm.notPossible', values))}</p>\n<p>${link(`${BASE}/${user.id}`, t('manage.cancel'), 'button')}</p>`
@@ -116,16 +153,19 @@ ${name === 'delete' ? field({ id: 'confirmEmail', type: 'email', label: t('manag
       }
     }
 
+    // An administrator is on their way to the administration: the page after choosing the password leads on to
+    // it, the first one or a new one, and the mail with the activation link names it. For everybody else the
+    // administrator said where they are going, or left it open.
+    const chosen = asksApplication(action, user) && typeof request.body?.clientId === 'string' ? request.body.clientId.trim() : ''
+    const leadsTo = LEADS_ON.has(ACTIONS[action].api ?? '') ? (user.isAdmin ? ADMIN_UI_CLIENT_ID : chosen || undefined) : undefined
+
     const response =
       action === 'delete'
         ? await api(request, session, { method: 'DELETE', url: `/users/${user.id}` })
         : await api(request, session, {
             method: 'POST',
             url: `/users/${user.id}/${ACTIONS[action].api}`,
-            // An administrator is on their way to the administration: the page after choosing the password leads
-            // on to it, the first one or a new one, and the mail with the activation link names it. For everybody
-            // else the administration does not know where they are going.
-            ...(LEADS_ON.has(ACTIONS[action].api) && user.isAdmin ? { body: { clientId: ADMIN_UI_CLIENT_ID } } : {}),
+            ...(leadsTo ? { body: { clientId: leadsTo } } : {}),
           })
     if (response.statusCode === 401) return sessionEnded(reply)
     if (response.statusCode >= 400) {
@@ -135,7 +175,7 @@ ${name === 'delete' ? field({ id: 'confirmEmail', type: 'email', label: t('manag
       } catch {
         body = undefined
       }
-      return confirmation(request, reply, session, user, action, { status: response.statusCode < 600 ? response.statusCode : 502, text: problemText(body) })
+      return confirmation(request, reply, session, user, action, { status: response.statusCode < 600 ? response.statusCode : 502, text: problemText(body), clientId: chosen })
     }
 
     if (action === 'delete') return redirectWith(reply, BASE, { kind: 'ok', key: 'manage.flash.deleted', values: { name } })
