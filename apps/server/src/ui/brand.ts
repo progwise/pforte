@@ -30,7 +30,7 @@ const FONT_FORMATS: Record<string, { type: string; format: FontFile['format'] }>
   '.woff': { type: 'font/woff', format: 'woff' },
 }
 
-const TOP_LEVEL = ['name', 'logo', 'colors', 'radius', 'fonts', 'links'] as const
+const TOP_LEVEL = ['name', 'logo', 'logoSmall', 'colors', 'radius', 'fonts', 'links'] as const
 const COLOR_KEYS = Object.keys(DEFAULT_COLORS)
 const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
 const RADIUS = /^(\d{1,2})(px|rem)$/
@@ -170,6 +170,7 @@ const parseLinks = (value: unknown): FooterLink[] => {
 /**
  * Reads `<dir>/brand.json` and the files it names. A folder without `brand.json` has no branding and
  * gets the neutral look. A brand without a logo keeps pforte's signet as the icon of the browser tab.
+ * A brand with two logos shows the small one there, and where the bar is one line.
  * Any mistake stops the start with a message that says what to change.
  */
 export const loadBrand = (dir: string): Brand => {
@@ -201,10 +202,17 @@ export const loadBrand = (dir: string): Brand => {
     theme.radius = parsed.radius as string
   }
 
-  if (parsed.logo !== undefined) {
-    const logo = readAsset(dir, parsed.logo, '"logo"', Object.keys(LOGO_TYPES), MAX_LOGO_BYTES)
-    theme.assets.push({ path: logo.path, type: LOGO_TYPES[logo.extension]!, bytes: logo.bytes })
-    theme.logoUrl = `/brand/${logo.path}`
+  /** Reads a logo, which pforte then serves, and returns its address. */
+  const readLogo = (value: unknown, where: string) => {
+    const logo = readAsset(dir, value, where, Object.keys(LOGO_TYPES), MAX_LOGO_BYTES)
+    if (!theme.assets.some((existing) => existing.path === logo.path)) theme.assets.push({ path: logo.path, type: LOGO_TYPES[logo.extension]!, bytes: logo.bytes })
+    return `/brand/${logo.path}`
+  }
+  if (parsed.logo !== undefined) theme.logoUrl = readLogo(parsed.logo, '"logo"')
+  if (parsed.logoSmall !== undefined) {
+    // It takes the place of the logo where that is too wide. Alone it would leave the pages without one.
+    if (!theme.logoUrl) throw new BrandError('"logoSmall" is the small form of "logo": name a "logo" as well, or name this file as "logo"')
+    theme.logoSmallUrl = readLogo(parsed.logoSmall, '"logoSmall"')
   }
 
   if (parsed.fonts !== undefined) {

@@ -12,8 +12,11 @@ import { plainTheme, type Theme, withSignet } from './theme.js'
 
 /** A wordmark, ten times as wide as high: the logo that is hardest on a bar. */
 const WORDMARK = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 40" width="400" height="40"><rect width="400" height="40" fill="#0b5cad"/></svg>')}`
+/** A mark that works small: a signet with a short label beside it, twice as wide as high. */
+const MARK_URL = WORDMARK.replaceAll('400', '80')
 const THEMES: Record<string, Theme> = {
   'a wordmark as logo': { ...plainTheme(), name: 'Example Inc.', logoUrl: WORDMARK },
+  'a wordmark and a small logo': { ...plainTheme(), name: 'Example Inc.', logoUrl: WORDMARK, logoSmallUrl: MARK_URL },
   'a name and no logo': withSignet({ ...plainTheme(), name: 'Example Inc.' }),
   // Without a branding folder the logo is pforte's signet: a square, stood in for by one the browser can load here.
   'no branding at all': { ...withSignet(plainTheme()), logoUrl: WORDMARK.replaceAll('400', '40') },
@@ -73,7 +76,9 @@ describe('the bar in a real browser', () => {
   }
   const box = async (selector: string) => (await page.locator(selector).boundingBox())!
   const visible = (selector: string) => page.locator(selector).isVisible()
-  const MARK = '.bar > :first-child'
+  const MARK = '.bar .logo, .bar .brand'
+  /** The file the browser shows as the logo of the bar. */
+  const shown = () => page.locator('.bar .logo').evaluate((logo: HTMLImageElement) => logo.currentSrc)
 
   describe.each(Object.entries(THEMES))('with %s', (_name, theme) => {
     describe.each(AREAS)('of $area in $language', (area) => {
@@ -108,6 +113,36 @@ describe('the bar in a real browser', () => {
         expect(mark.y).toBeGreaterThanOrEqual(0.5 * REM)
         expect(sections.y + sections.height - (mark.y + mark.height)).toBeGreaterThanOrEqual(0.5 * REM)
       })
+    })
+  })
+
+  describe('with two logos', () => {
+    const [account] = AREAS
+    const theme = THEMES['a wordmark and a small logo']!
+
+    it.each(ONE_LINE)('shows the small one at %d px, at its full height', async (width) => {
+      await show(html(theme, account!), width)
+      expect(await shown()).toBe(MARK_URL)
+      expect(await page.locator('.bar img').count()).toBe(1)
+      // 2.5rem high, where the wordmark is a thin strip of a third of the bar.
+      expect(await box(MARK)).toMatchObject({ width: 5 * REM, height: 2.5 * REM })
+    })
+
+    it('shows the logo in the wide bar', async () => {
+      await show(html(theme, account!), WIDE)
+      expect(await shown()).toBe(WORDMARK)
+    })
+
+    it('shows the logo at every width where there is no small one', async () => {
+      for (const width of [360, WIDE]) {
+        await show(html(THEMES['a wordmark as logo']!, account!), width)
+        expect(await shown()).toBe(WORDMARK)
+      }
+    })
+
+    it('keeps the logo on the card of the sign-in page, on a phone too', async () => {
+      await show(createUi({ theme }).pages.for('en').login({ uid: 'u1' }), 360)
+      expect(await page.locator('img.logo').evaluate((logo: HTMLImageElement) => logo.currentSrc)).toBe(WORDMARK)
     })
   })
 

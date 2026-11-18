@@ -2,7 +2,7 @@ import { CODE_LIFETIME_MS } from '@progwise/pforte-db/codes'
 import type { FastifyInstance } from 'fastify'
 import { validity } from '../i18n/duration.js'
 import type { I18n, MessageKey, TextValues } from '../i18n/index.js'
-import { buildContentSecurityPolicy, buildCss, defaultTheme, type FooterLink, type Theme } from './theme.js'
+import { buildContentSecurityPolicy, buildCss, defaultTheme, type FooterLink, ONE_LINE_BAR, type Theme } from './theme.js'
 
 const escapeMap: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
 export const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => escapeMap[char] as string)
@@ -360,6 +360,15 @@ ${formHtml}
 
       manage: ({ title, nav, person, flash, sectionsLabel, content }) => {
         const links = nav.map((item) => `<a href="${escapeHtml(item.href)}"${item.current ? ' aria-current="page"' : ''}>${escapeHtml(item.label)}</a>`).join('\n')
+        const logo = theme.logoUrl ? `<img class="logo" src="${escapeHtml(theme.logoUrl)}" alt="${escapeHtml(theme.name ?? '')}">` : ''
+        // With a small logo the browser loads that one where the bar is one line, and the other where it is wide.
+        const mark = theme.logoUrl
+          ? theme.logoSmallUrl
+            ? `<picture><source media="(max-width: ${ONE_LINE_BAR})" srcset="${escapeHtml(theme.logoSmallUrl)}">${logo}</picture>`
+            : logo
+          : theme.name
+            ? `<span class="brand">${escapeHtml(theme.name)}</span>`
+            : ''
         // Twice in the page, as the sections are: beside them in the wide bar, and at the end of the menu that opens.
         const signOut = person ? `<form method="post" action="${escapeHtml(person.signOutAction ?? '/manage/logout')}"><button type="submit" class="secondary">${escapeHtml(person.signOutLabel)}</button></form>` : ''
         return `<!doctype html>
@@ -372,7 +381,7 @@ ${icon}<style>${css}</style>
 </head>
 <body class="manage">
 <header class="bar">
-${theme.logoUrl ? `<img class="logo" src="${escapeHtml(theme.logoUrl)}" alt="${escapeHtml(theme.name ?? '')}">` : theme.name ? `<span class="brand">${escapeHtml(theme.name)}</span>` : ''}
+${mark}
 <nav class="sections" aria-label="${escapeHtml(sectionsLabel)}">
 ${links}
 </nav>

@@ -101,6 +101,46 @@ describe('the branding folder', () => {
     expect(theme.logoUrl).toMatch(/pforte\.svg$/)
   })
 
+  describe('with a second, small logo', () => {
+    const MARK = SVG.replace('viewBox="0 0 10 10"', 'viewBox="0 0 4 4"')
+    const both = (brand: object = {}) => loadBrand(folder({ name: 'Example Inc.', logo: 'logo.svg', logoSmall: 'mark.svg', ...brand }, { 'mark.svg': MARK, 'mark.png': PNG }))
+
+    it('serves both and keeps the first above the pages', () => {
+      const { theme } = both()
+      expect(theme.logoUrl).toMatch(/^\/brand\/[0-9a-f]{10}\/logo\.svg$/)
+      expect(theme.logoSmallUrl).toMatch(/^\/brand\/[0-9a-f]{10}\/mark\.svg$/)
+      expect(theme.assets.map((asset) => [`/brand/${asset.path}`, asset.type, Buffer.from(asset.bytes).toString()])).toEqual([
+        [theme.logoUrl, 'image/svg+xml', SVG],
+        [theme.logoSmallUrl, 'image/svg+xml', MARK],
+      ])
+    })
+
+    it('shows the small one in the browser tab', () => {
+      const { theme } = both()
+      expect(theme.iconUrl).toBe(theme.logoSmallUrl)
+      expect(theme.assets.some((asset) => asset.path.endsWith('pforte.svg'))).toBe(false)
+    })
+
+    it('may be of another type than the logo, or the same file', () => {
+      expect(both({ logoSmall: 'mark.png' }).theme.assets.map((asset) => asset.type)).toEqual(['image/svg+xml', 'image/png'])
+      const same = both({ logoSmall: 'logo.svg' }).theme
+      expect(same.logoSmallUrl).toBe(same.logoUrl)
+      expect(same.assets).toHaveLength(1)
+    })
+
+    it.each([
+      ['alone: it is the small form of a logo', { logo: undefined }, /"logoSmall" is the small form of "logo"/],
+      ['a file that is missing', { logoSmall: 'nope.svg' }, /"logoSmall": there is no file "nope.svg"/],
+      ['a file of the wrong type', { logoSmall: 'brand.json' }, /"logoSmall": "brand.json" must be a .svg, .png/],
+      ['a file that is not an image', { logoSmall: 'fake.png' }, /"logoSmall": "fake.png" does not look like a png file/],
+      ['a file that is too big', { logoSmall: 'big.svg' }, /"logoSmall": "big.svg" is \d+ KB; the limit is 512 KB/],
+      ['something that is no path', { logoSmall: true }, /"logoSmall" must be the path of a file/],
+    ])('refuses it as %s', (_name, brand, message) => {
+      const dir = folder({ name: 'Example Inc.', logo: 'logo.svg', logoSmall: 'mark.svg', ...brand }, { 'mark.svg': MARK, 'fake.png': 'not a png', 'big.svg': `${SVG}${' '.repeat(600 * 1024)}` })
+      expect(() => loadBrand(dir)).toThrow(message)
+    })
+  })
+
   it('accepts a raster logo', () => {
     const { theme } = loadBrand(folder({ logo: 'logo.png' }, { 'logo.png': PNG }))
     expect(theme.assets[0]!.type).toBe('image/png')

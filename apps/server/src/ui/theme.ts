@@ -49,6 +49,8 @@ export interface Theme {
   fonts: { body?: Font; heading?: Font }
   /** The logo above the pages, as a URL under `/brand/`. */
   logoUrl?: string
+  /** A second logo for narrow places, as a URL under `/brand/`: the one-line bar and the tab of the browser. */
+  logoSmallUrl?: string
   /** The icon of the browser tab, as a URL under `/brand/`. */
   iconUrl?: string
   links: FooterLink[]
@@ -56,6 +58,12 @@ export interface Theme {
   /** The name shown with (or instead of) the logo. */
   name?: string
 }
+
+/**
+ * Up to this width the bar of the account pages and of the administration is one line. From there on the sections
+ * fit side by side, for most logos, languages and names.
+ */
+export const ONE_LINE_BAR = '75rem'
 
 /** The neutral look pforte has without a branding folder. */
 export const DEFAULT_COLORS: Colors = {
@@ -85,11 +93,11 @@ export const signetSvg = ({ primary, primaryText }: Pick<Colors, 'primary' | 'pr
 export const plainTheme = (): Theme => ({ colors: { ...DEFAULT_COLORS }, radius: DEFAULT_RADIUS, fonts: {}, links: [], assets: [] })
 
 /**
- * Gives the theme the icon of the browser tab: its own logo, or else the signet in its colours. The signet is also
- * the logo above the pages of a theme that has neither a logo nor a name to show there.
+ * Gives the theme the icon of the browser tab: its own logo, the small one if it has two, or else the signet in its
+ * colours. The signet is also the logo above the pages of a theme that has neither a logo nor a name to show there.
  */
 export const withSignet = (theme: Theme): Theme => {
-  if (theme.logoUrl) return { ...theme, iconUrl: theme.logoUrl }
+  if (theme.logoUrl) return { ...theme, iconUrl: theme.logoSmallUrl ?? theme.logoUrl }
   const bytes = Buffer.from(signetSvg(theme.colors))
   const path = `${createHash('sha256').update(bytes).digest('hex').slice(0, 10)}/pforte.svg`
   const url = `/brand/${path}`
@@ -199,6 +207,8 @@ body.manage { display: block; padding: 0; min-height: 100vh; }
 .bar form { margin: 0; }
 .bar button { width: auto; padding: 0.5rem 0.9rem; margin: 0; }
 .bar .logo, .bar .brand { margin: 0.5rem 0; max-height: 2.5rem; font-size: 1rem; }
+/* Where there are two logos, the browser picks one by the width of the screen: the picture itself takes no room. */
+.bar picture { display: contents; }
 nav.sections { display: flex; flex-wrap: wrap; gap: 0.25rem; }
 nav.sections a { display: inline-flex; align-items: center; min-height: 3.5rem; padding: 0 0.9rem; border-bottom: 3px solid transparent;
   color: var(--text); font: 600 0.95rem var(--font-heading); text-decoration: none; }
@@ -274,7 +284,7 @@ form.below { margin-top: 1rem; }
  * upright are wider than a phone and still too narrow for the sections side by side.
  */
 details.menu { display: none; }
-@media (max-width: 75rem) {
+@media (max-width: ${ONE_LINE_BAR}) {
   .bar { position: relative; flex-wrap: nowrap; gap: 0.5rem; padding: 0.5rem 1rem; }
   .bar .logo, .bar .brand { flex: none; margin: 0; max-width: 35%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bar .who, nav.sections { display: none; }
