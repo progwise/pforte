@@ -21,8 +21,8 @@ export const fr: Catalog = {
   'login.wrong': "L'adresse e-mail ou le mot de passe n'est pas correct.",
 
   'code.title': 'Saisir le code',
-  'code.sentEmail': 'Nous avons envoyé un code à 6 chiffres par e-mail à {to}. Il est valable 10 minutes.',
-  'code.sentSms': 'Nous avons envoyé un code à 6 chiffres par SMS à {to}. Il est valable 10 minutes.',
+  'code.sentEmail': 'Nous avons envoyé un code à 6 chiffres par e-mail à {to}. Il est valable {validity}.',
+  'code.sentSms': 'Nous avons envoyé un code à 6 chiffres par SMS à {to}. Il est valable {validity}.',
   'code.remember': 'Mémoriser cet appareil pendant 90 jours pour ne plus avoir à saisir de code ici',
   'code.submit': 'Continuer',
   'code.useEmail': 'Envoyer plutôt le code par e-mail',
@@ -35,11 +35,11 @@ export const fr: Catalog = {
   'code.newOnItsWay': 'Un nouveau code est en route.',
   'code.badOrExpired': "Le code n'est pas correct ou a expiré. Vous pouvez en demander un nouveau ci-dessous.",
   'code.cooldown': "Un code vient d'être envoyé. Vous pourrez en demander un nouveau dans {seconds} secondes.",
-  'code.tooMany': 'Trop de codes ont été demandés. Veuillez réessayer dans {minutes} minutes.',
+  'code.tooMany': 'Trop de codes ont été demandés. Veuillez réessayer dans {wait}.',
   'code.tooManyTitle': 'Trop de codes',
 
   'limit.title': 'Trop de tentatives',
-  'limit.text': 'Il y a eu trop de tentatives depuis votre réseau ou pour cette adresse. Veuillez réessayer dans {minutes} minutes.',
+  'limit.text': 'Il y a eu trop de tentatives depuis votre réseau ou pour cette adresse. Veuillez réessayer dans {wait}.',
 
   'logout.title': 'Se déconnecter ?',
   'logout.text': 'Voulez-vous vous déconnecter de {host} ?',
@@ -85,7 +85,7 @@ export const fr: Catalog = {
   'reset.send': 'Envoyer',
   'reset.noEmail': 'Veuillez saisir votre adresse e-mail.',
   'reset.sent':
-    'Si un compte existe pour cette adresse, nous lui avons envoyé un message : un code à saisir ci-dessous, ou un lien pour choisir votre mot de passe. Un code est valable 10 minutes.',
+    'Si un compte existe pour cette adresse, nous lui avons envoyé un message : un code à saisir ci-dessous, ou un lien pour choisir votre mot de passe. Un code est valable {validity}.',
   'reset.codeTitle': 'Choisir un nouveau mot de passe',
   'reset.codeSubmit': 'Changer mon mot de passe',
   'reset.doneTitle': 'Mot de passe modifié',
@@ -111,10 +111,10 @@ export const fr: Catalog = {
     "Bonjour {firstName},\n\nvotre code de connexion est {code}. Il est valable {minutes} minutes.\n\nSi vous n'avez pas essayé de vous connecter, ne communiquez ce code à personne et informez votre administration.\n",
   'mail.activation.subject': 'Activez votre compte chez {organisation}',
   'mail.activation.text':
-    "Bonjour {firstName},\n\nun compte a été créé pour vous chez {organisation}. Ouvrez ce lien pour choisir votre mot de passe :\n\n{url}\n\nLe lien est valable {hours} heures. Si vous n'attendiez pas ce message, vous pouvez l'ignorer.\n",
+    "Bonjour {firstName},\n\nun compte a été créé pour vous chez {organisation}. Ouvrez ce lien pour choisir votre mot de passe :\n\n{url}\n\nLe lien est valable {validity}. Si vous n'attendiez pas ce message, vous pouvez l'ignorer.\n",
   'mail.activationFor.subject': 'Activez votre compte pour {application}',
   'mail.activationFor.text':
-    "Bonjour {firstName},\n\nun compte a été créé pour vous chez {organisation} pour vous connecter à {application}. Ouvrez ce lien pour choisir votre mot de passe :\n\n{url}\n\nLe lien est valable {hours} heures. Si vous n'attendiez pas ce message, vous pouvez l'ignorer.\n",
+    "Bonjour {firstName},\n\nun compte a été créé pour vous chez {organisation} pour vous connecter à {application}. Ouvrez ce lien pour choisir votre mot de passe :\n\n{url}\n\nLe lien est valable {validity}. Si vous n'attendiez pas ce message, vous pouvez l'ignorer.\n",
   'continue.button': 'Continuer vers {name}',
   'mail.resetCode.subject': 'Nouveau mot de passe pour {organisation}',
   'mail.resetCode.text':
@@ -204,7 +204,7 @@ export const fr: Catalog = {
   'account.password.title': 'Changer votre mot de passe',
   'account.password.help': 'Vous recevez un code, par SMS si votre numéro de téléphone est confirmé, sinon par e-mail. Sur la page suivante, vous le saisissez et choisissez un nouveau mot de passe. Vous êtes ensuite déconnecté partout et vous vous reconnectez avec le nouveau mot de passe.',
   'account.password.button': "M'envoyer un code",
-  'account.password.wait': 'Un code a été demandé trop souvent. Veuillez réessayer dans {minutes} minutes.',
+  'account.password.wait': 'Un code a été demandé trop souvent. Veuillez réessayer dans {wait}.',
   'account.password.unavailable': "Le code n'a pas pu être envoyé. Veuillez réessayer plus tard.",
   'account.stepUp.again': 'Pour cela, vous avez dû vous reconnecter. Répétez maintenant ce que vous vouliez faire.',
   'account.passkeys.title': "Clés d'accès",
@@ -236,4 +236,13 @@ export const fr: Catalog = {
   'sms.reset':
     '{code} est votre code pour choisir un nouveau mot de passe chez {organisation}. Valable {minutes} minutes. Ne le communiquez à personne.',
   'sms.phone': '{code} est votre code pour confirmer ce numéro de téléphone chez {organisation}. Valable {minutes} minutes.',
+
+  'duration.for.minute.one': '{count} minute',
+  'duration.for.minute.other': '{count} minutes',
+  'duration.for.hour.one': '{count} heure',
+  'duration.for.hour.other': '{count} heures',
+  'duration.for.day.one': '{count} jour',
+  'duration.for.day.other': '{count} jours',
+  'duration.in.minute.one': '{count} minute',
+  'duration.in.minute.other': '{count} minutes',
 }

@@ -152,11 +152,34 @@ A file is named after the language, `de.json` or `pt-BR.json`, and holds the tex
 - The **keys** and the English wording are in [`apps/server/src/i18n/en.ts`](../apps/server/src/i18n/en.ts).
 - `{name}` marks a value that pforte fills in. A text must keep exactly the values the English one has: losing
   `{code}` from a message would send people an empty message, so pforte refuses to start. The same happens
-  for an unknown key or a text that is not a string. The message names the file and the key.
+  for an unknown key or a text that is not a string. The message names the file and the key. The one exception
+  is a time, see [Texts that state a time](#texts-that-state-a-time).
 - Texts are escaped when they are shown, so they cannot contain HTML. A line break in an e-mail is `\n`.
 - A text you leave out stays as built in. For a **new language** every text you leave out appears in English,
   and pforte writes a warning at startup saying how many are missing.
 - A new language works for the pages, e-mails and SMS at once, and for every user whose `language` is that code.
+
+### Texts that state a time
+
+Some texts say how long something is valid or how long to wait. pforte hands them that time in words, with the
+singular and the plural: "1 minute", "10 minutes", "7 days".
+
+| Value | Says | In these texts |
+| --- | --- | --- |
+| `{validity}` | How long a link or a code is valid: minutes below an hour, hours below two days, whole days from there on. | `mail.activation.text`, `mail.activationFor.text`, `code.sentEmail`, `code.sentSms`, `reset.sent` |
+| `{wait}` | How long to wait before trying again, in minutes, rounded up. | `limit.text`, `code.tooMany`, `account.password.wait` |
+
+The words come from texts of their own, which you can replace like any other and which a new language should have:
+`duration.for.minute.one` ("{count} minute"), `duration.for.minute.other` ("{count} minutes") and the same for `hour`
+and `day`, for the sentence "valid for …"; `duration.in.minute.one` and `duration.in.minute.other` for the sentence
+"again in …". The two sentences have their own texts because some languages use another form in each: Hungarian
+says "7 napig" in the first and "5 perc" in the second. `.one` is used for exactly one, `.other` for every other number.
+
+A text of yours that states a time is free in two ways:
+
+- It **may leave the value out** and write the time itself ("valid for a week").
+- It **may use the number** these texts had up to 0.3.1: `{hours}` in the two activation mails, `{minutes}` in the
+  three texts with `{wait}`. A text written for an earlier version therefore reads as it did.
 
 Keep SMS texts short. Texts with letters outside the basic GSM alphabet (Hungarian á, í, ó, ú, ő, ű, for
 example) are sent as Unicode, where one message holds 70 characters instead of 160, so such an SMS is billed

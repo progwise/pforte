@@ -61,7 +61,7 @@ describe.skipIf(!hasDatabase)('rate limits', () => {
       expect(blocked.statusCode).toBe(429)
       expect(Number(blocked.headers['retry-after'])).toBeGreaterThan(890)
       expect(blocked.body).toContain('Too many attempts')
-      expect(blocked.body).toContain('15 minutes')
+      expect(blocked.body).toContain('Please try again in 15 minutes.')
       expect(blocked.headers['cache-control']).toBe('no-store')
     })
 
@@ -168,7 +168,7 @@ describe.skipIf(!hasDatabase)('rate limits', () => {
       await h.database.pool.query(`update otp_codes set created_at = created_at - interval '2 minutes'`)
       const tooMany = await s.browser.request('POST', `${s.interaction}/code/resend`, { ip: ATTACKER })
       expect(tooMany.statusCode).toBe(429)
-      expect(tooMany.body).toContain('Too many codes were requested')
+      expect(tooMany.body).toMatch(/Too many codes were requested\. Please try again in \d+ minutes\./)
     })
 
     it('does not count the first code of a sign-in, so a whole office can sign in from one address', async () => {

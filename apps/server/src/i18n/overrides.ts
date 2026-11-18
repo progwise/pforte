@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { DURATION_VALUES } from './duration.js'
 import { ALL_ENGLISH, BUILT_IN, type MessageKey } from './index.js'
 
 const placeholdersOf = (text: string) => new Set([...text.matchAll(/\{(\w+)\}/g)].map((match) => match[1]!))
@@ -43,8 +44,10 @@ export const loadLocaleOverrides = (dir: string, read = readFileSync): LocaleOve
       if (typeof value !== 'string' || value.trim() === '') throw new Error(`locales/${file}: "${key}" must be a non-empty text`)
       const wanted = placeholdersOf(ALL_ENGLISH[key as MessageKey])
       const given = placeholdersOf(value)
-      const unknown = [...given].filter((name) => !wanted.has(name))
-      const missing = [...wanted].filter((name) => !given.has(name))
+      // A time in words may be left out, and the number that stood there before it may stay.
+      const duration = DURATION_VALUES[key as MessageKey]
+      const unknown = [...given].filter((name) => !wanted.has(name) && name !== duration?.number)
+      const missing = [...wanted].filter((name) => !given.has(name) && name !== duration?.worded)
       if (unknown.length > 0) throw new Error(`locales/${file}: "${key}" uses ${unknown.map((name) => `{${name}}`).join(', ')}, which this text does not have`)
       if (missing.length > 0) throw new Error(`locales/${file}: "${key}" must contain ${missing.map((name) => `{${name}}`).join(', ')}`)
       texts[key as MessageKey] = value

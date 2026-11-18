@@ -8,6 +8,23 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
 
 ## Unreleased
 
+### Fixed
+
+- **The activation mail says "7 days", not "168 hours".** The two activation mails stated how long the link is valid as
+  a number of hours. They now say it as a person would, in English, German, French and Hungarian: "7 days", "7 Tage",
+  "7 jours", "7 napig". The same wording, with a singular, is used wherever pforte states a time in a sentence: the
+  pages that say "not now" said "in 1 minutes" for a wait of a minute and now say "in 1 minute", and the "10 minutes"
+  a code is valid for (on the code page and in the notice after asking for a reset) is taken from the time that
+  actually applies and no longer written into each text. **If you replaced texts in your `locales` folder, nothing
+  needs doing:** a text with `{hours}` or `{minutes}` loads and reads as before. To get the new wording in a text of
+  yours, use `{validity}` (in `mail.activation.text`, `mail.activationFor.text`, `code.sentEmail`, `code.sentSms`,
+  `reset.sent`) or `{wait}` (in `limit.text`, `code.tooMany`, `account.password.wait`). The words for it are eight new
+  texts: `duration.for.minute.one`, `duration.for.minute.other`, `duration.for.hour.one`, `duration.for.hour.other`,
+  `duration.for.day.one`, `duration.for.day.other`, `duration.in.minute.one` and `duration.in.minute.other`. **If you
+  added a language**, add them once a text of that language uses `{validity}` or `{wait}`; until then they are not
+  shown, and without them the time appears in English ([texts that state a
+  time](docs/branding-and-languages.md#texts-that-state-a-time), [#92](https://github.com/progwise/pforte/issues/92)).
+
 ## 0.3.1 (2026-11-18)
 
 **Before you update:** nothing to do. This release has no migration, no new or changed setting, no change to the admin

@@ -1,4 +1,6 @@
+import { CODE_LIFETIME_MS } from '@progwise/pforte-db/codes'
 import type { FastifyInstance } from 'fastify'
+import { validity } from '../i18n/duration.js'
 import type { I18n, MessageKey, Values } from '../i18n/index.js'
 import { buildContentSecurityPolicy, buildCss, defaultTheme, type FooterLink, type Theme } from './theme.js'
 
@@ -206,7 +208,7 @@ ${
         page(
           t('code.title'),
           `<h1>${escapeHtml(t('code.title'))}</h1>
-<p>${escapeHtml(t(channel === 'sms' ? 'code.sentSms' : 'code.sentEmail', { to: sentTo }))}</p>
+<p>${escapeHtml(t(channel === 'sms' ? 'code.sentSms' : 'code.sentEmail', { to: sentTo, validity: validity(t, CODE_LIFETIME_MS) }))}</p>
 ${status(notice)}
 ${alert(error)}
 <form method="post" action="/interaction/${encodeURIComponent(uid)}/code">

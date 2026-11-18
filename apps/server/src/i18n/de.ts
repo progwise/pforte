@@ -21,8 +21,8 @@ export const de: Catalog = {
   'login.wrong': 'Die E-Mail-Adresse oder das Passwort ist nicht richtig.',
 
   'code.title': 'Code eingeben',
-  'code.sentEmail': 'Wir haben einen 6-stelligen Code per E-Mail an {to} gesendet. Er ist 10 Minuten gültig.',
-  'code.sentSms': 'Wir haben einen 6-stelligen Code per SMS an {to} gesendet. Er ist 10 Minuten gültig.',
+  'code.sentEmail': 'Wir haben einen 6-stelligen Code per E-Mail an {to} gesendet. Er ist {validity} gültig.',
+  'code.sentSms': 'Wir haben einen 6-stelligen Code per SMS an {to} gesendet. Er ist {validity} gültig.',
   'code.remember': 'Dieses Gerät 90 Tage merken, damit hier kein Code mehr abgefragt wird',
   'code.submit': 'Weiter',
   'code.useEmail': 'Code stattdessen per E-Mail senden',
@@ -35,11 +35,11 @@ export const de: Catalog = {
   'code.newOnItsWay': 'Ein neuer Code ist unterwegs.',
   'code.badOrExpired': 'Der Code ist nicht richtig oder abgelaufen. Unten können Sie einen neuen anfordern.',
   'code.cooldown': 'Vor einem Moment wurde ein Code gesendet. Einen neuen können Sie in {seconds} Sekunden anfordern.',
-  'code.tooMany': 'Es wurden zu viele Codes angefordert. Bitte versuchen Sie es in {minutes} Minuten erneut.',
+  'code.tooMany': 'Es wurden zu viele Codes angefordert. Bitte versuchen Sie es in {wait} erneut.',
   'code.tooManyTitle': 'Zu viele Codes',
 
   'limit.title': 'Zu viele Versuche',
-  'limit.text': 'Von Ihrem Netzwerk oder für diese Adresse gab es zu viele Versuche. Bitte versuchen Sie es in {minutes} Minuten erneut.',
+  'limit.text': 'Von Ihrem Netzwerk oder für diese Adresse gab es zu viele Versuche. Bitte versuchen Sie es in {wait} erneut.',
 
   'logout.title': 'Abmelden?',
   'logout.text': 'Möchten Sie sich von {host} abmelden?',
@@ -85,7 +85,7 @@ export const de: Catalog = {
   'reset.send': 'Senden',
   'reset.noEmail': 'Bitte geben Sie Ihre E-Mail-Adresse ein.',
   'reset.sent':
-    'Falls es zu dieser Adresse ein Konto gibt, haben wir eine Nachricht dorthin gesendet: einen Code, den Sie unten eingeben, oder einen Link zum Wählen Ihres Passworts. Ein Code ist 10 Minuten gültig.',
+    'Falls es zu dieser Adresse ein Konto gibt, haben wir eine Nachricht dorthin gesendet: einen Code, den Sie unten eingeben, oder einen Link zum Wählen Ihres Passworts. Ein Code ist {validity} gültig.',
   'reset.codeTitle': 'Neues Passwort wählen',
   'reset.codeSubmit': 'Passwort ändern',
   'reset.doneTitle': 'Passwort geändert',
@@ -110,10 +110,10 @@ export const de: Catalog = {
     'Guten Tag {firstName},\n\nIhr Anmeldecode lautet {code}. Er ist {minutes} Minuten gültig.\n\nWenn Sie sich nicht anmelden wollten, geben Sie den Code an niemanden weiter und informieren Sie Ihre Administration.\n',
   'mail.activation.subject': 'Aktivieren Sie Ihr Konto bei {organisation}',
   'mail.activation.text':
-    'Guten Tag {firstName},\n\nfür Sie wurde ein Konto bei {organisation} angelegt. Über diesen Link wählen Sie Ihr Passwort:\n\n{url}\n\nDer Link ist {hours} Stunden gültig. Wenn Sie diese Nachricht nicht erwartet haben, können Sie sie ignorieren.\n',
+    'Guten Tag {firstName},\n\nfür Sie wurde ein Konto bei {organisation} angelegt. Über diesen Link wählen Sie Ihr Passwort:\n\n{url}\n\nDer Link ist {validity} gültig. Wenn Sie diese Nachricht nicht erwartet haben, können Sie sie ignorieren.\n',
   'mail.activationFor.subject': 'Aktivieren Sie Ihr Konto für {application}',
   'mail.activationFor.text':
-    'Guten Tag {firstName},\n\nfür Sie wurde bei {organisation} ein Konto für {application} angelegt. Über diesen Link wählen Sie Ihr Passwort:\n\n{url}\n\nDer Link ist {hours} Stunden gültig. Wenn Sie diese Nachricht nicht erwartet haben, können Sie sie ignorieren.\n',
+    'Guten Tag {firstName},\n\nfür Sie wurde bei {organisation} ein Konto für {application} angelegt. Über diesen Link wählen Sie Ihr Passwort:\n\n{url}\n\nDer Link ist {validity} gültig. Wenn Sie diese Nachricht nicht erwartet haben, können Sie sie ignorieren.\n',
   'continue.button': 'Weiter zu {name}',
   'mail.resetCode.subject': 'Neues Passwort für {organisation}',
   'mail.resetCode.text':
@@ -203,7 +203,7 @@ export const de: Catalog = {
   'account.password.title': 'Passwort ändern',
   'account.password.help': 'Sie erhalten einen Code: per SMS, wenn Ihre Telefonnummer bestätigt ist, sonst per E-Mail. Auf der nächsten Seite geben Sie ihn ein und wählen ein neues Passwort. Danach sind Sie überall abgemeldet und melden sich mit dem neuen Passwort wieder an.',
   'account.password.button': 'Code senden',
-  'account.password.wait': 'Es wurde zu oft ein Code angefordert. Bitte versuchen Sie es in {minutes} Minuten erneut.',
+  'account.password.wait': 'Es wurde zu oft ein Code angefordert. Bitte versuchen Sie es in {wait} erneut.',
   'account.password.unavailable': 'Der Code konnte nicht gesendet werden. Bitte versuchen Sie es später erneut.',
   'account.stepUp.again': 'Dafür mussten Sie sich neu anmelden. Wiederholen Sie jetzt, was Sie tun wollten.',
   'account.passkeys.title': 'Passkeys',
@@ -234,4 +234,13 @@ export const de: Catalog = {
   'sms.login': '{code} ist Ihr Anmeldecode für {organisation}. Gültig {minutes} Minuten. Nicht weitergeben.',
   'sms.reset': '{code} ist Ihr Code für ein neues Passwort bei {organisation}. Gültig {minutes} Minuten. Nicht weitergeben.',
   'sms.phone': '{code} ist Ihr Code, um diese Telefonnummer bei {organisation} zu bestätigen. Gültig {minutes} Minuten.',
+
+  'duration.for.minute.one': '{count} Minute',
+  'duration.for.minute.other': '{count} Minuten',
+  'duration.for.hour.one': '{count} Stunde',
+  'duration.for.hour.other': '{count} Stunden',
+  'duration.for.day.one': '{count} Tag',
+  'duration.for.day.other': '{count} Tage',
+  'duration.in.minute.one': '{count} Minute',
+  'duration.in.minute.other': '{count} Minuten',
 }
