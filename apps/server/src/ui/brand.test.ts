@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { loadBrand } from './brand.js'
-import { DEFAULT_COLORS } from './theme.js'
+import { darkColors, DEFAULT_COLORS } from './theme.js'
 
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10"/></svg>'
 const WOFF2 = Buffer.concat([Buffer.from('wOF2'), Buffer.alloc(40, 1)])
@@ -138,6 +138,63 @@ describe('the branding folder', () => {
     ])('refuses it as %s', (_name, brand, message) => {
       const dir = folder({ name: 'Example Inc.', logo: 'logo.svg', logoSmall: 'mark.svg', ...brand }, { 'mark.svg': MARK, 'fake.png': 'not a png', 'big.svg': `${SVG}${' '.repeat(600 * 1024)}` })
       expect(() => loadBrand(dir)).toThrow(message)
+    })
+  })
+
+  describe('the dark variant', () => {
+    const colors = { primary: '#162438', primaryText: '#ffffff', link: '#2a4a6b' }
+
+    it('is calculated from the colours of the brand when it says nothing', () => {
+      const { theme, warnings } = loadBrand(folder({ colors }))
+      expect(theme.dark).toEqual({ colors: darkColors({ ...DEFAULT_COLORS, ...colors }), logoTile: false })
+      expect(theme.dark!.colors.primary).not.toBe('#162438')
+      expect(warnings).toEqual([])
+    })
+
+    it('is there for a brand without colours of its own, and for a folder without a brand.json', () => {
+      const neutral = { colors: darkColors(DEFAULT_COLORS), logoTile: false }
+      expect(loadBrand(folder({ name: 'Example Inc.' })).theme.dark).toEqual(neutral)
+      expect(loadBrand(folder(undefined)).theme.dark).toEqual(neutral)
+    })
+
+    it('keeps the logo on a light tile, because it was drawn for a light page, unless the brand says it reads on dark', () => {
+      expect(loadBrand(folder({ logo: 'logo.svg' })).theme.dark!.logoTile).toBe(true)
+      expect(loadBrand(folder({ logo: 'logo.svg', dark: {} })).theme.dark!.logoTile).toBe(true)
+      expect(loadBrand(folder({ logo: 'logo.svg', dark: { logoTile: false } })).theme.dark!.logoTile).toBe(false)
+      // The signet is drawn on its own tile.
+      expect(loadBrand(folder({ dark: { logoTile: true } })).theme.dark!.logoTile).toBe(false)
+    })
+
+    it('takes single colours from the brand and calculates the rest', () => {
+      const { theme } = loadBrand(folder({ colors, dark: { colors: { primary: '#F2C94C', primaryText: '#1d2b4a', surface: '#202020' } } }))
+      expect(theme.dark!.colors).toEqual({ ...darkColors({ ...DEFAULT_COLORS, ...colors }), primary: '#f2c94c', primaryText: '#1d2b4a', surface: '#202020' })
+      // The light colours are not touched.
+      expect(theme.colors).toMatchObject(colors)
+    })
+
+    it('is switched off with false: the brand is light for everybody', () => {
+      const { theme, warnings } = loadBrand(folder({ colors, logo: 'logo.svg', dark: false }))
+      expect(theme.dark).toBeUndefined()
+      expect(warnings).toEqual([])
+    })
+
+    it('warns about dark colours that cannot be read, and says that they are the dark ones', () => {
+      const { warnings } = loadBrand(folder({ dark: { colors: { text: '#444444' } } }))
+      expect(warnings).toHaveLength(2)
+      expect(warnings[0]).toMatch(/^Low contrast for text on a dark page: \d\.\d:1/)
+    })
+
+    it.each([
+      ['something that is neither false nor an object', { dark: true }, /"dark" must be false, or an object/],
+      ['a list', { dark: [] }, /"dark" must be false, or an object/],
+      ['an entry it does not know', { dark: { colours: {} } }, /"dark" has unknown entry "colours"/],
+      ['a colour that is not hex', { dark: { colors: { primary: 'gold' } } }, /"dark.colors.primary" must be a hex colour/],
+      ['a colour that could be CSS', { dark: { colors: { primary: '#fff; x: y' } } }, /"dark.colors.primary" must be a hex colour/],
+      ['an unknown colour', { dark: { colors: { accent: '#fff' } } }, /"dark.colors" has unknown entry "accent"/],
+      ['colours that are no object', { dark: { colors: '#000' } }, /"dark.colors" must be an object/],
+      ['a tile that is neither yes nor no', { dark: { logoTile: 'yes' } }, /"dark.logoTile" must be true or false/],
+    ])('refuses %s', (_name, brand, message) => {
+      expect(() => loadBrand(folder(brand))).toThrow(message)
     })
   })
 

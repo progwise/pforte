@@ -39,6 +39,10 @@ Every entry is optional. This one shows them all:
     "danger": "#82071e",
     "dangerBackground": "#ffebe9"
   },
+  "dark": {
+    "colors": { "link": "#9db8ff" },
+    "logoTile": false
+  },
   "fonts": {
     "body": {
       "family": "Example Sans",
@@ -66,12 +70,45 @@ Every entry is optional. This one shows them all:
 | `logoSmall` | A second logo for the narrow places, with the rules of `logo`; it needs a `logo`. It is for a mark that works small: a signet, or a signet with a short label beside it. It does not have to be square. It is shown where the bar is one line (on a screen up to 1,200 pixels wide), at most 2.5 rem high and a third of the bar wide, and as the icon of the browser tab. The wide bar and the cards keep the `logo`. Without it the `logo` is used everywhere: a wide wordmark is then a thin strip in the one-line bar and in the tab, a square mark is not. |
 | `radius` | Corner radius of the card, like `16px` or `1rem`, up to 32px. Fields and buttons are two thirds of it. |
 | `colors` | Hex colours. `primary` and `primaryText` are the main button, `link` the links and secondary buttons, `muted` hints and footer links. What you leave out stays neutral. |
+| `dark` | The dark pages ([light and dark](#light-and-dark)). Without it they are calculated from `colors`. `dark.colors` replaces single colours of them, with the names and rules of `colors`. `dark.logoTile: false` shows the logo on a dark page as it is, without the light tile. `"dark": false` keeps the installation light for everybody. |
 | `fonts.body` | Text, fields and hints. |
 | `fonts.heading` | Headings, labels and buttons. Without it they use the body font. |
 | `fonts.*.files` | One to six `.woff2` or `.woff` files, up to 600 KB each, with `weight` (100 to 900, default 400) and `style` (`normal` or `italic`). |
 | `links` | Up to six links under the card, e.g. imprint and privacy policy. `label` is one text, or a text per language with `en` as the fallback. `url` must be `https://` or `mailto:`. |
 
 Paths are relative to the branding folder and must stay inside it.
+
+### Light and dark
+
+Every page comes light and dark, in one stylesheet. Which of the two a person sees is decided in this order:
+
+1. **The application they come from**, if it says so with `color_scheme=dark` or `color_scheme=light`
+   ([integrating a client](integrating-a-client.md#light-or-dark)). pforte remembers it in that browser until an
+   application says something else.
+2. **The device**, where no application ever said anything: dark where it is set to dark.
+
+There is no switch on the pages, and no script.
+
+**You do not have to choose dark colours.** They are calculated from your `colors` when pforte starts:
+
+- The page, the card, text, hints, lines and error messages are pforte's own dark ones. They carry no colour of a brand.
+- `link` is kept if it reads on the dark card, else lightened in its own hue until it does (4.5:1).
+- `primary` is kept if the button stands out from the dark card, else lightened in its own hue until it does (3:1).
+  `primaryText` stays if it reads on that button, else it becomes black or white.
+
+To choose a colour yourself, name it in `dark.colors`; what you leave out stays calculated. pforte warns at startup
+about dark colours that are hard to read, as it does for the light ones, and says that it means the dark page.
+
+**The logo on a dark page.** A logo is usually drawn for a light page, and pforte cannot tell from a file whether it
+reads on a dark one. So on a dark page your logo sits on a small tile in your light `surface` colour, where it reads
+as it always did. If your logo reads on both, a mark on its own ground for example, say `"logoTile": false` and it is
+shown as it is. There is one logo file for light and dark. An SVG may carry its own `prefers-color-scheme` rule;
+browsers differ in whether that follows the page or the device inside an image, so check it where an application says
+dark on a device that is light. pforte's own signet needs nothing: it is drawn on a tile in the colours of your main
+button.
+
+**To stay light for everybody**, as before 0.3.2, say `"dark": false`. The pages then ignore the device and what an
+application says.
 
 ### Fonts and the logo are served by pforte itself
 
@@ -88,7 +125,7 @@ address and browsers keep the old one for a year.
 
 pforte reads the folder when it starts and refuses to start, naming what to change, if for example:
 
-- an entry is misspelled or unknown (`"colour"`), a colour is not a hex colour, or a file is missing or too big,
+- an entry is misspelled or unknown (`"colour"`), a colour is not a hex colour (in `colors` or in `dark.colors`), or a file is missing or too big,
 - a file is outside the folder, or does not look like its extension (a text file called `logo.png`),
 - a link is not `https://` or `mailto:`.
 

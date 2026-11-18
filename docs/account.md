@@ -124,6 +124,9 @@ pforte links to the account pages in one place only: the mail about a new passke
 `https://id.example.com/account` from your application or your intranet. A person who follows the link and is signed in at pforte with a code lands on the overview without being asked
 anything.
 
+A link from an application that is dark or light by its own choice can say so, `/account?color_scheme=dark`, and the
+account pages look like it ([light or dark](integrating-a-client.md#light-or-dark)).
+
 There is no setting that turns the pages off. They show a person nothing but their own account, and only after a
 sign-in with a code.
 

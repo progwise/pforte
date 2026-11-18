@@ -4,6 +4,7 @@ import { basename, extname, join, resolve, sep } from 'node:path'
 import {
   type Asset,
   contrastWarnings,
+  darkColors,
   DEFAULT_COLORS,
   defaultTheme,
   type Font,
@@ -30,7 +31,7 @@ const FONT_FORMATS: Record<string, { type: string; format: FontFile['format'] }>
   '.woff': { type: 'font/woff', format: 'woff' },
 }
 
-const TOP_LEVEL = ['name', 'logo', 'logoSmall', 'colors', 'radius', 'fonts', 'links'] as const
+const TOP_LEVEL = ['name', 'logo', 'logoSmall', 'colors', 'dark', 'radius', 'fonts', 'links'] as const
 const COLOR_KEYS = Object.keys(DEFAULT_COLORS)
 const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
 const RADIUS = /^(\d{1,2})(px|rem)$/
@@ -106,11 +107,12 @@ const readAsset = (dir: string, relative: unknown, where: string, allowed: strin
   return { bytes, extension, path: `${hash}/${name}` }
 }
 
-const parseColors = (value: unknown, colors: Theme['colors']) => {
-  if (!isRecord(value)) throw new BrandError('"colors" must be an object')
-  onlyKnown(value, COLOR_KEYS, '"colors"')
+/** Writes the colours a brand names over those in `colors`. `where` is the entry they come from: `colors` or `dark.colors`. */
+const parseColors = (value: unknown, colors: Theme['colors'], where = 'colors') => {
+  if (!isRecord(value)) throw new BrandError(`"${where}" must be an object`)
+  onlyKnown(value, COLOR_KEYS, `"${where}"`)
   for (const [key, color] of Object.entries(value)) {
-    if (typeof color !== 'string' || !HEX.test(color)) throw new BrandError(`"colors.${key}" must be a hex colour such as #162438`)
+    if (typeof color !== 'string' || !HEX.test(color)) throw new BrandError(`"${where}.${key}" must be a hex colour such as #162438`)
     ;(colors as unknown as Record<string, string>)[key] = color.toLowerCase()
   }
 }
@@ -170,7 +172,8 @@ const parseLinks = (value: unknown): FooterLink[] => {
 /**
  * Reads `<dir>/brand.json` and the files it names. A folder without `brand.json` has no branding and
  * gets the neutral look. A brand without a logo keeps pforte's signet as the icon of the browser tab.
- * A brand with two logos shows the small one there, and where the bar is one line.
+ * A brand with two logos shows the small one there, and where the bar is one line. Every brand has a dark
+ * variant, calculated from its colours, unless it says `"dark": false`.
  * Any mistake stops the start with a message that says what to change.
  */
 export const loadBrand = (dir: string): Brand => {
@@ -223,6 +226,18 @@ export const loadBrand = (dir: string): Brand => {
   }
 
   if (parsed.links !== undefined) theme.links = parseLinks(parsed.links)
+
+  // The dark variant is calculated from the colours above; `dark` changes single colours of it, or switches it off.
+  if (parsed.dark !== false) {
+    const dark = parsed.dark ?? {}
+    if (!isRecord(dark)) throw new BrandError('"dark" must be false, or an object with "colors" and "logoTile"')
+    onlyKnown(dark, ['colors', 'logoTile'], '"dark"')
+    const colors = darkColors(theme.colors)
+    if (dark.colors !== undefined) parseColors(dark.colors, colors, 'dark.colors')
+    if (dark.logoTile !== undefined && typeof dark.logoTile !== 'boolean') throw new BrandError('"dark.logoTile" must be true or false')
+    // A logo was drawn for a light page, so it keeps a light ground unless the brand says it reads on dark.
+    theme.dark = { colors, logoTile: Boolean(theme.logoUrl) && dark.logoTile !== false }
+  }
 
   return { theme: withSignet(theme), name, warnings: contrastWarnings(theme) }
 }

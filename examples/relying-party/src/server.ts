@@ -18,6 +18,9 @@ const secure = baseUrl.startsWith('https:')
 // The language this application asks pforte's pages to be in (`ui_locales`), when it signs somebody in and when it
 // signs them out. An application with a language setting of its own passes that; this one has a setting for it.
 const uiLocales: Record<string, string> = process.env.UI_LOCALES?.trim() ? { ui_locales: process.env.UI_LOCALES.trim() } : {}
+// Whether this application is light or dark (`color_scheme`), said the same way. pforte's pages then look like it, and
+// stay so in that browser until an application says something else. An application with a switch passes its state.
+const colorScheme: Record<string, string> = process.env.COLOR_SCHEME?.trim() ? { color_scheme: process.env.COLOR_SCHEME.trim() } : {}
 
 // demo-web is a public client: it has no secret and PKCE protects the authorization code.
 // Plain http is only accepted for local development; use an https issuer anywhere else.
@@ -168,6 +171,7 @@ const server = createServer(async (request, response) => {
         state,
         nonce,
         ...uiLocales,
+        ...colorScheme,
       })
       return redirect(response, authorizationUrl.href)
     }
@@ -206,6 +210,7 @@ const server = createServer(async (request, response) => {
         ...(idToken ? { id_token_hint: idToken } : {}),
         post_logout_redirect_uri: `${baseUrl}/`,
         ...uiLocales,
+        ...colorScheme,
       })
       return redirect(response, endSession.href)
     }

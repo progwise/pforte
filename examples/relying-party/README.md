@@ -38,6 +38,7 @@ with the redirect `http://localhost:3400/callback`.
 | `CLIENT_ID` | `demo-web` | The client registered in pforte |
 | `PORT` | `3400` | Port of this application |
 | `UI_LOCALES` | none | The language the application asks pforte's pages to be in, for example `de` or `fr hu`. Sent as `ui_locales` with the sign-in and with the sign-out. Without it pforte chooses by the person and the browser |
+| `COLOR_SCHEME` | none | Whether the application is `light` or `dark`. Sent as `color_scheme` with the sign-in and with the sign-out; pforte's pages then look like it and stay so in that browser. Without it pforte's pages follow the device, or what an application said before |
 | `BASE_URL` | `http://localhost:<PORT>` | The address people reach it under, if that is not where it listens (behind a proxy). The redirect URI of the client registration is `<BASE_URL>/callback` |
 
 `demo-web` is a public client (no secret). Plain `http` for the issuer is accepted only for
