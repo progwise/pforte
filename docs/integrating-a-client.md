@@ -184,6 +184,7 @@ for the return to end your session, and do not show "you are signed in" there.
 Add `ui_locales` (for example `ui_locales=de`) to have the question in the language of your application, as with the
 authorization request. Without it the question is in the person's own language, then the browser's
 ([which language is used](branding-and-languages.md#which-language-is-used)).
+`color_scheme` works here as well ([light or dark](#light-or-dark)).
 
 **Back-channel logout.** If the client has a back-channel logout address, pforte sends a `logout_token` (a signed JWT) to it
 with a POST when a session of the person ends. Use it to end your own session of that person. Answer `200` or `204`. The
@@ -231,6 +232,28 @@ These are standard parameters of the authorization request:
 | `acr_values=urn:pforte:acr:mfa` | Require the code, even when the browser is remembered. Use it before something sensitive. Check the `acr` of the ID token: a library does not do it for you. |
 | `login_hint=anna@example.com` | Fills in the e-mail address. |
 | `ui_locales=de` | The language of pforte's pages: `de`, `en`, `fr`, `hu` or one the installation added; several are a list, most preferred first (`ui_locales=fr hu`). Without it pforte uses the person's own language once it knows who is signing in, before that the browser's, then its default language. The end-session request takes the same parameter. |
+
+### Light or dark
+
+Your application is light or dark by its own choice: it follows the device, or it has a switch. pforte cannot see
+that, so say it. Add `color_scheme=dark` or `color_scheme=light` to the query of a request that leads to one of
+pforte's pages:
+
+- the authorization request (`…/auth?client_id=…&color_scheme=dark`),
+- the end-session request,
+- a link to the [account pages](account.md) (`…/account?color_scheme=dark`).
+
+pforte's pages then look like your application, and they keep that look in this browser: the parameter leaves a cookie
+([`pforte_color_scheme`](security.md#cookies)), so no page has to pass it on, and the pages that follow without a
+request of yours (the code, a password reset, the account pages) have it too. It holds until a request says something
+else. So **send it with every authorization request**, with the value your application has at that moment: an
+application that is light and says nothing gets the look the last application asked for. `color_scheme=auto` removes
+the cookie.
+
+A browser in which no application ever said anything gets pforte's pages as the device is set
+(`prefers-color-scheme`). The parameter is pforte's own, not part of OpenID Connect; a library passes it on as any
+additional parameter of the authorization request. It is read from the query of a `GET` request only. An installation
+can be light for everybody ([`"dark": false`](branding-and-languages.md#light-and-dark)); it ignores the parameter.
 
 ## Browser and mobile applications
 

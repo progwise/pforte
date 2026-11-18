@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { buildContentSecurityPolicy, buildCss, contrastRatio, contrastWarnings, DEFAULT_COLORS, defaultTheme, signetSvg } from './theme.js'
+import { buildContentSecurityPolicy, buildCss, contrastRatio, contrastWarnings, darkColors, DEFAULT_COLORS, defaultTheme, plainTheme, signetSvg, withDark } from './theme.js'
 
 describe('contrast', () => {
   it('is 21 for black on white, 1 for the same colour, and reads short hex', () => {
@@ -42,6 +42,112 @@ describe('the signet', () => {
   it('is the icon of the documentation site as well: site/src/favicon.svg is the same drawing', () => {
     const favicon = readFileSync(new URL('../../../../site/src/favicon.svg', import.meta.url), 'utf8')
     expect(favicon, 'write the output of signetSvg(DEFAULT_COLORS) to site/src/favicon.svg').toBe(`${signetSvg(DEFAULT_COLORS)}\n`)
+  })
+})
+
+describe('the dark colours', () => {
+  const dark = darkColors(DEFAULT_COLORS)
+
+  it('of the neutral look are readable: every pair that is checked reaches 4.5:1', () => {
+    expect(defaultTheme().dark).toEqual({ colors: dark, logoTile: false })
+    expect(contrastWarnings({ colors: dark })).toEqual([])
+    expect(contrastWarnings(defaultTheme())).toEqual([])
+    // What the check does not name: hints on the page itself, and the shape of the main button on the card.
+    expect(contrastRatio(dark.muted, dark.background)).toBeGreaterThanOrEqual(4.5)
+    expect(contrastRatio(dark.primary, dark.surface)).toBeGreaterThanOrEqual(3)
+  })
+
+  it('are dark: the page and the card are darker than the text on them', () => {
+    expect(contrastRatio(dark.background, '#000000')).toBeLessThan(1.5)
+    expect(contrastRatio(dark.surface, '#000000')).toBeLessThan(1.5)
+    expect(contrastRatio(dark.text, '#ffffff')).toBeLessThan(1.5)
+  })
+
+  it('keep what carries the brand, in its own hue, and take the rest from pforte', () => {
+    const brand = darkColors({ ...DEFAULT_COLORS, background: '#f6f3ec', surface: '#fffdf7', text: '#1d2b4a', primary: '#f2c94c', primaryText: '#1d2b4a', link: '#1d2b4a', danger: '#7a0000' })
+    // A yellow button reads on a dark card as it is, with its own text.
+    expect(brand).toMatchObject({ primary: '#f2c94c', primaryText: '#1d2b4a' })
+    // A navy link does not: it becomes a lighter blue, not a grey.
+    expect(brand.link).toMatch(/^#[0-9a-f]{6}$/)
+    expect(brand.link).not.toBe('#1d2b4a')
+    const [r, g, b] = [1, 3, 5].map((start) => Number.parseInt(brand.link.slice(start, start + 2), 16))
+    expect(b!).toBeGreaterThan(g!)
+    expect(g!).toBeGreaterThan(r!)
+    expect({ ...brand, primary: '', primaryText: '', link: '' }).toEqual({ ...dark, primary: '', primaryText: '', link: '' })
+  })
+
+  it('give a button whose own text no longer reads black or white text, whichever does', () => {
+    // A navy button becomes a lighter blue to stand out from the card, and keeps its white text.
+    expect(darkColors({ ...DEFAULT_COLORS, primary: '#162438', primaryText: '#ffffff' })).toMatchObject({ primaryText: '#ffffff' })
+    // A grey button with grey text that cannot be read on it.
+    const grey = darkColors({ ...DEFAULT_COLORS, primary: '#999999', primaryText: '#aaaaaa' })
+    expect(grey).toMatchObject({ primary: '#999999', primaryText: '#000000' })
+  })
+
+  it('are readable whatever the colours of the brand are', () => {
+    const steps = ['00', '33', '66', '99', 'cc', 'ff']
+    const all = steps.flatMap((r) => steps.flatMap((g) => steps.map((b) => `#${r}${g}${b}`)))
+    for (const color of all) {
+      for (const primaryText of ['#ffffff', '#000000', color]) {
+        const colors = darkColors({ ...DEFAULT_COLORS, primary: color, primaryText, link: color })
+        expect(contrastWarnings({ colors }), `${color} with ${primaryText}`).toEqual([])
+        expect(contrastRatio(colors.primary, colors.surface), color).toBeGreaterThanOrEqual(3)
+      }
+    }
+  })
+
+  it('are named when they are hard to read, as dark ones', () => {
+    const theme = { colors: DEFAULT_COLORS, dark: { colors: { ...dark, link: '#333333' }, logoTile: false } }
+    expect(contrastWarnings(theme).map((warning) => warning.replace(/: .*/, ''))).toEqual(['Low contrast for links on the card on a dark page', 'Low contrast for links on the page background on a dark page'])
+  })
+})
+
+describe('the stylesheet of a theme with a dark variant', () => {
+  const theme = defaultTheme()
+  const css = buildCss(theme)
+  const variables = (colors: typeof DEFAULT_COLORS) =>
+    `--background: ${colors.background}; --surface: ${colors.surface}; --text: ${colors.text}; --muted: ${colors.muted};\n  --border: ${colors.border}; --primary: ${colors.primary}; --primary-text: ${colors.primaryText}; --link: ${colors.link};\n  --danger: ${colors.danger}; --danger-background: ${colors.dangerBackground};`
+
+  it('is one stylesheet: light first, then dark where the page says so, then dark where the device says so and the page does not say light', () => {
+    const light = css.indexOf(`:root {\n  ${variables(DEFAULT_COLORS)}`)
+    const asked = css.indexOf(`:root[data-color-scheme="dark"] {\n  ${variables(theme.dark!.colors)}`)
+    const device = css.indexOf(`@media (prefers-color-scheme: dark) {\n:root:not([data-color-scheme="light"]) {\n  ${variables(theme.dark!.colors)}`)
+    expect(light).toBeGreaterThan(-1)
+    expect(asked).toBeGreaterThan(light)
+    expect(device).toBeGreaterThan(asked)
+  })
+
+  it('tells the browser which it is, so that what the browser draws itself fits', () => {
+    expect(css).toMatch(/:root \{[^}]*color-scheme: light;/)
+    expect(css.match(/color-scheme: dark;/g)).toHaveLength(2)
+  })
+
+  it('writes no colour of a text or a line into a rule: they are variables, with a value for dark', () => {
+    const rules = css.slice(css.indexOf('*, *::before'))
+    expect(rules).not.toMatch(/#[0-9a-fA-F]{3,6}\b/)
+    expect(rules).toContain('.flash.ok { border-color: var(--ok); }')
+    expect(rules).toContain('.badge.active { border-color: var(--ok); color: var(--ok); }')
+    expect(rules).toContain('.page button.danger { background: var(--danger); color: var(--on-danger); }')
+    expect(css).toMatch(/:root \{[^}]*--ok: #2e7d32; --on-danger: #fff;/)
+    // The green of a confirmation reads on the dark card and on the dark page, and the text on a red button on the red.
+    expect(css.match(/--ok: #7bd88f; --on-danger: var\(--danger-background\);/g)).toHaveLength(2)
+    expect(contrastRatio('#7bd88f', theme.dark!.colors.surface)).toBeGreaterThanOrEqual(4.5)
+    expect(contrastRatio('#7bd88f', theme.dark!.colors.background)).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('puts the logo on a tile in the light colour of the card on a dark page, where the theme asks for it', () => {
+    expect(css).not.toContain('.logo { padding')
+    const tiled = buildCss({ ...theme, colors: { ...DEFAULT_COLORS, surface: '#fffdf7' }, dark: { ...theme.dark!, logoTile: true } })
+    expect(tiled).toContain(':root[data-color-scheme="dark"] .logo { padding: 0.3rem 0.5rem; background: #fffdf7; border-radius: var(--radius-small); }')
+    expect(tiled).toContain(':root:not([data-color-scheme="light"]) .logo { padding: 0.3rem 0.5rem; background: #fffdf7; border-radius: var(--radius-small); }')
+  })
+
+  it('has nothing of this without a dark variant: the theme is light for everybody, as before', () => {
+    const light = buildCss(plainTheme())
+    expect(light).not.toContain('prefers-color-scheme')
+    expect(light).not.toContain('data-color-scheme')
+    expect(light).not.toContain('color-scheme:')
+    expect(buildCss(withDark(plainTheme()))).toBe(css)
   })
 })
 

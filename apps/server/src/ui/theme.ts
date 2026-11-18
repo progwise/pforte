@@ -57,6 +57,11 @@ export interface Theme {
   assets: Asset[]
   /** The name shown with (or instead of) the logo. */
   name?: string
+  /**
+   * The dark variant of the pages, for an application or a device that asks for dark. A theme without it is light
+   * for everybody. `logoTile` puts the logo on a tile in the light colour of the card, where it was drawn for.
+   */
+  dark?: { colors: Colors; logoTile: boolean }
 }
 
 /**
@@ -104,8 +109,8 @@ export const withSignet = (theme: Theme): Theme => {
   return { ...theme, assets: [...theme.assets, { path, type: 'image/svg+xml', bytes }], iconUrl: url, logoUrl: theme.name ? undefined : url }
 }
 
-/** The look pforte has without a branding folder: neutral colours and its own signet. */
-export const defaultTheme = (): Theme => withSignet(plainTheme())
+/** The look pforte has without a branding folder: neutral colours, light and dark, and its own signet. */
+export const defaultTheme = (): Theme => withSignet(withDark(plainTheme()))
 
 // --- contrast, so a theme that cannot be read is noticed at startup
 
@@ -126,8 +131,8 @@ export const contrastRatio = (a: string, b: string) => {
   return (lighter! + 0.05) / (darker! + 0.05)
 }
 
-/** Pairs that have to be readable, with the ratio WCAG asks of normal text. */
-export const contrastWarnings = ({ colors }: Pick<Theme, 'colors'>) => {
+/** Pairs that have to be readable, with the ratio WCAG asks of normal text. `where` names the page they are on. */
+const lowContrast = (colors: Colors, where = '') => {
   const pairs: [string, string, string][] = [
     ['text', colors.text, colors.surface],
     ['text on the page background', colors.text, colors.background],
@@ -140,8 +145,75 @@ export const contrastWarnings = ({ colors }: Pick<Theme, 'colors'>) => {
   return pairs
     .map(([what, a, b]) => ({ what, ratio: contrastRatio(a, b) }))
     .filter(({ ratio }) => ratio < 4.5)
-    .map(({ what, ratio }) => `Low contrast for ${what}: ${ratio.toFixed(1)}:1 (4.5:1 is the minimum for readable text).`)
+    .map(({ what, ratio }) => `Low contrast for ${what}${where}: ${ratio.toFixed(1)}:1 (4.5:1 is the minimum for readable text).`)
 }
+
+/** What is hard to read in a theme, in its light colours and in its dark ones. */
+export const contrastWarnings = ({ colors, dark }: Pick<Theme, 'colors' | 'dark'>) => [...lowContrast(colors), ...(dark ? lowContrast(dark.colors, ' on a dark page') : [])]
+
+// --- the dark variant, calculated from the colours of the light one
+
+/** The parts of a dark page that are the same for every installation: they carry no colour of a brand. */
+const DARK_BASE = {
+  background: '#111418',
+  surface: '#1b2027',
+  text: '#e7eaee',
+  muted: '#a3acb8',
+  border: '#3a424d',
+  danger: '#ffb4ab',
+  dangerBackground: '#4c1519',
+} satisfies Partial<Colors>
+
+const toHsl = (hex: string) => {
+  const full = hex.length === 4 ? `#${Array.from(hex.slice(1), (digit) => digit + digit).join('')}` : hex
+  const [r, g, b] = [1, 3, 5].map((start) => Number.parseInt(full.slice(start, start + 2), 16) / 255) as [number, number, number]
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  const lightness = (max + min) / 2
+  if (max === min) return { hue: 0, saturation: 0, lightness }
+  const spread = max - min
+  const saturation = spread / (1 - Math.abs(2 * lightness - 1))
+  const hue = max === r ? ((g - b) / spread + 6) % 6 : max === g ? (b - r) / spread + 2 : (r - g) / spread + 4
+  return { hue: hue * 60, saturation, lightness }
+}
+
+const fromHsl = ({ hue, saturation, lightness }: { hue: number; saturation: number; lightness: number }) => {
+  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation
+  const part = (offset: number) => {
+    const k = (offset + hue / 30) % 12
+    const value = lightness - (chroma / 2) * Math.max(-1, Math.min(k - 3, 9 - k, 1))
+    return Math.round(value * 255).toString(16).padStart(2, '0')
+  }
+  return `#${part(0)}${part(8)}${part(4)}`
+}
+
+/** The colour itself if it stands out from every one of `against` by `ratio`, else the lightest step of its own hue that does. */
+const lightened = (color: string, against: string[], ratio: number) => {
+  const reads = (candidate: string) => against.every((other) => contrastRatio(candidate, other) >= ratio)
+  if (reads(color)) return color.toLowerCase()
+  const hsl = toHsl(color)
+  for (let lightness = Math.ceil(hsl.lightness * 100); lightness < 100; lightness++) {
+    const candidate = fromHsl({ ...hsl, lightness: lightness / 100 })
+    if (reads(candidate)) return candidate
+  }
+  return '#ffffff'
+}
+
+/**
+ * The dark colours that go with a set of light ones. Background, card, text, hints, lines and errors are pforte's
+ * own. What carries the brand is kept and only made readable: a link is lightened in its own hue until it reads on
+ * the card and on the page (4.5:1), the main button until its shape stands out from the card (3:1). The text on the
+ * button stays if it still reads there, else it is black or white: one of the two reads on every colour.
+ */
+export const darkColors = (light: Colors): Colors => {
+  const primary = lightened(light.primary, [DARK_BASE.surface], 3)
+  const reads = (text: string) => contrastRatio(primary, text) >= 4.5
+  const primaryText = reads(light.primaryText) ? light.primaryText : reads('#ffffff') ? '#ffffff' : '#000000'
+  return { ...DARK_BASE, primary, primaryText, link: lightened(light.link, [DARK_BASE.surface, DARK_BASE.background], 4.5) }
+}
+
+/** Gives the theme the dark variant that is calculated from its colours. */
+export const withDark = (theme: Theme): Theme => ({ ...theme, dark: { colors: darkColors(theme.colors), logoTile: false } })
 
 // --- the stylesheet
 
@@ -158,15 +230,35 @@ export const buildCss = (theme: Theme) => {
     )
     .join('\n')
 
+  const variables = (set: Colors) => `--background: ${set.background}; --surface: ${set.surface}; --text: ${set.text}; --muted: ${set.muted};
+  --border: ${set.border}; --primary: ${set.primary}; --primary-text: ${set.primaryText}; --link: ${set.link};
+  --danger: ${set.danger}; --danger-background: ${set.dangerBackground};`
+  /**
+   * The dark variant, for the page (`root`) it applies to. Besides the colours of the theme: the green of a
+   * confirmation and the text on a red button, which read on a light page as they are, and what the browser draws
+   * itself (the autofill of a field, a scroll bar). The logo keeps the ground it was drawn for.
+   */
+  const darkFor = (root: string, dark: NonNullable<Theme['dark']>) => `${root} {
+  ${variables(dark.colors)}
+  --ok: #7bd88f; --on-danger: var(--danger-background); color-scheme: dark;
+}${dark.logoTile ? `\n${root} .logo { padding: 0.3rem 0.5rem; background: ${colors.surface}; border-radius: var(--radius-small); }` : ''}`
+  // Dark where the application said so (`data-color-scheme`, see `color-scheme.ts`); where nobody said anything, where the device does.
+  const darkVariant = theme.dark
+    ? `
+${darkFor(':root[data-color-scheme="dark"]', theme.dark)}
+@media (prefers-color-scheme: dark) {
+${darkFor(':root:not([data-color-scheme="light"])', theme.dark)}
+}`
+    : ''
+
   return `${faces}
 :root {
-  --background: ${colors.background}; --surface: ${colors.surface}; --text: ${colors.text}; --muted: ${colors.muted};
-  --border: ${colors.border}; --primary: ${colors.primary}; --primary-text: ${colors.primaryText}; --link: ${colors.link};
-  --danger: ${colors.danger}; --danger-background: ${colors.dangerBackground};
+  ${variables(colors)}
+  --ok: #2e7d32; --on-danger: #fff;${theme.dark ? ' color-scheme: light;' : ''}
   --radius: ${radius}; --radius-small: calc(${radius} * 0.66);
   --input-border: color-mix(in srgb, var(--text) 45%, var(--surface));
   --font-body: ${stack(fonts.body)}; --font-heading: ${fonts.heading ? stack(fonts.heading) : 'var(--font-body)'};
-}
+}${darkVariant}
 *, *::before, *::after { box-sizing: border-box; }
 body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem;
   padding: 1rem; font: 16px/1.5 var(--font-body); background: var(--background); color: var(--text); }
@@ -218,7 +310,7 @@ nav.sections a[aria-current="page"] { border-bottom-color: var(--link); color: v
 .page > h1 { margin-bottom: 1.25rem; font-size: 1.7rem; }
 .page h2 { margin: 2rem 0 0.75rem; font: 600 1.15rem var(--font-heading); }
 .flash { margin-bottom: 1rem; padding: 0.75rem 1rem; border-radius: var(--radius-small); border: 1px solid var(--border); background: var(--surface); }
-.flash.ok { border-color: #2e7d32; }
+.flash.ok { border-color: var(--ok); }
 .flash.error { border-color: var(--danger); color: var(--danger); background: var(--danger-background); }
 .panel { padding: 1rem 1.25rem; margin-bottom: 1rem; background: var(--surface); border-radius: var(--radius); box-shadow: 0 1px 3px rgb(0 0 0 / 12%); }
 table.list { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: var(--radius-small); overflow: hidden; box-shadow: 0 1px 3px rgb(0 0 0 / 12%); }
@@ -227,14 +319,14 @@ table.list th { font: 600 0.85rem var(--font-heading); color: var(--muted); }
 table.list tr:last-child td { border-bottom: 0; }
 .scroll { overflow-x: auto; }
 .badge { display: inline-block; padding: 0.1rem 0.55rem; border-radius: 999px; border: 1px solid var(--border); font-size: 0.8rem; background: var(--background); }
-.badge.active { border-color: #2e7d32; color: #2e7d32; }
+.badge.active { border-color: var(--ok); color: var(--ok); }
 .badge.locked, .badge.deactivated { border-color: var(--danger); color: var(--danger); }
 .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0; }
 .actions form { margin: 0; }
 a.button, .page button { display: inline-flex; align-items: center; justify-content: center; width: auto; min-height: 2.75rem; padding: 0 1.1rem; margin: 0;
   border: 0; border-radius: var(--radius-small); background: var(--primary); color: var(--primary-text); font: 600 1rem var(--font-heading); text-decoration: none; cursor: pointer; }
 a.button.secondary, .page button.secondary { background: transparent; color: var(--link); box-shadow: inset 0 0 0 1px var(--input-border); margin-top: 0; }
-.page button.danger { background: var(--danger); color: #fff; }
+.page button.danger { background: var(--danger); color: var(--on-danger); }
 .page form.fields { display: grid; gap: 0.25rem 1rem; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); align-items: start; }
 .page form.fields.stack { grid-template-columns: minmax(0, 40rem); }
 .page form.fields .submit { align-self: end; margin-bottom: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.5rem; }

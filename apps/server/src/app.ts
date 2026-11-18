@@ -7,6 +7,7 @@ import { interactionRoutes } from './interaction/routes.js'
 import { addSecurityHeaders } from './security/headers.js'
 import { logSerializers } from './security/log-redaction.js'
 import { brandRoutes } from './ui/brand-routes.js'
+import { createColorScheme } from './ui/color-scheme.js'
 import type { Ui } from './ui/index.js'
 import type { ManageDependencies } from './manage/context.js'
 import { manageRoutes } from './manage/routes.js'
@@ -49,6 +50,8 @@ export const buildApp = ({ getDatabaseTime, oidc, admin, account, accountArea, m
   }
   const app = Fastify(options)
   addSecurityHeaders(app, { https: issuer?.startsWith('https:') ?? false })
+  // A theme without a dark variant is light for everybody: there is nothing for an application to say.
+  if (ui?.theme.dark) createColorScheme({ secure: issuer?.startsWith('https:') ?? false }).addTo(app)
 
   // Rate limits count by client address. Behind a proxy without TRUST_PROXY that address is the proxy's,
   // and everybody would be counted together: worth saying once, loudly.

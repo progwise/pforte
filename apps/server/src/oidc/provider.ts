@@ -4,6 +4,7 @@ import { verify } from '@node-rs/argon2'
 import Provider, { type Configuration, type JWK, type KoaContextWithOIDC } from 'oidc-provider'
 import type { Config } from '../config.js'
 import { parseAcceptLanguage } from '../i18n/index.js'
+import { COLOR_SCHEME_PARAMETER, createColorScheme } from '../ui/color-scheme.js'
 import { createUi, type Ui } from '../ui/index.js'
 import { ACCOUNT_PATH } from '../account-area/constants.js'
 import { ACR_PASSWORD, ACR_SECOND_FACTOR } from '../auth/assurance.js'
@@ -179,6 +180,17 @@ export const createProvider = async ({ config, db, onError, ui = createUi() }: P
     if (ctx.oidc?.route === 'end_session' && ctx.status === 200) ctx.append('Set-Cookie', logoutLanguage.remember(await languageOfLogout(ctx)))
     if (ctx.oidc?.route === 'end_session_confirm' && ctx.status === 303 && !leadsToPageAtTheEnd(ctx.response.get('location'))) ctx.append('Set-Cookie', logoutLanguage.forget())
   })
+  // Light or dark as the application said, for what the library answers itself: the request that says it (the
+  // authorization request, the end-session request) and the pages the library sends (see `color-scheme.ts`).
+  if (ui.theme.dark) {
+    const colorScheme = createColorScheme({ secure: secureIssuer })
+    provider.use(async (ctx, next) => {
+      await next()
+      const { scheme, setCookie } = colorScheme.of(ctx.method, ctx.query[COLOR_SCHEME_PARAMETER], ctx.get('cookie'))
+      if (setCookie) ctx.append('Set-Cookie', setCookie)
+      if (typeof ctx.body === 'string') ctx.body = colorScheme.mark(ctx.body, scheme)
+    })
+  }
   provider.on('server_error', (_ctx, error) => onError?.(error))
 
   // Because `expiresWithSession` is false, the library marks every authorization as surviving

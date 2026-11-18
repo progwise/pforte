@@ -24,6 +24,30 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   refuses entries it does not know, so a folder with `logoSmall` stops pforte 0.3.1 and earlier at the start. Add the
   entry after the update, not before
   ([branding](docs/branding-and-languages.md#branding-brandjson), [#93](https://github.com/progwise/pforte/issues/93)).
+- **The pages come dark as well as light.** They were light on every device and for every application. Which of the
+  two a person sees is now decided by the application they come from, else by the device:
+  - **An application says whether it is dark or light** with `color_scheme=dark` or `color_scheme=light` in the query
+    of the authorization request, the end-session request or a link to the account pages. pforte's pages then look
+    like it and keep that look in this browser until a request says something else, so no page has to pass the
+    parameter on. It is kept in the new cookie `pforte_color_scheme` (one of the two words, 400 days);
+    `color_scheme=auto` removes it. **An application that is light or dark by its own choice should send the
+    parameter with every authorization request**: one that says nothing gets what the last application asked for.
+  - **Where no application ever said anything, the pages follow the device** (`prefers-color-scheme`).
+  - **The dark colours are calculated** from the colours of the installation: pforte's own dark page, card, text,
+    hints, lines and error messages, and the installation's `primary` and `link`, kept where they read on dark and
+    else lightened in their own hue until they do. `brand.json` has a new entry `dark`: `dark.colors` replaces single
+    calculated colours, and startup warns about dark colours that are hard to read.
+  - **A logo sits on a light tile on a dark page**, in the installation's light `surface` colour, because it was
+    drawn for a light page; `"logoTile": false` in `dark` shows it as it is. There is one logo file for both.
+
+  **Who sees a change without doing anything: every installation, on a device that is set to dark**, also one with
+  its own colours and logo. Look at your sign-in page on such a device after the update. **To stay light for
+  everybody, as before, add `"dark": false` to `brand.json`.** One thing to know: `brand.json` refuses entries it
+  does not know, so a folder with `dark` stops pforte 0.3.1 and earlier at the start; add the entry after the update,
+  not before. The pages still run no script for this and load nothing from other sites, and no text is new. The
+  example application takes `COLOR_SCHEME` to try the parameter
+  ([light and dark](docs/branding-and-languages.md#light-and-dark),
+  [for applications](docs/integrating-a-client.md#light-or-dark), [#94](https://github.com/progwise/pforte/issues/94)).
 
 ### Fixed
 
