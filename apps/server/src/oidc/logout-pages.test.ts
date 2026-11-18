@@ -297,11 +297,39 @@ describe.skipIf(!hasDatabase)('the pages of the OpenID library, in pforte\'s loo
       expect((await browser.request('GET', '/manage/signed-out', french)).body).not.toContain('<html lang="de">')
     })
 
-    it('keeps it with the answer where the page that follows is one of pforte\'s own', async () => {
+    it('ends with the answer also where the application lives at pforte\'s own host, under another path', async () => {
+      const own = 'https://localhost:3300/shop/signed-out'
+      expect((await h.api('PATCH', '/clients/demo-web', { body: { postLogoutRedirectUris: ['http://localhost:3400/', own] } })).statusCode).toBe(200)
       const browser = await signedIn()
-      const question = await browser.request('GET', '/session/end?ui_locales=de', ENGLISH_BROWSER)
+      const query = new URLSearchParams({ client_id: WEB.clientId, post_logout_redirect_uri: own, state: 'abc', ui_locales: 'de' })
+      const question = await browser.request('GET', `/session/end?${query}`, ENGLISH_BROWSER)
+
       const answered = await browser.request('POST', '/session/end/confirm', { form: { xsrf: xsrfOf(question.body), logout: 'yes' } })
-      expect(answered.headers.location).toBe('https://localhost:3300/session/end/success')
+      expect(answered.headers.location).toBe(`${own}?state=abc`)
+      expect(languageCookies(answered)).toEqual(['pforte_logout_language=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax; Secure'])
+      const french = { headers: { 'accept-language': 'fr-FR,fr;q=0.9' } }
+      expect((await browser.request('GET', '/session/end/success', french)).body).toContain('<html lang="fr">')
+    })
+
+    it.each([
+      ['the provider\'s notice', {}, 'https://localhost:3300/session/end/success'],
+      ['the provider\'s notice for an application', { client_id: WEB.clientId }, 'https://localhost:3300/session/end/success'],
+      ['the "signed out" page of the account pages', { client_id: 'pforte-account-ui', post_logout_redirect_uri: 'https://localhost:3300/account/signed-out', state: 'abc' }, 'https://localhost:3300/account/signed-out?state=abc'],
+      ['the "signed out" page of the administration', { client_id: 'pforte-admin-ui', post_logout_redirect_uri: 'https://localhost:3300/manage/signed-out' }, 'https://localhost:3300/manage/signed-out'],
+    ])('keeps it with the answer where the page that follows is %s', async (_page, parameters, location) => {
+      const browser = await signedIn()
+      const question = await browser.request('GET', `/session/end?${new URLSearchParams({ ...parameters, ui_locales: 'de' })}`, ENGLISH_BROWSER)
+      const answered = await browser.request('POST', '/session/end/confirm', { form: { xsrf: xsrfOf(question.body), logout: 'yes' } })
+      expect(answered.headers.location).toBe(location)
+      expect(languageCookies(answered)).toEqual([])
+      expect((await browser.request('GET', location, ENGLISH_BROWSER)).body).toContain('<html lang="de">')
+    })
+
+    it('keeps it after a no for an application that names no address to return to', async () => {
+      const browser = await signedIn()
+      const question = await browser.request('GET', `/session/end?${new URLSearchParams({ client_id: WEB.clientId, ui_locales: 'de' })}`, ENGLISH_BROWSER)
+      const answered = await browser.request('POST', '/session/end/confirm', { form: { xsrf: xsrfOf(question.body) } })
+      expect(answered.headers.location).toBe(`https://localhost:3300/session/end/success?client_id=${WEB.clientId}`)
       expect(languageCookies(answered)).toEqual([])
     })
 

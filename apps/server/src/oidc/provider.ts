@@ -5,7 +5,9 @@ import Provider, { type Configuration, type JWK, type KoaContextWithOIDC } from 
 import type { Config } from '../config.js'
 import { parseAcceptLanguage } from '../i18n/index.js'
 import { createUi, type Ui } from '../ui/index.js'
+import { ACCOUNT_PATH } from '../account-area/constants.js'
 import { ACR_PASSWORD, ACR_SECOND_FACTOR } from '../auth/assurance.js'
+import { MANAGE_PATH } from '../manage/constants.js'
 import { createFindAccount, standardClaims } from './accounts.js'
 import { ClientAdapter, PayloadAdapter } from './adapter.js'
 import { createCors } from './cors.js'
@@ -166,15 +168,16 @@ export const createProvider = async ({ config, db, onError, ui = createUi() }: P
   provider.use(cors.middleware)
   // Every request to sign out leaves the language of its pages behind for the page at the end. Here and not in
   // `logoutSource`, because the library asks no question of a browser without a session and so never calls it.
-  // The answer ends that again where it leads to an application: none of pforte's pages follows that could take
-  // the language and remove it, and a later page of pforte must not speak the language of a sign-out long over.
-  const ownOrigin = new URL(config.issuer).origin
-  const leadsToApplication = (location: string) => URL.canParse(location) && new URL(location).origin !== ownOrigin
+  // The answer ends that again unless it leads to one of the three pages that take the language and remove it:
+  // behind any other address, also one of an application at pforte's own host, no such page follows, and a later
+  // page of pforte must not speak the language of a sign-out long over.
+  const pagesAtTheEnd = new Set(['/session/end/success', `${ACCOUNT_PATH}/signed-out`, `${MANAGE_PATH}/signed-out`].map((path) => `${config.issuer}${path}`))
+  const leadsToPageAtTheEnd = (location: string) => pagesAtTheEnd.has(location.split(/[?#]/)[0]!)
   provider.use(async (plain, next) => {
     await next()
     const ctx = plain as KoaContextWithOIDC
     if (ctx.oidc?.route === 'end_session' && ctx.status === 200) ctx.append('Set-Cookie', logoutLanguage.remember(await languageOfLogout(ctx)))
-    if (ctx.oidc?.route === 'end_session_confirm' && ctx.status === 303 && leadsToApplication(ctx.response.get('location'))) ctx.append('Set-Cookie', logoutLanguage.forget())
+    if (ctx.oidc?.route === 'end_session_confirm' && ctx.status === 303 && !leadsToPageAtTheEnd(ctx.response.get('location'))) ctx.append('Set-Cookie', logoutLanguage.forget())
   })
   provider.on('server_error', (_ctx, error) => onError?.(error))
 
