@@ -130,7 +130,8 @@ export const clientsRoutes =
             'Two kinds exist. An **application** signs users in (authorization code flow, public or confidential) and has ' +
             'OpenID scopes and redirect URIs. A **machine** calls the admin API with the client_credentials grant and has ' +
             'only the scopes `admin` and/or `directory`. They never mix. A confidential client gets a generated secret, ' +
-            'returned here once and never again. Redirect URIs and the start address (`clientUri`) must be https (http only for localhost).',
+            'returned here once and never again. Redirect URIs and the start address (`clientUri`) must be https (http only for localhost). ' +
+            'An empty `clientUri` or `backchannelLogoutUri` (`""`) means none and is stored as `null`.',
           body: z.object({
             clientId,
             name: z.string().trim().min(1).max(200),
@@ -192,7 +193,8 @@ export const clientsRoutes =
           summary: 'Change a client',
           description:
             'Only the fields given are changed, and the result must still be a valid client of its kind. Takes effect at ' +
-            'once. The last client with the `admin` scope cannot lose it.',
+            'once. The last client with the `admin` scope cannot lose it. An empty `clientUri` or `backchannelLogoutUri` ' +
+            '(`""`) removes the address, as `null` does.',
           params,
           body: z
             .object({
