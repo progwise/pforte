@@ -49,7 +49,8 @@ platforms, tests and scans, and takes the notes from "Unreleased" if the version
 
 ## After a release
 
-- Check from outside that the new image is there: `docker pull ghcr.io/progwise/pforte:0.2.0`.
+- Check from outside that the new image is there, with the version that was just released in place of `<version>`:
+  `docker pull ghcr.io/progwise/pforte:<version>`. An older version would be pulled also when the new one is missing.
 - Name the new version where the documentation names one, in a pull request of its own: the status line of
   [README.md](../README.md) and its sentence on what came with the release, and the image to pin in
   [the quick start](quick-start.md), in both READMEs of the examples, in `examples/production/compose.yaml` and in
