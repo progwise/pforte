@@ -2,7 +2,6 @@ import { confirmPhone, LifecycleError, type RequestContext } from '@progwise/pfo
 import { CodeLimitError, currentCode, issueCode, withdrawCode } from '@progwise/pforte-db/codes'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { canConfirmPhone, maskPhone } from '../auth/channels.js'
-import { shortWaitValues } from '../i18n/duration.js'
 import { NotifierUnavailableError } from '../notifications/notifier.js'
 import { escapeHtml } from '../ui/pages.js'
 import { tooManyRequests } from '../ui/too-many.js'
@@ -80,8 +79,7 @@ ${
       await notifier.sendPhoneCode(user, { code, expiresAt })
       await audit.codeSent(where(request), { userId: user.id, purpose: 'activation', channel: 'sms' })
     } catch (error) {
-      // Worded here, in the language the next page is shown in: a time in words cannot travel as a value of the message.
-      if (error instanceof CodeLimitError) return redirectWith(reply, PHONE, { kind: 'error', text: viewFor(request, user).t('phone.wait', shortWaitValues(error.retryAfterSeconds)) })
+      if (error instanceof CodeLimitError) return redirectWith(reply, PHONE, { kind: 'error', key: 'phone.wait', values: { seconds: error.retryAfterSeconds } })
       if (!(error instanceof NotifierUnavailableError)) throw error
       request.log.error(error, 'the code to confirm the phone number could not be sent')
       // Nobody is waiting for that code: the page offers to send one again instead of asking for it.

@@ -1,4 +1,4 @@
-import type { MessageKey, Worded } from './index.js'
+import type { MessageKey, TextValues, Values, Worded } from './index.js'
 
 /** The four built-in languages say "1 minute" and "2 minutes"; a language with more forms than these two has its own texts. */
 const form = (count: number) => (count === 1 ? 'one' : 'other')
@@ -53,4 +53,16 @@ export const DURATION_VALUES: Partial<Record<MessageKey, { worded: string; numbe
   'code.tooMany': { worded: 'wait', number: 'minutes' },
   'limit.text': { worded: 'wait', number: 'minutes' },
   'account.password.wait': { worded: 'wait', number: 'minutes' },
+}
+
+/**
+ * The values of a text whose wait came to the page in a message. A message for the next page travels in a cookie
+ * and carries the wait as the bare number of seconds (`seconds`): a time in words is no value that can travel, and
+ * the sentence itself, which a `locales` folder can make long, has no place in a cookie. The words are put to it
+ * here, on the page that shows the text. A text without a wait keeps its values.
+ */
+export const withWait = (key: MessageKey, values: Values = {}): TextValues => {
+  const duration = DURATION_VALUES[key]
+  if (duration?.worded !== 'wait' || typeof values.seconds !== 'number') return values
+  return { ...values, ...(duration.number === 'seconds' ? shortWaitValues(values.seconds) : waitValues(values.seconds)) }
 }

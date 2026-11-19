@@ -8,7 +8,8 @@ import type { LoginAudit } from '../auth/login-audit.js'
 import type { SendPasswordResetCode } from '../auth/password-reset.js'
 import type { RateLimiter } from '../auth/rate-limiter.js'
 import { parseAcceptLanguage } from '../i18n/index.js'
-import type { MessageKey, Translate, Values } from '../i18n/index.js'
+import { withWait } from '../i18n/duration.js'
+import type { MessageKey, Translate } from '../i18n/index.js'
 import type { Notifier } from '../notifications/notifier.js'
 import type { ClientLogouts } from '../oidc/client-logouts.js'
 import { createLogoutLanguage } from '../oidc/logout-language.js'
@@ -88,7 +89,8 @@ export const accountAreaRoutes =
 
     // Messages from one page to the next. Lax like the other cookies of the area.
     const flash = createFlash({ cookie: 'pforte_account_flash', path: ACCOUNT_PATH, sameSite: 'Lax' })
-    const flashText = (t: (key: MessageKey, values?: Values) => string, message: Flash) => message.text ?? (message.key ? t(message.key, message.values) : '')
+    // A wait travels as a number of seconds and gets its words here, in the language of this page.
+    const flashText = (t: Translate, message: Flash) => message.text ?? (message.key ? t(message.key, withWait(message.key, message.values)) : '')
 
     /**
      * A page for somebody who has no session: what the sign-in or the sign-out came to. A message the last action

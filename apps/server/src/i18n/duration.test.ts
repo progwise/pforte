@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DURATION_VALUES, shortWaitValues, validity, waitValues } from './duration.js'
+import { DURATION_VALUES, shortWaitValues, validity, waitValues, withWait } from './duration.js'
 import { BUILT_IN, createI18n, type I18n, type Worded } from './index.js'
 
 const i18n = createI18n()
@@ -98,6 +98,30 @@ describe('how long to wait where it can be seconds, in words', () => {
     expect(phone('de', 45)).toContain('warten Sie 45 Sekunden,')
     expect(phone('fr', 1)).toContain('patienter 1 seconde avant')
     expect(phone('hu', 45)).toBe('Újabb kódot 45 másodperc múlva kérhet.')
+  })
+})
+
+describe('a wait that came to the page in a message, as a number of seconds', () => {
+  const shown = (key: Parameters<typeof withWait>[0], values?: Parameters<typeof withWait>[1], language = 'en') => i18n.text(language, key, withWait(key, values))
+
+  it('gets its words on the page that shows it: seconds and minutes where the text can be short, minutes else', () => {
+    expect(shown('phone.wait', { seconds: 1 })).toBe('Please wait 1 second before asking for another code.')
+    expect(shown('phone.wait', { seconds: 3540 })).toBe('Please wait 59 minutes before asking for another code.')
+    expect(shown('phone.wait', { seconds: 45 }, 'de')).toContain('warten Sie 45 Sekunden,')
+    expect(shown('account.password.wait', { seconds: 45 })).toContain('in 1 minute')
+    expect(shown('account.password.wait', { seconds: 300 }, 'de')).toContain('in 5 Minuten')
+  })
+
+  it('still fills a text of an installation that writes the bare number', () => {
+    const own = createI18n({ overrides: { de: { 'phone.wait': 'Noch {seconds} Sek.', 'account.password.wait': 'Noch {minutes} Min.' } } })
+    expect(own.text('de', 'phone.wait', withWait('phone.wait', { seconds: 45 }))).toBe('Noch 45 Sek.')
+    expect(own.text('de', 'account.password.wait', withWait('account.password.wait', { seconds: 300 }))).toBe('Noch 5 Min.')
+  })
+
+  it('leaves every other text and a message without a wait as they are', () => {
+    expect(withWait('account.password.unavailable')).toEqual({})
+    expect(withWait('phone.wait')).toEqual({})
+    expect(withWait('manage.import.doneTitle', { seconds: 4 })).toEqual({ seconds: 4 })
   })
 })
 
