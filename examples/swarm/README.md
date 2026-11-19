@@ -30,7 +30,7 @@ $EDITOR .env                   # PFORTE_HOST, PFORTE_IMAGE, SWARM_MANAGER, DATA_
 | --- | --- |
 | `STACK_NAME` | The name of the stack. Services, secrets and the database address carry it: choose it before `./setup.sh` and keep it. |
 | `PFORTE_HOST` | The public name of pforte. |
-| `PFORTE_IMAGE` | A released version such as `ghcr.io/progwise/pforte:0.3.1`, or `build` (below). **Pin a version**, so an update is something you decide. |
+| `PFORTE_IMAGE` | A released version such as `ghcr.io/progwise/pforte:0.3.2`, or `build` (below). **Pin a version**, so an update is something you decide. |
 | `SWARM_MANAGER` | An SSH host of a manager node. The Docker CLI talks to it as `ssh://<host>`. Empty: the Docker of your shell. |
 | `DATA_NODE` | The node the services run on, as an SSH host. Empty: the manager above, and without one the Docker of your shell. `deploy.sh` makes the data folder there, builds there, and pins the services to that node by its ID: the database's files are a folder on it, so nothing may start anywhere else. All three go through the Docker of that node, so they cannot land on different machines. |
 | `DATA_DIR` | The folder on that node. |

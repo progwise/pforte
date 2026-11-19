@@ -7,7 +7,7 @@ by a back office rather than by self-registration.
 
 **Documentation: <https://pforte.dev>**
 
-**Status: early release, 0.3.1.** Sign-in with e-mail and password and a second factor by code (by e-mail or SMS), passkeys,
+**Status: early release, 0.3.2.** Sign-in with e-mail and password and a second factor by code (by e-mail or SMS), passkeys,
 remembered devices, password reset and activation links, the authorization code flow with PKCE, refresh tokens, logout and
 back-channel logout, an admin API, an administration (users, clients, claim types, audit log, CSV import), account pages for
 every person, a login audit with rate limits, your own name, colours and languages, and a Docker image all work and are tested. The image is `ghcr.io/progwise/pforte`; what changed in each release is in the
@@ -149,7 +149,8 @@ password reset, the audit log and rate limits, branding and languages, the Docke
 releases 0.1.0 and 0.2.0. With 0.3.0: the account pages, passkeys, telling applications when somebody else ends a person's
 sessions, confirming a phone number later (on the account pages, at a sign-in or in an application's own pages), and an
 example for Docker Swarm. With 0.3.1: account pages that fit a phone, new passwords that a password manager saves under
-the e-mail address, and pforte's signet.
+the e-mail address, and pforte's signet. With 0.3.2: pages that come dark as well as light, as the application or the
+device says, a second, small logo for the narrow places, and sign-out pages in the person's language.
 
 Next: the OpenID conformance suite again before 1.0 ([#48](https://github.com/progwise/pforte/issues/48)), and ideas that
 wait for a need: a consent screen, custom URL schemes for native apps, self-service sign-up, a first-party login API.
