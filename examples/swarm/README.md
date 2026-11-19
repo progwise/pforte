@@ -37,6 +37,7 @@ $EDITOR .env                   # PFORTE_HOST, PFORTE_IMAGE, SWARM_MANAGER, DATA_
 | `PROXY_NETWORK` | The overlay network of caddy-docker-proxy. |
 | `TRUST_PROXY` | `1` for the edge proxy alone, `2` with a CDN in front of it ([rate limits](../../docs/rate-limiting.md)). |
 | `MAIL_FROM`, `ORGANISATION_NAME`, `DEFAULT_LANGUAGE`, `TIME_ZONE`, `BOOTSTRAP_ADMIN_EMAIL` | As in the [configuration reference](../../docs/configuration.md). |
+| `BRANDING_DIR` | Optional: a branding folder **on the machine you deploy from** ([below](#your-own-name-logo-and-colours)). |
 
 `deploy.sh` loads `.env` with the shell, so a value with spaces needs quotes: `ORGANISATION_NAME="Example Inc."`.
 
@@ -79,6 +80,26 @@ for an address; a provider that wants a key in the address itself does not fit t
 If you write a stack file of your own: a swarm reads `{{...}}` in the environment of a service as a template of its own
 and refuses `{{to}}` (`function "to" not defined`), so the task never starts. `deploy.sh` passes each placeholder of
 `SMS_BODY` as `{{"{{to}}"}}`, which the swarm turns back into `{{to}}`.
+
+## Your own name, logo and colours
+
+Optional. Without it pforte looks neutral ([branding and languages](../../docs/branding-and-languages.md)).
+
+1. Make a branding folder on the machine you deploy from. [`examples/branding`](../branding) is a small one to start
+   from: a made-up company with a wordmark, a small logo and its colours.
+2. Name it in `.env`, seen from this folder or as an absolute path: `BRANDING_DIR=../branding`.
+3. `./deploy.sh --check`, then `./deploy.sh`. With `BRANDING_DIR` set it adds `stack.branding.yml`, copies the folder
+   to `DATA_NODE` through Docker and mounts it into pforte, read-only.
+
+The copy lies in `<DATA_DIR>/branding/<fingerprint>`, named after what is in the folder. So a changed folder restarts
+pforte with the next deploy, an unchanged one does not, and the pforte that is running keeps the folder it started
+with. The folders of earlier deploys stay until you remove them; they are small.
+
+**Try a changed folder before you deploy it.** pforte refuses to start with a branding folder it cannot read (an
+entry in `brand.json` it does not know, a file that is missing or too big), and here the one instance is stopped
+before the new one starts. In a checkout, `BRANDING_DIR=/path/to/branding pnpm dev` starts pforte with the folder or
+says what is wrong with it ([CONTRIBUTING](../../CONTRIBUTING.md)); or deploy it to a test stack first. If it
+happened: correct the folder and deploy again.
 
 ## What this setup does for you
 

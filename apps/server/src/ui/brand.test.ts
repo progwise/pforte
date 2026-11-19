@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { loadBrand } from './brand.js'
 import { darkColors, DEFAULT_COLORS } from './theme.js'
@@ -267,5 +268,19 @@ describe('the branding folder', () => {
 
   it('refuses files that are too big', () => {
     expect(() => loadBrand(folder({ logo: 'big.svg' }, { 'big.svg': `${SVG}${' '.repeat(600 * 1024)}` }))).toThrow(/limit is 512 KB/)
+  })
+})
+
+// examples/branding is what the examples offer to start from, and what a test instance shows.
+describe('the sample brand of the examples', () => {
+  it('is a folder pforte starts with, without a warning: a wordmark, a small logo, and colours that read light and dark', () => {
+    const brand = loadBrand(fileURLToPath(new URL('../../../../examples/branding', import.meta.url)))
+    expect(brand.warnings).toEqual([])
+    expect(brand.name).toBe('Example Inc.')
+    expect(brand.theme.logoUrl).toMatch(/^\/brand\/.*logo.*\.svg$/)
+    expect(brand.theme.logoSmallUrl).toMatch(/^\/brand\/.*logo-small.*\.svg$/)
+    expect(brand.theme.logoSmallUrl).not.toBe(brand.theme.logoUrl)
+    expect(brand.theme.dark).toMatchObject({ logoTile: true })
+    expect(brand.theme.links).toHaveLength(2)
   })
 })

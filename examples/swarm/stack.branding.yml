@@ -1,0 +1,14 @@
+# Your own name, logo, colours and texts (docs/branding-and-languages.md). deploy.sh adds this file when
+# BRANDING_DIR is set in .env: it copies that folder from the machine you deploy from to the node the services run
+# on, into the data folder, and pforte reads it there.
+version: '3.8'
+
+services:
+  pforte:
+    environment:
+      BRANDING_DIR: /branding
+    volumes:
+      # pforte reads the folder once, when it starts. The copy on the node is named after a fingerprint of what is
+      # in it: a changed folder is a changed service, so the deploy restarts pforte with it, and leaves pforte
+      # alone when nothing changed.
+      - ${DATA_DIR}/branding/${BRANDING_PRINT:?deploy.sh sets BRANDING_PRINT}:/branding:ro

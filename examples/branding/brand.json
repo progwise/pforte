@@ -1,0 +1,20 @@
+{
+  "name": "Example Inc.",
+  "logo": "logo.svg",
+  "logoSmall": "logo-small.svg",
+  "radius": "16px",
+  "colors": {
+    "background": "#f6f3ec",
+    "surface": "#ffffff",
+    "text": "#1d2b4a",
+    "muted": "#4d5870",
+    "border": "#e0dacb",
+    "primary": "#f2c94c",
+    "primaryText": "#1d2b4a",
+    "link": "#2a4a8b"
+  },
+  "links": [
+    { "label": { "en": "Imprint", "de": "Impressum" }, "url": "https://example.com/imprint" },
+    { "label": { "en": "Privacy", "de": "Datenschutz" }, "url": "https://example.com/privacy" }
+  ]
+}
