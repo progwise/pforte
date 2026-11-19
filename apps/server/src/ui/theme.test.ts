@@ -102,6 +102,24 @@ describe('the dark colours', () => {
       expect(contrastRatio(button.primary, button.primaryText)).toBeGreaterThanOrEqual(4.5)
     })
 
+    it('are darkened where the card the brand chose is not dark: no lighter link or button reads on it', () => {
+      const ground = '#aaaaaa'
+      expect(contrastRatio('#ffffff', ground)).toBeLessThan(3)
+      const chosen = darkColors(DEFAULT_COLORS, { surface: ground, background: ground })
+      expect(contrastRatio(chosen.link, ground)).toBeGreaterThanOrEqual(4.5)
+      expect(contrastRatio(chosen.primary, ground)).toBeGreaterThanOrEqual(3)
+      expect(contrastRatio(chosen.primary, chosen.primaryText)).toBeGreaterThanOrEqual(4.5)
+      // Still the colours of the brand, in their own hue: black would read as well, and is not taken.
+      expect(chosen.link).not.toBe('#000000')
+      expect(chosen.primary).not.toBe('#000000')
+    })
+
+    it('take black or white, whichever stands out more, where no colour reads on both the card and the page', () => {
+      // Nothing reaches 4.5:1 on white and on this grey at once. Black is the better of the two ends.
+      expect(darkColors(DEFAULT_COLORS, { surface: '#ffffff', background: '#555555' }).link).toBe('#000000')
+      expect(darkColors(DEFAULT_COLORS, { surface: '#000000', background: '#aaaaaa' }).link).toBe('#ffffff')
+    })
+
     it('take what the brand names as it is, also where it reads badly: that is a warning, not a correction', () => {
       const chosen = darkColors(light, { surface: '#333333', link: '#777777', primary: '#222222', primaryText: '#333333' })
       expect(chosen).toMatchObject({ surface: '#333333', link: '#777777', primary: '#222222', primaryText: '#333333' })
