@@ -23,7 +23,9 @@ The page of the application is also a place to try pforte from, made for a phone
   browser and sent with the sign-in and the sign-out. The application itself is as light or dark as it says.
 - **A button for each thing to try**, with a line on what to look at: signing in and out, refreshing the tokens, and
   pforte's own pages (the account pages, the administration, the page to set or reset the password). These links
-  are the one part that knows pforte; they carry the look that is chosen.
+  are the one part that knows pforte; they carry the look that is chosen. The language reaches the password page
+  only: the account pages and the administration come in the language stored for the person
+  ([the account pages](../../docs/account.md)).
 
 ## Run it
 

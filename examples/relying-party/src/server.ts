@@ -162,7 +162,7 @@ const whatItSays = (said: Said) => {
   const sent = new URLSearchParams(said).toString()
   return `<h2>What this application tells pforte</h2>
 ${rows.join('\n')}
-<p>${sent ? `Sent with the sign-in and the sign-out: <code>${escapeHtml(sent)}</code>. The links to pforte's own pages carry the look.` : 'Nothing is sent: pforte chooses the language by the person and the browser.'}
+<p>${sent ? `Sent with the sign-in and the sign-out: <code>${escapeHtml(sent)}</code>. The links to pforte's own pages carry the look; only the password page takes the language as well.` : 'Nothing is sent: pforte chooses the language by the person and the browser.'}
 pforte keeps the look in the browser. After <code>dark</code> its pages stay dark, also for a request that says
 nothing, until one says <code>light</code> or <code>auto</code> (as the device is set).</p>`
 }
@@ -197,11 +197,11 @@ const thingsToTry = (said: Said, signedIn: boolean) => {
         ]),
     [
       link(atPforte('/account', look), 'Your account'),
-      'The account pages of pforte. On a narrow screen their bar is one line, the logo and a menu, and signing out is the last entry of the menu.',
+      'The account pages of pforte. On a narrow screen their bar is one line, the logo and a menu, and signing out is the last entry of the menu. They come in the language stored for the person, which their Overview page shows, not in the one chosen above.',
     ],
     [
       link(atPforte('/manage', look), 'Administration'),
-      'For administrators. Under Users, "Send activation link" and "Reset password" ask which application the person is going to, among those registered with a start address. The page at the end of the link then leads on to it.',
+      'For administrators. Under Users, "Send activation link" and "Reset password" ask which application the person is going to, among those registered with a start address. The page at the end of the link then leads on to it. The administration too comes in the language stored for the person.',
     ],
     [
       link(atPforte('/reset', { client_id: clientId, ...language, ...look }), 'Set or reset the password'),
