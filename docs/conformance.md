@@ -3,7 +3,8 @@
 pforte is tested against the official [OpenID conformance suite](https://openid.net/certification/about-conformance-suite/)
 (Basic OP profile). The suite acts as an application and calls pforte, so pforte has to be
 reachable from the internet while a test runs. This is done with a Cloudflare tunnel to a
-separate pforte instance with its own database and keys, never your development data.
+separate pforte instance with its own database and keys, never your development data. A test
+instance that is deployed anyway serves as well ([below](#against-a-test-instance-that-is-deployed)).
 
 The suite cannot run in CI. A run is manual, takes about an hour, and is repeated before a
 release.
@@ -82,6 +83,53 @@ release.
 
 5. Stop the tunnel and pforte when you are done. The conformance instance has no rate limiting
    yet, so do not leave it running.
+
+## Against a test instance that is deployed
+
+A test instance that is reachable anyway, for example one deployed with the
+[Swarm example](../examples/swarm/README.md), needs no tunnel, and it tests pforte as it runs: the
+image, in production mode, behind the proxy, with real mail. Never use an instance people rely
+on: the suite's clients are weaker than a client should be (no PKCE, and a redirect address at
+another site).
+
+`pnpm conformance:setup` is not for such an instance. It makes a database of its own, refuses
+to run in production mode, and gives its user a made-up phone number. Set the instance up once,
+in its administration:
+
+1. **Two clients**: *Clients → New client → Application*, with the IDs `conformance-1` and
+   `conformance-2`, **Confidential**, *Require PKCE* switched off, and profile, e-mail and phone
+   under *What the application may ask for*. For both, with the alias of your test plan:
+
+   | Field | Value |
+   | --- | --- |
+   | Redirect URIs | `https://www.certification.openid.net/test/a/<alias>/callback` and, on a second line, the same address with `?dummy1=lorem&dummy2=ipsum` at its end |
+   | After signing out, return to | `https://www.certification.openid.net/test/a/<alias>/post_logout_redirect` |
+
+   The secret of each client is shown once, when it is created. Keep both where the secrets of
+   the instance are kept.
+
+2. **A test user**: *Users → New user* with an address whose mail you can read, then *Send
+   activation link*, and choose a password from the mail. **Give it no made-up phone number.**
+   Where codes go by SMS, every code of a person with a confirmed number is sent to that number.
+   Without a phone number the codes come by e-mail, and the user has no `phone_number` claim,
+   which `oidcc-scope-phone` may report as a warning.
+
+The run itself is the one above, from step 3, with these differences:
+
+- The discovery URL is `https://<the instance>/.well-known/openid-configuration`.
+- The codes come by e-mail (or SMS), not into a terminal. Tick **Remember this device** yourself
+  when you enter the first one.
+- The rate limits of the instance are on. One person in one browser is not expected to reach
+  them; if a page says "not now", wait the time it names.
+- Do not deploy while a plan runs: the instance is gone for a minute.
+- In the results, name the commit that is deployed. Leave the address of the instance out if it
+  is not public.
+
+**After the run.** The two secrets are in the logs of the suite, which only your account there
+can read, until a plan is published. Either delete the two clients and the user, or keep them
+for the next run. If you keep them, replace both secrets (*Clients* → the client → *Replace the
+secret*) before the logs of a plan are shared or published, and keep the instance free of data
+that matters.
 
 ## Tips for a run
 
