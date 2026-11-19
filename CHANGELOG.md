@@ -8,6 +8,20 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
 
 ## Unreleased
 
+## 0.3.2 (2026-11-19)
+
+**Before you update:** nothing to do. This release has no migration and changes no setting; one setting is new and
+optional (`ACTIVATION_LINK_DAYS`). The admin API and what applications receive are as they were, with one detail: an
+empty `clientUri` is now answered as `null`. Two things show without your doing:
+
+- **The pages are dark on a device that is set to dark**, also with your own colours and logo. Look at your sign-in
+  page on such a device after the update. `"dark": false` in `brand.json` keeps them light for everybody.
+- **The sign-out pages come in the language of the application or of the person**, no longer in the browser's alone.
+
+`brand.json` has two new entries, `logoSmall` and `dark`. pforte 0.3.1 and earlier refuse a folder that has them, so
+add them after the update, not before. There are new texts for an installation with a `locales` folder; the entries
+below name them.
+
 ### Added
 
 - **How long an activation link works is a setting.** It was seven days and could not be changed. `ACTIVATION_LINK_DAYS`
@@ -15,16 +29,6 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   activation link: the one an administrator or an application sends, the one a person asks for themselves, and the
   one of the first administrator. The mail states the time that applies. A change applies to links sent from then on
   ([configuration](docs/configuration.md)).
-- **A sample branding folder, and branding in the Swarm example.** `examples/branding` is a small folder to start from
-  or to try things with: a made-up company with a wordmark, a small logo, its colours and two footer links. The
-  [Swarm example](examples/swarm/README.md#your-own-name-logo-and-colours) could not carry a branding folder at all;
-  with `BRANDING_DIR` in its `.env`, `deploy.sh` now copies the folder from the machine you deploy from to the node
-  and mounts it into pforte. A changed folder restarts pforte with the next deploy, an unchanged one does not.
-  An installation that uses the example without `BRANDING_DIR` is deployed as before.
-- **The example application is a place to try pforte from, also on a phone.** Its page has two switches for what
-  it tells pforte (light or dark, and the language) and a button for each thing to try, with a line on what to look
-  at: signing in and out, the account pages, the administration, the page to set or reset the password. Nothing has
-  to be typed into the address bar ([example application](examples/relying-party/README.md#things-to-try)).
 - **A second, small logo for the narrow places: `logoSmall` in `brand.json`.** A branding folder had one `logo` for the
   card of the sign-in pages, for the bar and for the tab of the browser. A wide wordmark is right on the card, but in
   the one-line bar it is a thin strip that still takes a third of the width, and in the tab it cannot be read. With
@@ -58,6 +62,16 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   example application takes `COLOR_SCHEME` to try the parameter
   ([light and dark](docs/branding-and-languages.md#light-and-dark),
   [for applications](docs/integrating-a-client.md#light-or-dark), [#94](https://github.com/progwise/pforte/issues/94)).
+- **A sample branding folder, and branding in the Swarm example.** `examples/branding` is a small folder to start from
+  or to try things with: a made-up company with a wordmark, a small logo, its colours and two footer links. The
+  [Swarm example](examples/swarm/README.md#your-own-name-logo-and-colours) could not carry a branding folder at all;
+  with `BRANDING_DIR` in its `.env`, `deploy.sh` now copies the folder from the machine you deploy from to the node
+  and mounts it into pforte. A changed folder restarts pforte with the next deploy, an unchanged one does not.
+  An installation that uses the example without `BRANDING_DIR` is deployed as before.
+- **The example application is a place to try pforte from, also on a phone.** Its page has two switches for what
+  it tells pforte (light or dark, and the language) and a button for each thing to try, with a line on what to look
+  at: signing in and out, the account pages, the administration, the page to set or reset the password. Nothing has
+  to be typed into the address bar ([example application](examples/relying-party/README.md#things-to-try)).
 
 ### Fixed
 
