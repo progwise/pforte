@@ -5,7 +5,7 @@
 # through its Docker; no command is run there in a shell.
 #
 #   ./deploy.sh --check    # validates .env and the stack files and says what would be deployed; touches nothing
-#   ./deploy.sh            # data folder, images, secrets, docker stack deploy, pinned to the node of the data
+#   ./deploy.sh            # data folder, branding, images, secrets, docker stack deploy, pinned to the node of the data
 set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY="$(cd ../.. && pwd)"
@@ -58,6 +58,12 @@ if [ -n "${SMS_PROVIDER:-}" ]; then
   [ -n "${SMS_BODY:-}" ] || fail "SMS_BODY is not set in .env."
 fi
 
+# A branding folder is optional (stack.branding.yml). It is a folder on this machine, given from here or as an
+# absolute path; the deploy copies it to the node.
+if [ -n "${BRANDING_DIR:-}" ]; then
+  [ -d "${BRANDING_DIR}" ] || fail "BRANDING_DIR is set in .env, but there is no folder \"${BRANDING_DIR}\" on this machine (seen from examples/swarm, or an absolute path)."
+fi
+
 # Two Dockers. The manager's takes the stack. The one of the node the services run on gets the data folder and
 # the images, and the services are pinned to that node (below): on any other the database would start next to an
 # empty folder. A host that .env names is addressed with -H, which no Docker context and no DOCKER_HOST of the
@@ -82,6 +88,15 @@ if [ -n "${SMS_PROVIDER:-}" ]; then
   export SMS_BODY_FOR_SWARM="$(printf '%s' "${SMS_BODY}" | sed 's/{{[^{}]*}}/{{"&"}}/g')"
 fi
 
+# pforte reads the branding folder when it starts, and a swarm restarts a service only when its definition changed.
+# So the folder on the node is named after a fingerprint of the names and the content of the files: a changed
+# folder is another folder, and with it a changed service. Links are followed, as the copy follows them.
+folder_fingerprint() {
+  (cd "$1" && find -L . -type f ! -name .DS_Store | LC_ALL=C sort | while IFS= read -r file; do printf '%s\n' "${file}"; cat "${file}"; done) \
+    | { sha256sum 2>/dev/null || shasum -a 256; } | cut -c1-12
+}
+[ -z "${BRANDING_DIR:-}" ] || export BRANDING_PRINT="$(folder_fingerprint "${BRANDING_DIR}")"
+
 # `build` as an image means: this checkout, built on the node that will run it. Nothing is pushed to a registry,
 # so the swarm must not look the image up there.
 revision="$(git -C "${REPOSITORY}" rev-parse --short HEAD)"
@@ -95,6 +110,7 @@ if [ "${PFORTE_IMAGE}" = build ]; then
 fi
 FILES=(-c stack.yml)
 [ -z "${SMS_PROVIDER:-}" ] || FILES+=(-c stack.sms.yml)
+[ -z "${BRANDING_DIR:-}" ] || FILES+=(-c stack.branding.yml)
 if [ -n "${APP_HOST:-}" ]; then
   FILES+=(-c stack.app.yml)
   if [ "${APP_IMAGE:-build}" = build ]; then
@@ -116,6 +132,7 @@ echo "Mail from:  ${MAIL_FROM}"
 # Nothing of the SMS address: with some providers it carries an account or a key, and no pattern of a shell reads
 # an address exactly as pforte does.
 [ -z "${SMS_PROVIDER:-}" ] || echo "SMS:        on"
+[ -z "${BRANDING_DIR:-}" ] || echo "Branding:   ${BRANDING_DIR}  (on the node: ${DATA_DIR}/branding/${BRANDING_PRINT})"
 [ -z "${BOOTSTRAP_ADMIN_EMAIL:-}" ] || echo "First administrator: ${BOOTSTRAP_ADMIN_EMAIL} (gets the activation link while the database has no administrator)"
 
 if ${CHECK}; then
@@ -142,6 +159,23 @@ echo "Pinned to the node ${node_name} (${NODE_ID})."
 # to, whatever this script was told or not told about where that is.
 echo "Preparing ${DATA_DIR} on ${node_name} ..."
 on_node run --rm --entrypoint mkdir -v "${DATA_DIR}:/data" "${DB_IMAGE}" -p /data/db
+
+# The branding folder goes through the same Docker, as an archive on its standard input, into a folder named after
+# its fingerprint: a pforte that is running keeps the folder it started with, and a folder that is there already is
+# not copied again. It is unpacked under another name first, so a copy that broke off is never taken for a whole
+# one, and made readable for the user pforte runs as, whatever the files are on this machine. A plain archive
+# (ustar) carries nothing of the file system it comes from. Nothing is removed: the folders of earlier deploys stay.
+if [ -n "${BRANDING_DIR:-}" ]; then
+  echo "Copying the branding folder to ${node_name} ..."
+  COPYFILE_DISABLE=1 tar -c -h --format=ustar --exclude .DS_Store -C "${BRANDING_DIR}" -f - . \
+    | on_node run --rm -i --entrypoint sh -v "${DATA_DIR}:/data" "${DB_IMAGE}" -c '
+        set -e
+        if [ -d "/data/branding/$1" ]; then cat > /dev/null; exit 0; fi
+        mkdir -p "/data/branding/$1.partial"
+        tar -x -o -f - -C "/data/branding/$1.partial"
+        chmod -R a+rX "/data/branding/$1.partial"
+        mv "/data/branding/$1.partial" "/data/branding/$1"' sh "${BRANDING_PRINT}"
+fi
 
 for build in "${BUILDS[@]+"${BUILDS[@]}"}"; do
   image="${build%%|*}"

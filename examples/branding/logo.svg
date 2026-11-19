@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 48" role="img" aria-label="Example Inc.">
+  <rect width="48" height="48" rx="12" fill="#1d2b4a"/>
+  <path d="M15 37V23a9 9 0 0 1 18 0v14" fill="none" stroke="#f2c94c" stroke-width="5" stroke-linecap="round"/>
+  <text x="60" y="33" textLength="176" lengthAdjust="spacingAndGlyphs" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="27" font-weight="700" fill="#1d2b4a">Example Inc.</text>
+</svg>

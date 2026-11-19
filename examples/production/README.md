@@ -65,7 +65,8 @@ To restore into an empty database: `gunzip -c pforte-….sql.gz | docker compose
 ## Your own name, colours and texts
 
 Put a folder `branding` next to `compose.yaml` and remove the `#` in front of `BRANDING_DIR` and the volume in `compose.yaml`;
-see [branding and languages](../../docs/branding-and-languages.md).
+see [branding and languages](../../docs/branding-and-languages.md). [`examples/branding`](../branding) is a small folder to
+start from (`cp -r ../branding branding`): a made-up company with a wordmark, a small logo and its colours.
 
 ## Another proxy than Caddy
 

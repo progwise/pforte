@@ -131,15 +131,19 @@ test('no file passes the check that pforte would refuse, whatever is done to a g
 // stand-in that does nothing: these tests are about what happens before Docker is asked.
 
 const SECRET_URL = 'https://account:url-password@sms.example.com/send?key=url-key'
-/** `headers: null` leaves the file out. */
-const installation = ({ sms = true, headers = '{"X-Api-Key":"header-key"}', extra = '' } = {}) => {
+/** `headers: null` leaves the file out. `branding` are the files of a folder `branding` next to the script. */
+const installation = ({ sms = true, headers = '{"X-Api-Key":"header-key"}', extra = '', branding } = {}) => {
   const root = mkdtempSync(join(temporary, 'checkout-'))
   const folder = join(root, 'examples', 'swarm')
   mkdirSync(join(folder, 'secrets'), { recursive: true })
-  for (const file of ['deploy.sh', 'stack.yml', 'stack.app.yml', 'stack.sms.yml']) cpSync(join(swarm, file), join(folder, file))
+  for (const file of ['deploy.sh', 'stack.yml', 'stack.app.yml', 'stack.sms.yml', 'stack.branding.yml']) cpSync(join(swarm, file), join(folder, file))
   for (const secret of ['db_password', 'cookie_keys', 'jwks', 'smtp_url']) writeFileSync(join(folder, 'secrets', secret), 'x')
   writeFileSync(join(folder, 'secrets', 'database_url'), 'postgres://pforte:x@pforte_db:5432/pforte')
   if (headers !== null) writeFileSync(join(folder, 'secrets', 'sms_headers'), headers)
+  for (const [file, content] of Object.entries(branding ?? {})) {
+    mkdirSync(join(folder, 'branding', file, '..'), { recursive: true })
+    writeFileSync(join(folder, 'branding', file), content)
+  }
   const settings = ['PFORTE_HOST=id.example.com', 'PFORTE_IMAGE=ghcr.io/progwise/pforte:0.2.0', 'MAIL_FROM=no-reply@example.com', 'DATA_DIR=/srv/pforte']
   if (sms) settings.push('SMS_PROVIDER=http', `SMS_URL='${SECRET_URL}'`, 'SMS_CONTENT_TYPE=form', "SMS_BODY='to={{to}}&text={{ text }}'")
   writeFileSync(join(folder, '.env'), `${settings.join('\n')}\n${extra}\n`)
@@ -189,4 +193,38 @@ test('headers in .env are refused: they would be part of the service definition'
   assert.equal(status, 1)
   assert.match(output, /SMS_HEADERS is set in \.env/)
   assert.doesNotMatch(output, /header-key/)
+})
+
+// --- A branding folder: on the machine the script runs on, copied to the node under a name made from its content.
+
+const fingerprintOf = (output) => /^Branding: +branding +\(on the node: \/srv\/pforte\/branding\/([0-9a-f]{12})\)$/m.exec(output)?.[1]
+
+test('without a branding folder the check says nothing about branding', () => {
+  const { status, output } = installation({ sms: false, headers: null })
+  assert.equal(status, 0, output)
+  assert.doesNotMatch(output, /[Bb]randing/)
+})
+
+test('a branding folder that is not there is refused', () => {
+  const { status, output } = installation({ sms: false, headers: null, extra: 'BRANDING_DIR=branding' })
+  assert.equal(status, 1)
+  assert.match(output, /there is no folder "branding" on this machine/)
+})
+
+test('a branding folder is named on the node after what is in it: the same again for the same files, another for a change', () => {
+  const brand = { 'brand.json': '{"name":"Example Inc.","logo":"logo.svg"}', 'logo.svg': '<svg xmlns="http://www.w3.org/2000/svg"/>', 'locales/de.json': '{}' }
+  const check = (branding) => {
+    const { status, output } = installation({ sms: false, headers: null, extra: 'BRANDING_DIR=branding', branding })
+    assert.equal(status, 0, output)
+    const fingerprint = fingerprintOf(output)
+    assert.ok(fingerprint, output)
+    return fingerprint
+  }
+  const first = check(brand)
+  assert.equal(check(brand), first)
+  assert.equal(check({ ...brand, '.DS_Store': 'what a file manager leaves behind' }), first)
+  // A changed content, a renamed file and a file in a subfolder each make another folder, so pforte restarts with it.
+  assert.notEqual(check({ ...brand, 'brand.json': '{"name":"Example Ltd.","logo":"logo.svg"}' }), first)
+  assert.notEqual(check({ 'brand.json': brand['brand.json'], 'mark.svg': brand['logo.svg'], 'locales/de.json': '{}' }), first)
+  assert.notEqual(check({ ...brand, 'locales/fr.json': '{}' }), first)
 })

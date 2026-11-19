@@ -15,6 +15,12 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   activation link: the one an administrator or an application sends, the one a person asks for themselves, and the
   one of the first administrator. The mail states the time that applies. A change applies to links sent from then on
   ([configuration](docs/configuration.md)).
+- **A sample branding folder, and branding in the Swarm example.** `examples/branding` is a small folder to start from
+  or to try things with: a made-up company with a wordmark, a small logo, its colours and two footer links. The
+  [Swarm example](examples/swarm/README.md#your-own-name-logo-and-colours) could not carry a branding folder at all;
+  with `BRANDING_DIR` in its `.env`, `deploy.sh` now copies the folder from the machine you deploy from to the node
+  and mounts it into pforte. A changed folder restarts pforte with the next deploy, an unchanged one does not.
+  An installation that uses the example without `BRANDING_DIR` is deployed as before.
 - **The example application is a place to try pforte from, also on a phone.** Its page has two switches for what
   it tells pforte (light or dark, and the language) and a button for each thing to try, with a line on what to look
   at: signing in and out, the account pages, the administration, the page to set or reset the password. Nothing has

@@ -14,6 +14,8 @@ branding/
 
 In a container the folder is a mounted volume. Without it pforte looks neutral, with its own signet as
 the logo, and is in English and German.
+[`examples/branding`](../examples/branding) is a small folder to start from
+or to try things with: a made-up company with a wordmark, a small logo, its colours and two footer links.
 This is deliberately small: the pages keep their layout, one card per step. Branding changes how they look,
 not what they do.
 
