@@ -111,8 +111,8 @@ in its administration:
 2. **A test user**: *Users → New user* with an address whose mail you can read, then *Send
    activation link*, and choose a password from the mail. **Give it no made-up phone number.**
    Where codes go by SMS, every code of a person with a confirmed number is sent to that number.
-   Without a phone number the codes come by e-mail, and the user has no `phone_number` claim,
-   which `oidcc-scope-phone` may report as a warning.
+   Without a phone number the codes come by e-mail, and the user has no `phone_number` claim;
+   `oidcc-scope-phone` passed without one in the run of 2026-11-19.
 
 The run itself is the one above, from step 3, with these differences:
 
@@ -192,21 +192,47 @@ Keep the link to each test's log. Record the outcome of each run below.
 
 ### Since the last run
 
-The run below is the last one. Nothing merged after it was checked against the suite: there is no run for 0.2.0, 0.3.0 or 0.3.1, and none for
-the activation that remembers the device ([#44](https://github.com/progwise/pforte/issues/44)), where it was left out on purpose.
-That change adds a cookie to the sign-in (`pforte_device_new`) that only an activation sets, which the suite never does; the
-endpoints of the provider, the session and the tokens are as they were, so no result is expected to change. The same holds
-for the logout token that applications now get when an administrator ends a person's sessions
-([#27](https://github.com/progwise/pforte/issues/27)): it is the token of a sign-out, sent on an occasion the suite does not
-have. The account pages ([#18](https://github.com/progwise/pforte/issues/18)) add a second built-in client, and the ID tokens of
-the two built-in clients now always carry `auth_time`; no other client and no endpoint is touched. 0.3.0 also changes the
-sign-in itself: passkeys as a second way in, with the `amr` `["pop", "mfa"]`, a page that asks for an unconfirmed phone number
-between a complete sign-in and the way back to the application (only where SMS is on and the person has such a number, which the
-user of the suite has not), and `prompt=login`: when a different person than the one signed in enters their password there, they
-can now complete the sign-in, where it ended in an error before. Signing in again as the same person is as it was. 0.3.1 changes pages
-only (the account pages, and the forms of the password reset and the activation, which the suite does not use), no endpoint and no
-token. This is an expectation, not a result. A full run is due before 1.0
-([#48](https://github.com/progwise/pforte/issues/48), which lists what changed since).
+The run below is the last one, on the code of 0.3.2. Nothing merged after it changes pforte: the release adds a sentence of
+documentation and the changelog entry to it.
+
+The suite signs in with a password and a code and uses the endpoints of the provider. It does not use passkeys, the account
+pages, the administration, an activation or a password reset, so a run says nothing about those; they have tests of their own.
+A run is due again before the next release and before 1.0 ([#48](https://github.com/progwise/pforte/issues/48)).
+
+### Run of 2026-11-19: no failures
+
+The first run since the one for the first release, and the first against a test instance that is deployed
+([above](#against-a-test-instance-that-is-deployed)) instead of a local instance behind a tunnel: the image built from pforte
+commit `54fd9c5`, in production mode behind a proxy, with real mail, with the rate limits on and with a branding folder. That
+commit is the code of 0.3.2. The address of the instance is not published here.
+
+Plan `oidcc-basic-certification-test-plan` (id `TL2JfL0L9W71N`), suite version 5.3.4 (revision `23353b3`), variant
+`server_metadata=discovery, client_registration=static_client`, alias `progwise-pforte`. The plan was started on 2026-11-19 at
+09:06 (UTC) and was through within twenty minutes. The table shows the latest result of each test.
+
+**35 tests: 24 passed, 4 warnings, 4 to review, 3 skipped, 0 failed, 0 interrupted.**
+
+| Result | Tests |
+| --- | --- |
+| Passed | `server`, `response-type-missing`, `userinfo-get`, `userinfo-post-header`, `userinfo-post-body`, `ensure-request-without-nonce-succeeds-for-code-flow`, `scope-phone`, `display-page`, `display-popup`, `prompt-none-not-logged-in`, `prompt-none-logged-in`, `max-age-10000`, `ensure-request-with-unknown-parameter-succeeds`, `id-token-hint`, `login-hint`, `ui-locales`, `claims-locales`, `ensure-request-with-acr-values-succeeds`, `codereuse`, `codereuse-30seconds`, `ensure-post-request-succeeds`, `server-client-secret-post`, `refresh-token`, `ensure-request-with-valid-pkce-succeeds` |
+| Warning (accepted, see above) | `scope-profile`, `scope-email`, `alternate-happy-flow`, `claims-essential` |
+| Review | `prompt-login`, `max-age-1`, `ensure-registered-redirect-uri`, `ensure-request-object-with-redirect-uri` |
+| Skipped | `scope-address`, `scope-all`, `unsigned-request-object-supported-correctly-or-rejected-as-unsupported` |
+
+Every test ended as it did in the run of 2026-10-20. So nothing that was merged in between changed a result on the paths the
+suite takes. That covers the releases 0.2.0 to 0.3.2, for which no run had been made: among other things the logout token for
+applications, `auth_time` in the ID tokens of the two built-in clients, passkeys as a second way in, `prompt=login` for another
+person than the one signed in, and in 0.3.2 the parameter `color_scheme` and the language of the sign-out pages.
+
+Two things about this run:
+
+- `prompt-none-not-logged-in` failed at the first attempt, because the browser still had its session at pforte (see the
+  [tips](#tips-for-a-run)), and passed when it was repeated in a window without one.
+- The test user had no phone number, so the codes came by e-mail. `scope-phone` passed all the same.
+
+The four tests marked *review* only need a human to look at evidence (screenshots of the login page or of an error page); they are
+required for a formal certification submission, which has not been made. The suite's "private link" for the plan is not published
+here, because the logs contain the credentials of the test clients.
 
 ### Run of 2026-10-20: no failures
 
