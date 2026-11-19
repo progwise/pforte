@@ -59,8 +59,8 @@ docker buildx imagetools inspect ghcr.io/progwise/pforte:0.1.0     # platforms, 
 
 ## Versions
 
-[Semantic versioning](https://semver.org). While the version starts with `0`, a minor release (`0.2.0`) may break things and a patch
-release (`0.1.1`) only fixes. From `1.0.0` a breaking change means a new major version. These count as breaking:
+[Semantic versioning](https://semver.org). While the version starts with `0`, a minor release (`0.2.0`) may break things. A patch
+release (`0.1.1`) never breaks and needs nothing done before updating: it fixes, and it may add. From `1.0.0` a breaking change means a new major version. These count as breaking:
 
 - an environment variable that is renamed, removed or changes its meaning ([configuration](configuration.md)),
 - a change of the admin API that clients of it must follow (the OpenAPI document is the contract),
