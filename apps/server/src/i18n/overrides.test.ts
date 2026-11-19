@@ -39,6 +39,8 @@ describe('locale overrides', () => {
       'mail.activationFor.text': 'Guten Tag {firstName}, Ihr Link für {application} bei {organisation}: {url}. Er gilt eine Woche.',
       'limit.text': 'Zu viele Versuche. Weiter in {minutes} Min.',
       'code.tooMany': 'Zu viele Codes. Weiter in {wait}.',
+      'code.cooldown': 'Gerade gesendet. Neuer Code in {seconds} Sek.',
+      'phone.wait': 'Bitte kurz warten.',
       'reset.sent': 'Wir haben eine Nachricht gesendet. Ein Code gilt 10 Minuten.',
       'duration.for.day.other': '{count} Tage lang',
     }
@@ -49,6 +51,7 @@ describe('locale overrides', () => {
     ['de.json', '{"mail.activation.text":"Guten Tag {firstName}, Ihr Link für {organisation} gilt {validity}."}', /must contain \{url\}/],
     ['de.json', '{"limit.text":"Weiter in {hours} Stunden."}', /uses \{hours\}, which this text does not have/],
     ['de.json', '{"reset.sent":"Ein Code gilt {minutes} Minuten."}', /uses \{minutes\}, which this text does not have/],
+    ['de.json', '{"code.cooldown":"Neuer Code in {minutes} Minuten."}', /uses \{minutes\}, which this text does not have/],
     ['de.json', '{"duration.for.day.other":"Tage"}', /must contain \{count\}/],
     ['Deutsch.json', '{}', /must be a language code/],
     ['de.json', '{oops', /not valid JSON/],

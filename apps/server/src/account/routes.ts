@@ -15,7 +15,7 @@ import type { SendPasswordResetCode } from '../auth/password-reset.js'
 import { newDeviceCookie } from '../interaction/device-cookie.js'
 import { createPhoneReminder } from '../interaction/phone-reminder.js'
 import { readCookie, setCookieHeader, sign, unsign } from '../interaction/signed-cookie.js'
-import { validity } from '../i18n/duration.js'
+import { shortWaitValues, validity } from '../i18n/duration.js'
 import { parseAcceptLanguage } from '../i18n/index.js'
 import { type Notifier, NotifierUnavailableError } from '../notifications/notifier.js'
 import type { Ui } from '../ui/index.js'
@@ -381,7 +381,7 @@ export const accountRoutes =
         await sendPhoneCode(user)
       } catch (error) {
         if (error instanceof CodeLimitError) {
-          return html(reply, 429, view.phoneConfirm({ sentTo: maskPhone(user.phone), error: view.t('phone.wait', { seconds: error.retryAfterSeconds }) }))
+          return html(reply, 429, view.phoneConfirm({ sentTo: maskPhone(user.phone), error: view.t('phone.wait', shortWaitValues(error.retryAfterSeconds)) }))
         }
         if (!(error instanceof NotifierUnavailableError)) throw error
         request.log.error(error, 'the code to confirm the phone number could not be sent')

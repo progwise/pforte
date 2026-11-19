@@ -218,12 +218,13 @@ singular and the plural: "1 minute", "10 minutes", "7 days".
 | --- | --- | --- |
 | `{validity}` | How long a link or a code is valid: minutes below an hour, hours below two days, whole days from there on. Hours and days are rounded down, so the text never promises more than there is. | `mail.activation.text`, `mail.activationFor.text`, `code.sentEmail`, `code.sentSms`, `reset.sent` |
 | `{wait}` | How long to wait before trying again, in minutes, rounded up. | `limit.text`, `code.tooMany`, `account.password.wait` |
+| `{wait}` | The wait between two codes, which can be short: in seconds below a minute, in minutes from there on. | `code.cooldown`, `phone.wait` |
 
 The words come from texts of their own, which you can replace like any other and which a new language should have:
 `duration.for.minute.one` ("{count} minute"), `duration.for.minute.other` ("{count} minutes") and the same for `hour`
-and `day`, for the sentence "valid for …"; `duration.in.minute.one` and `duration.in.minute.other` for the sentence
-"again in …". The two sentences have their own texts because some languages use another form in each: Hungarian
-says "7 napig" in the first and "5 perc" in the second. `.one` is used for exactly one, `.other` for every other number.
+and `day`, for the sentence "valid for …"; `duration.in.minute.one` and `duration.in.minute.other`, and the same for
+`second`, for the sentence "again in …". The two sentences have their own texts because some languages use another
+form in each: Hungarian says "7 napig" in the first and "5 perc" in the second. `.one` is used for exactly one, `.other` for every other number.
 
 The words are taken from the language the sentence around them comes from. A new language that has the words but
 not yet the sentence shows that sentence in English, with the English words; one that has the sentence but not the
@@ -232,8 +233,9 @@ words shows its own sentence with the time in English.
 A text of yours that states a time is free in two ways:
 
 - It **may leave the value out** and write the time itself ("valid for a week").
-- It **may use the number** these texts had up to 0.3.1: `{hours}` in the two activation mails, `{minutes}` in the
-  three texts with `{wait}`. A text written for an earlier version therefore reads as it did.
+- It **may use the number** these texts had before the time came in words: `{hours}` in the two activation mails,
+  `{minutes}` in the three texts that wait in minutes (up to 0.3.1), and `{seconds}` in `code.cooldown` and
+  `phone.wait` (up to 0.3.2). A text written for an earlier version therefore reads as it did.
 
 Keep SMS texts short. Texts with letters outside the basic GSM alphabet (Hungarian á, í, ó, ú, ő, ű, for
 example) are sent as Unicode, where one message holds 70 characters instead of 160, so such an SMS is billed

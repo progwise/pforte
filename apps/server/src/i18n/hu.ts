@@ -34,7 +34,7 @@ export const hu: Catalog = {
   'code.none': 'Nincs érvényes kód. Kérjen újat.',
   'code.newOnItsWay': 'Az új kód úton van.',
   'code.badOrExpired': 'A kód nem helyes, vagy lejárt. Lent kérhet újat.',
-  'code.cooldown': 'Nemrég küldtünk egy kódot. Új kódot {seconds} másodperc múlva kérhet.',
+  'code.cooldown': 'Nemrég küldtünk egy kódot. Új kódot {wait} múlva kérhet.',
   'code.tooMany': 'Túl sok kódot kért. Kérjük, próbálja újra {wait} múlva.',
   'code.tooManyTitle': 'Túl sok kód',
 
@@ -101,7 +101,7 @@ export const hu: Catalog = {
   'phone.signIn':
     'A telefonszáma ({to}) még nincs megerősítve, ezért a bejelentkezési kódok e-mailben érkeznek. A megerősítéshez 6 számjegyű kódot küldünk rá SMS-ben. Miután megadta, a bejelentkezési kódok SMS-ben érkeznek.',
   'phone.later': 'Most nem',
-  'phone.wait': 'Kérjük, várjon {seconds} másodpercet, mielőtt újabb kódot kér.',
+  'phone.wait': 'Újabb kódot {wait} múlva kérhet.',
   'phone.cannotSend': 'A kódot nem sikerült elküldeni. Kihagyhatja ezt a lépést, és később megerősítheti.',
   'phone.doneTitle': 'A telefonszám megerősítve',
   'phone.done':
@@ -245,6 +245,8 @@ export const hu: Catalog = {
   'duration.for.hour.other': '{count} óráig',
   'duration.for.day.one': '{count} napig',
   'duration.for.day.other': '{count} napig',
+  'duration.in.second.one': '{count} másodperc',
+  'duration.in.second.other': '{count} másodperc',
   'duration.in.minute.one': '{count} perc',
   'duration.in.minute.other': '{count} perc',
 }

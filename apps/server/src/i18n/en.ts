@@ -37,7 +37,7 @@ export const en = {
   'code.none': 'There is no valid code. Please ask for a new one.',
   'code.newOnItsWay': 'A new code is on its way.',
   'code.badOrExpired': 'The code is not correct or has expired. You can ask for a new one below.',
-  'code.cooldown': 'A code was sent a moment ago. You can ask for a new one in {seconds} seconds.',
+  'code.cooldown': 'A code was sent a moment ago. You can ask for a new one in {wait}.',
   'code.tooMany': 'Too many codes were requested. Please try again in {wait}.',
   'code.tooManyTitle': 'Too many codes',
 
@@ -104,7 +104,7 @@ export const en = {
   'phone.signIn':
     'Your phone number {to} is not confirmed yet, so your sign-in codes come by e-mail. To confirm it, we send a 6-digit code to it by SMS. Once you have entered it, your sign-in codes come by SMS.',
   'phone.later': 'Not now',
-  'phone.wait': 'Please wait {seconds} seconds before asking for another code.',
+  'phone.wait': 'Please wait {wait} before asking for another code.',
   'phone.cannotSend': 'The code could not be sent. You can skip this step and confirm later.',
   'phone.doneTitle': 'Phone number confirmed',
   'phone.done':
@@ -249,6 +249,8 @@ export const en = {
   'duration.for.hour.other': '{count} hours',
   'duration.for.day.one': '{count} day',
   'duration.for.day.other': '{count} days',
+  'duration.in.second.one': '{count} second',
+  'duration.in.second.other': '{count} seconds',
   'duration.in.minute.one': '{count} minute',
   'duration.in.minute.other': '{count} minutes',
 } as const

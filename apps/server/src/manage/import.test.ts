@@ -110,7 +110,7 @@ describe.skipIf(!hasDatabase)('the administration: import', () => {
       const done = await apply(tokenOf(checked.body))
 
       expect(done.statusCode).toBe(200)
-      expect(plain(done.body)).toContain('Import finished in')
+      expect(plain(done.body)).toMatch(/Import finished in \d+\.\d seconds/)
       expect(await userRow('imp-ann@example.com')).toMatchObject({ first_name: 'Ann', last_name: 'Lee', status: 'created' })
       expect(await claimsOf('imp-ann@example.com')).toEqual(['imp_region=north', 'imp_region=south', 'imp_team=MUC'])
       expect(await claimsOf('imp-bob@example.com')).toEqual(['imp_team=BER'])
@@ -376,8 +376,11 @@ describe.skipIf(!hasDatabase)('the administration: import', () => {
     browser = await signedInToManage(h, Browser)
 
     expect((await get('/manage/import')).body).toContain('Benutzer importieren')
-    const checked = plain((await upload(CSV)).body)
+    const uploaded = await upload(CSV)
+    const checked = plain(uploaded.body)
     expect(checked).toContain('Geprüft: es wurde nichts geschrieben')
     expect(checked).toContain('Jetzt importieren')
+    // A number is written as the language writes it: the seconds with a comma.
+    expect(plain((await apply(tokenOf(uploaded.body))).body)).toMatch(/Import in \d+,\d Sekunden abgeschlossen/)
   })
 })

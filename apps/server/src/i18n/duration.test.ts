@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DURATION_VALUES, validity, waitValues } from './duration.js'
+import { DURATION_VALUES, shortWaitValues, validity, waitValues } from './duration.js'
 import { BUILT_IN, createI18n, type I18n, type Worded } from './index.js'
 
 const i18n = createI18n()
@@ -62,6 +62,42 @@ describe('how long to wait, in words', () => {
     expect(sentence('de', 30)).toContain('in 1 Minute erneut.')
     expect(sentence('fr', 30)).toContain('dans 1 minute.')
     expect(sentence('hu', 300)).toContain('5 perc múlva.')
+  })
+})
+
+describe('how long to wait where it can be seconds, in words', () => {
+  it.each([
+    [1, '1 second', '1 Sekunde', '1 seconde', '1 másodperc'],
+    [2, '2 seconds', '2 Sekunden', '2 secondes', '2 másodperc'],
+    [59, '59 seconds', '59 Sekunden', '59 secondes', '59 másodperc'],
+    [60, '1 minute', '1 Minute', '1 minute', '1 perc'],
+    [61, '2 minutes', '2 Minuten', '2 minutes', '2 perc'],
+    [3540, '59 minutes', '59 Minuten', '59 minutes', '59 perc'],
+  ])('%d seconds', (seconds, en, de, fr, hu) => {
+    expect(shortWaitValues(seconds).seconds).toBe(seconds)
+    expect(LANGUAGES.map((language) => worded(language, shortWaitValues(seconds).wait))).toEqual([en, de, fr, hu])
+  })
+
+  it('is never less than a second', () => {
+    expect(worded('en', shortWaitValues(0).wait)).toBe('1 second')
+    expect(worded('en', shortWaitValues(0.2).wait)).toBe('1 second')
+  })
+
+  it('reads as a sentence with one second, with several, and with minutes', () => {
+    const cooldown = (language: string, seconds: number) => i18n.text(language, 'code.cooldown', shortWaitValues(seconds))
+    expect(cooldown('en', 1)).toBe('A code was sent a moment ago. You can ask for a new one in 1 second.')
+    expect(cooldown('en', 45)).toContain('in 45 seconds.')
+    expect(cooldown('de', 1)).toContain('in 1 Sekunde anfordern.')
+    expect(cooldown('fr', 1)).toContain('dans 1 seconde.')
+    expect(cooldown('hu', 1)).toContain('1 másodperc múlva kérhet.')
+
+    // The wait for another code for a phone number can also be the rest of an hour.
+    const phone = (language: string, seconds: number) => i18n.text(language, 'phone.wait', shortWaitValues(seconds))
+    expect(phone('en', 1)).toBe('Please wait 1 second before asking for another code.')
+    expect(phone('en', 3540)).toBe('Please wait 59 minutes before asking for another code.')
+    expect(phone('de', 45)).toContain('warten Sie 45 Sekunden,')
+    expect(phone('fr', 1)).toContain('patienter 1 seconde avant')
+    expect(phone('hu', 45)).toBe('Újabb kódot 45 másodperc múlva kérhet.')
   })
 })
 
