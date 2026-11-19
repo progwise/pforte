@@ -91,11 +91,22 @@ fi
 # pforte reads the branding folder when it starts, and a swarm restarts a service only when its definition changed.
 # So the folder on the node is named after a fingerprint of the names and the content of the files: a changed
 # folder is another folder, and with it a changed service. Links are followed, as the copy follows them.
+#
+# The same lines work it out here and on the node, where the copy is held against it before it is used: so they
+# are a text that both shells read, and plain sh. A file that cannot be read ends it.
+read -r -d '' FOLDER_FINGERPRINT <<'SH' || true
 folder_fingerprint() {
-  (cd "$1" && find -L . -type f ! -name .DS_Store | LC_ALL=C sort | while IFS= read -r file; do printf '%s\n' "${file}"; cat "${file}"; done) \
+  (cd "$1" && find -L . -type f ! -name .DS_Store | LC_ALL=C sort | while IFS= read -r file; do printf '%s\n' "$file"; cat "$file" || exit 1; done) \
     | { sha256sum 2>/dev/null || shasum -a 256; } | cut -c1-12
 }
-[ -z "${BRANDING_DIR:-}" ] || export BRANDING_PRINT="$(folder_fingerprint "${BRANDING_DIR}")"
+SH
+eval "${FOLDER_FINGERPRINT}"
+if [ -n "${BRANDING_DIR:-}" ]; then
+  # Not `export NAME="$(...)"`: that answers for the export, and a folder read by half would pass.
+  BRANDING_PRINT="$(folder_fingerprint "${BRANDING_DIR}")" && [[ "${BRANDING_PRINT}" =~ ^[0-9a-f]{12}$ ]] \
+    || fail "The branding folder \"${BRANDING_DIR}\" could not be read in full: see the message above. Nothing was deployed."
+  export BRANDING_PRINT
+fi
 
 # `build` as an image means: this checkout, built on the node that will run it. Nothing is pushed to a registry,
 # so the swarm must not look the image up there.
@@ -162,19 +173,39 @@ on_node run --rm --entrypoint mkdir -v "${DATA_DIR}:/data" "${DB_IMAGE}" -p /dat
 
 # The branding folder goes through the same Docker, as an archive on its standard input, into a folder named after
 # its fingerprint: a pforte that is running keeps the folder it started with, and a folder that is there already is
-# not copied again. It is unpacked under another name first, so a copy that broke off is never taken for a whole
-# one, and made readable for the user pforte runs as, whatever the files are on this machine. A plain archive
-# (ustar) carries nothing of the file system it comes from. Nothing is removed: the folders of earlier deploys stay.
+# not copied again.
+#
+# What arrives is not trusted to be what was sent: an archive can leave a file out and say nothing (a name too
+# long for its format). So the node unpacks into a folder of its own for this attempt, works out the fingerprint
+# of what is there, and puts the folder in place only if it is the one of the folder here. A folder that is in
+# place already is held against its name the same way. The files are made readable for the user pforte runs as,
+# whatever they are on this machine. Nothing is removed: the folders of earlier deploys stay, and so does what a
+# refused attempt unpacked.
+archive_of() { COPYFILE_DISABLE=1 tar -c -h --exclude .DS_Store -C "$1" -f - .; }
+# $1: the fingerprint, $2: the data folder as the container sees it.
+read -r -d '' PLACE_BRANDING <<'SH' || true
+set -e
+final="$2/branding/$1"
+if [ -d "$final" ]; then
+  cat > /dev/null
+  [ "$(folder_fingerprint "$final")" = "$1" ] && exit 0
+  echo "The branding folder that is on the node under this name, branding/$1, does not hold what the name says. Look at it and remove it, then deploy again." >&2
+  exit 1
+fi
+mkdir -p "$2/branding"
+attempt="$(mktemp -d "$2/branding/$1.XXXXXX")"
+tar -x -o -f - -C "$attempt"
+chmod -R a+rX "$attempt"
+if [ "$(folder_fingerprint "$attempt")" != "$1" ]; then
+  echo "What arrived on the node is not the branding folder that was sent: a file is missing or differs. Nothing was put in place, and pforte keeps running as it is." >&2
+  exit 1
+fi
+mv "$attempt" "$final"
+SH
 if [ -n "${BRANDING_DIR:-}" ]; then
   echo "Copying the branding folder to ${node_name} ..."
-  COPYFILE_DISABLE=1 tar -c -h --format=ustar --exclude .DS_Store -C "${BRANDING_DIR}" -f - . \
-    | on_node run --rm -i --entrypoint sh -v "${DATA_DIR}:/data" "${DB_IMAGE}" -c '
-        set -e
-        if [ -d "/data/branding/$1" ]; then cat > /dev/null; exit 0; fi
-        mkdir -p "/data/branding/$1.partial"
-        tar -x -o -f - -C "/data/branding/$1.partial"
-        chmod -R a+rX "/data/branding/$1.partial"
-        mv "/data/branding/$1.partial" "/data/branding/$1"' sh "${BRANDING_PRINT}"
+  archive_of "${BRANDING_DIR}" \
+    | on_node run --rm -i --entrypoint sh -v "${DATA_DIR}:/data" "${DB_IMAGE}" -c "${FOLDER_FINGERPRINT}"$'\n'"${PLACE_BRANDING}" sh "${BRANDING_PRINT}" /data
 fi
 
 for build in "${BUILDS[@]+"${BUILDS[@]}"}"; do

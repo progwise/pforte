@@ -93,7 +93,9 @@ Optional. Without it pforte looks neutral ([branding and languages](../../docs/b
 
 The copy lies in `<DATA_DIR>/branding/<fingerprint>`, named after what is in the folder. So a changed folder restarts
 pforte with the next deploy, an unchanged one does not, and the pforte that is running keeps the folder it started
-with. The folders of earlier deploys stay until you remove them; they are small.
+with. Before the copy is used, the node works out the fingerprint of what arrived: a copy that lacks a file or holds
+another one is refused, and pforte keeps running as it is. The folders of earlier deploys stay until you remove them,
+and so does what a refused copy unpacked (`<fingerprint>.<letters>`); they are small.
 
 **Try a changed folder before you deploy it.** pforte refuses to start with a branding folder it cannot read (an
 entry in `brand.json` it does not know, a file that is missing or too big), and here the one instance is stopped

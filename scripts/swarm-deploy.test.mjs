@@ -2,7 +2,7 @@
 // through and pforte then refuses stops the one instance, so its check is held against the rule of the server.
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { chmodSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
@@ -131,8 +131,8 @@ test('no file passes the check that pforte would refuse, whatever is done to a g
 // stand-in that does nothing: these tests are about what happens before Docker is asked.
 
 const SECRET_URL = 'https://account:url-password@sms.example.com/send?key=url-key'
-/** `headers: null` leaves the file out. `branding` are the files of a folder `branding` next to the script. */
-const installation = ({ sms = true, headers = '{"X-Api-Key":"header-key"}', extra = '', branding } = {}) => {
+/** `headers: null` leaves the file out. `branding` are the files of a folder `branding` next to the script, `unreadable` one of them that the script may not read. */
+const installation = ({ sms = true, headers = '{"X-Api-Key":"header-key"}', extra = '', branding, unreadable } = {}) => {
   const root = mkdtempSync(join(temporary, 'checkout-'))
   const folder = join(root, 'examples', 'swarm')
   mkdirSync(join(folder, 'secrets'), { recursive: true })
@@ -144,6 +144,7 @@ const installation = ({ sms = true, headers = '{"X-Api-Key":"header-key"}', extr
     mkdirSync(join(folder, 'branding', file, '..'), { recursive: true })
     writeFileSync(join(folder, 'branding', file), content)
   }
+  if (unreadable) chmodSync(join(folder, 'branding', unreadable), 0o000)
   const settings = ['PFORTE_HOST=id.example.com', 'PFORTE_IMAGE=ghcr.io/progwise/pforte:0.2.0', 'MAIL_FROM=no-reply@example.com', 'DATA_DIR=/srv/pforte']
   if (sms) settings.push('SMS_PROVIDER=http', `SMS_URL='${SECRET_URL}'`, 'SMS_CONTENT_TYPE=form', "SMS_BODY='to={{to}}&text={{ text }}'")
   writeFileSync(join(folder, '.env'), `${settings.join('\n')}\n${extra}\n`)
@@ -227,4 +228,92 @@ test('a branding folder is named on the node after what is in it: the same again
   assert.notEqual(check({ ...brand, 'brand.json': '{"name":"Example Ltd.","logo":"logo.svg"}' }), first)
   assert.notEqual(check({ 'brand.json': brand['brand.json'], 'mark.svg': brand['logo.svg'], 'locales/de.json': '{}' }), first)
   assert.notEqual(check({ ...brand, 'locales/fr.json': '{}' }), first)
+})
+
+// A user who may read everything (root, in some containers) has no file they cannot read.
+test('a branding folder with a file that cannot be read is refused, not fingerprinted by half', { skip: process.getuid?.() === 0 }, () => {
+  const branding = { 'brand.json': '{"logo":"logo.svg"}', 'logo.svg': '<svg xmlns="http://www.w3.org/2000/svg"/>' }
+  const { status, output } = installation({ sms: false, headers: null, extra: 'BRANDING_DIR=branding', branding, unreadable: 'logo.svg' })
+  assert.equal(status, 1, output)
+  assert.match(output, /The branding folder "branding" could not be read in full/)
+  assert.doesNotMatch(output, /valid\. Nothing was deployed/)
+})
+
+// --- The copy to the node. What the node runs is a text in deploy.sh; here it runs in a folder of this machine,
+// fed by the script's own way of packing, with the tar of this machine.
+
+const textOf = (name) => new RegExp(`^read -r -d '' ${name} <<'SH' \\|\\| true\\n([\\s\\S]*?)\\nSH$`, 'm').exec(deployScript)?.[1]
+const fingerprintLines = textOf('FOLDER_FINGERPRINT')
+const placeLines = textOf('PLACE_BRANDING')
+const archiveFunction = /^archive_of\(\) \{.*\}$/m.exec(deployScript)?.[0]
+
+const folderWith = (files) => {
+  const folder = mkdtempSync(join(temporary, 'brand-'))
+  for (const [file, content] of Object.entries(files)) {
+    mkdirSync(join(folder, file, '..'), { recursive: true })
+    writeFileSync(join(folder, file), content)
+  }
+  return folder
+}
+/** Sends `sent` to a node that expects the folder `source`, as the deploy does. `data` is the node's data folder. */
+const place = (source, { sent = source, data = mkdtempSync(join(temporary, 'data-')) } = {}) => {
+  const run = `${fingerprintLines}\n${archiveFunction}\nprint="$(folder_fingerprint "$1")"\narchive_of "$2" | sh -c "$3" sh "$print" "$4"; status=$?; printf '%s' "$print" >&3; exit $status`
+  const result = spawnSync('bash', ['-c', run, 'bash', source, sent, `${fingerprintLines}\n${placeLines}`, data], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe', 'pipe'] })
+  const placed = existsSync(join(data, 'branding')) ? readdirSync(join(data, 'branding')) : []
+  return { status: result.status, output: result.stdout + result.stderr, fingerprint: result.output[3], data, placed }
+}
+
+const LONG = 'n'.repeat(110)
+const BRAND = {
+  'brand.json': '{"name":"Example Inc.","logo":"logo.svg"}',
+  'logo.svg': '<svg xmlns="http://www.w3.org/2000/svg"/>',
+  [`locales/${LONG}.json`]: '{}',
+  [`fonts/a-folder-with-a-rather-long-name-so-that-the-whole-path-is-longer-than-a-hundred-characters/${LONG}.woff2`]: 'wOF2',
+}
+
+test('the texts of the copy are there to be tested', () => {
+  assert.ok(fingerprintLines && placeLines && archiveFunction)
+})
+
+test('a branding folder arrives whole on the node, under its fingerprint and readable for everybody', () => {
+  const source = folderWith({ ...BRAND, '.DS_Store': 'what a file manager leaves behind' })
+  chmodSync(join(source, 'logo.svg'), 0o600)
+
+  const { status, output, fingerprint, data, placed } = place(source)
+
+  assert.equal(status, 0, output)
+  assert.match(fingerprint, /^[0-9a-f]{12}$/)
+  assert.deepEqual(placed, [fingerprint])
+  const arrived = join(data, 'branding', fingerprint)
+  // Also the names an archive of the old kind has no room for: they were left out without a word.
+  for (const [file, content] of Object.entries(BRAND)) assert.equal(readFileSync(join(arrived, file), 'utf8'), content, file)
+  assert.equal(existsSync(join(arrived, '.DS_Store')), false)
+  assert.equal(statSync(join(arrived, 'logo.svg')).mode & 0o044, 0o044)
+  assert.equal(statSync(arrived).mode & 0o055, 0o055)
+})
+
+test('a copy that lacks a file or holds another one is refused, and nothing is put in place', () => {
+  const source = folderWith(BRAND)
+  const { 'logo.svg': _logo, ...withoutLogo } = BRAND
+  for (const sent of [folderWith(withoutLogo), folderWith({ ...BRAND, 'logo.svg': '<svg/>' }), folderWith({ ...BRAND, 'more.svg': '<svg/>' })]) {
+    const { status, output, fingerprint, placed } = place(source, { sent })
+    assert.equal(status, 1, output)
+    assert.match(output, /What arrived on the node is not the branding folder that was sent/)
+    assert.equal(placed.includes(fingerprint), false)
+  }
+})
+
+test('a folder that is in place is not copied again, and is refused once it does not hold what its name says', () => {
+  const source = folderWith(BRAND)
+  const first = place(source)
+  assert.equal(first.status, 0, first.output)
+
+  const again = place(source, { data: first.data })
+  assert.equal(again.status, 0, again.output)
+  assert.deepEqual(again.placed, [first.fingerprint])
+
+  writeFileSync(join(first.data, 'branding', first.fingerprint, 'brand.json'), '{"name":"Somebody else"}')
+  const changed = place(source, { data: first.data })
+  assert.equal(changed.status, 1, changed.output)
+  assert.match(changed.output, /does not hold what the name says/)
 })
