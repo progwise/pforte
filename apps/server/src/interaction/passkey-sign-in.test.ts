@@ -294,11 +294,11 @@ describe.skipIf(!hasDatabase)('signing in with a passkey', () => {
       // and then it is simply the earlier sign-in: 6 after 5 is right, and both sign in. So the row of the passkey is
       // held until both wait to note their use. Reading the row, which is what they are checked against, is not held up.
       const holder = await h.database.pool.connect()
-      let responses: Awaited<ReturnType<typeof post>>[]
+      let posted: Promise<Awaited<ReturnType<typeof post>>[]> | undefined
       try {
         await holder.query('begin')
         await holder.query('select id from passkeys where credential_id = $1 for update', [phone.newest])
-        const posted = Promise.all([
+        posted = Promise.all([
           post(one, `${first.interaction}/passkey`, { credential: JSON.stringify(phone.get(first.question, { counter: 5 })) }),
           post(two, `${second.interaction}/passkey`, { credential: JSON.stringify(phone.get(second.question, { counter: 6 })) }),
         ])
@@ -306,10 +306,15 @@ describe.skipIf(!hasDatabase)('signing in with a passkey', () => {
           .poll(async () => (await h.database.pool.query(`select count(*)::int as waiting from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock' and query like 'update "passkeys"%'`)).rows[0].waiting, { timeout: 10_000, interval: 20 })
           .toBe(2)
         await holder.query('commit')
-        responses = await posted
       } finally {
-        holder.release()
+        // Whatever happened, nothing of this reaches the next test: the row is let go before the connection goes
+        // back to the pool (after a commit this does nothing; a connection that cannot do it is thrown away), and
+        // both sign-ins are through before the test ends.
+        const stuck = await holder.query('rollback').then(() => undefined, (error: Error) => error)
+        holder.release(stuck)
+        await posted?.catch(() => undefined)
       }
+      const responses = await posted
 
       expect(responses.map((response) => response.statusCode).sort()).toEqual([303, 401])
       const winner = responses[0]!.statusCode === 303 ? '5' : '6'
