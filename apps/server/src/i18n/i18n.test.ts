@@ -63,9 +63,9 @@ describe('choosing a language', () => {
 describe('texts', () => {
   it('fills in the values and leaves unknown ones visible', () => {
     const i18n = createI18n()
-    expect(i18n.text('en', 'phone.wait', { seconds: 42 })).toBe('Please wait 42 seconds before asking for another code.')
-    expect(i18n.text('de', 'phone.wait', { seconds: 42 })).toContain('42 Sekunden')
-    expect(i18n.text('en', 'phone.wait')).toContain('{seconds}')
+    expect(i18n.text('en', 'manage.import.doneTitle', { seconds: '4.2' })).toBe('Import finished in 4.2 seconds')
+    expect(i18n.text('de', 'manage.import.doneTitle', { seconds: '4,2' })).toContain('4,2 Sekunden')
+    expect(i18n.text('en', 'manage.import.doneTitle')).toContain('{seconds}')
   })
 
   it('replaces a built-in text with the installation\'s own', () => {

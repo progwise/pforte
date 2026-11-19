@@ -147,7 +147,7 @@ describe.skipIf(!hasDatabase)('the account pages: confirming the phone number', 
       const again = await post(browser, '/account/phone/send')
 
       expect(again.headers.location).toBe('/account/phone')
-      expect((await follow(browser, again)).body).toMatch(/Please wait \d+ seconds before asking for another code\./)
+      expect((await follow(browser, again)).body).toMatch(/Please wait (\d+ seconds|1 minute) before asking for another code\./)
       expect(phoneCodes()).toHaveLength(1)
     })
 

@@ -29,9 +29,18 @@ export const waitValues = (seconds: number): { wait: Worded; minutes: number } =
 }
 
 /**
+ * The same for a wait that can be a matter of seconds, as the one between two codes: seconds below a minute
+ * ("1 second", "45 Sekunden"), whole minutes from there on. `seconds` is the bare number such a text had up to 0.3.2.
+ */
+export const shortWaitValues = (seconds: number): { wait: Worded; seconds: number } => {
+  const left = Math.max(1, Math.ceil(seconds))
+  return { wait: left < 60 ? (t) => t(`duration.in.second.${form(left)}`, { count: left }) : waitValues(left).wait, seconds: left }
+}
+
+/**
  * The texts that state a time. They get it in words (`worded`). A text replaced through a `locales` folder may leave
- * that value out and write the time itself, and may use the bare number the text had before 0.3.2 (`number`), so a
- * folder written for an earlier version still loads and reads as it did.
+ * that value out and write the time itself, and may use the bare number the text had before it was worded (`number`),
+ * so a folder written for an earlier version still loads and reads as it did.
  */
 export const DURATION_VALUES: Partial<Record<MessageKey, { worded: string; number?: string }>> = {
   'code.sentEmail': { worded: 'validity' },
@@ -39,6 +48,8 @@ export const DURATION_VALUES: Partial<Record<MessageKey, { worded: string; numbe
   'reset.sent': { worded: 'validity' },
   'mail.activation.text': { worded: 'validity', number: 'hours' },
   'mail.activationFor.text': { worded: 'validity', number: 'hours' },
+  'code.cooldown': { worded: 'wait', number: 'seconds' },
+  'phone.wait': { worded: 'wait', number: 'seconds' },
   'code.tooMany': { worded: 'wait', number: 'minutes' },
   'limit.text': { worded: 'wait', number: 'minutes' },
   'account.password.wait': { worded: 'wait', number: 'minutes' },

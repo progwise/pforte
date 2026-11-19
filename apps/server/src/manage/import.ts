@@ -132,7 +132,7 @@ ${rowTable(rejected, 'reason')}
           : `<div class="panel"><p>${escapeHtml(t('manage.import.nothing'))}</p><p>${link(BASE, t('manage.import.choose'), 'button')}</p></div>`
         : `<div class="actions">${link(BASE, t('manage.import.another'), 'button')}</div>`
 
-      const title = dry ? t('manage.import.dryTitle') : t('manage.import.doneTitle', { seconds: (report.durationMs / 1000).toFixed(1) })
+      const title = dry ? t('manage.import.dryTitle') : t('manage.import.doneTitle', { seconds: new Intl.NumberFormat(language, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(report.durationMs / 1000) })
       const content = `<h1>${escapeHtml(t('manage.import.title'))}</h1>
 <div class="panel"><h2>${escapeHtml(title)}</h2>
 <p>${escapeHtml(t('manage.import.rows', { rows: n.format(report.totalRows) }))}</p>

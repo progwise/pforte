@@ -262,7 +262,7 @@ describe.skipIf(!hasDatabase)('confirming the phone number at a sign-in', () => 
       const second = await post(browser, `${phone}/send`)
       expect(second.statusCode).toBe(429)
       expect(Number(second.headers['retry-after'])).toBeGreaterThan(0)
-      expect(second.body).toMatch(/You can ask for a new one in \d+ seconds/)
+      expect(second.body).toMatch(/You can ask for a new one in (\d+ seconds|1 minute)\./)
       expect(second.body).toContain(CODE_FIELD)
       expect(phoneCodes()).toHaveLength(1)
     })

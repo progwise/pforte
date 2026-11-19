@@ -26,7 +26,7 @@ import type { RateLimiter } from '../auth/rate-limiter.js'
 import { type Channel, type Notifier, NotifierUnavailableError } from '../notifications/notifier.js'
 import { applyIssuerHeaders } from '../oidc/issuer-headers.js'
 import type { ProviderHolder } from '../oidc/provider.js'
-import { waitValues } from '../i18n/duration.js'
+import { shortWaitValues, waitValues } from '../i18n/duration.js'
 import { parseAcceptLanguage } from '../i18n/index.js'
 import { isHandleOf, namedBy, type Passkeys } from '../passkeys/index.js'
 import type { Ui } from '../ui/index.js'
@@ -318,7 +318,7 @@ export const interactionRoutes =
 
     const limitMessage = (view: PageSet, error: CodeLimitError) =>
       error.reason === 'cooldown'
-        ? view.t('code.cooldown', { seconds: error.retryAfterSeconds })
+        ? view.t('code.cooldown', shortWaitValues(error.retryAfterSeconds))
         : view.t('code.tooMany', waitValues(error.retryAfterSeconds))
 
     const cannotSend = (reply: FastifyReply, view: PageSet, error: NotifierUnavailableError) => {

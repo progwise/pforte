@@ -34,7 +34,7 @@ export const fr: Catalog = {
   'code.none': "Il n'y a pas de code valable. Veuillez en demander un nouveau.",
   'code.newOnItsWay': 'Un nouveau code est en route.',
   'code.badOrExpired': "Le code n'est pas correct ou a expiré. Vous pouvez en demander un nouveau ci-dessous.",
-  'code.cooldown': "Un code vient d'être envoyé. Vous pourrez en demander un nouveau dans {seconds} secondes.",
+  'code.cooldown': "Un code vient d'être envoyé. Vous pourrez en demander un nouveau dans {wait}.",
   'code.tooMany': 'Trop de codes ont été demandés. Veuillez réessayer dans {wait}.',
   'code.tooManyTitle': 'Trop de codes',
 
@@ -103,7 +103,7 @@ export const fr: Catalog = {
   'phone.signIn':
     "Votre numéro de téléphone {to} n'est pas encore confirmé, vos codes de connexion arrivent donc par e-mail. Pour le confirmer, nous y envoyons un code à 6 chiffres par SMS. Une fois ce code saisi, vos codes de connexion arriveront par SMS.",
   'phone.later': 'Pas maintenant',
-  'phone.wait': 'Veuillez patienter {seconds} secondes avant de demander un autre code.',
+  'phone.wait': 'Veuillez patienter {wait} avant de demander un autre code.',
   'phone.cannotSend': "Le code n'a pas pu être envoyé. Vous pouvez passer cette étape et confirmer plus tard.",
   'phone.doneTitle': 'Numéro de téléphone confirmé',
   'phone.done':
@@ -247,6 +247,8 @@ export const fr: Catalog = {
   'duration.for.hour.other': '{count} heures',
   'duration.for.day.one': '{count} jour',
   'duration.for.day.other': '{count} jours',
+  'duration.in.second.one': '{count} seconde',
+  'duration.in.second.other': '{count} secondes',
   'duration.in.minute.one': '{count} minute',
   'duration.in.minute.other': '{count} minutes',
 }

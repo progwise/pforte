@@ -8,6 +8,20 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
 
 ## Unreleased
 
+### Fixed
+
+- **A wait of one second reads "1 second", and a long one is said in minutes.** The two texts that say how long to wait
+  for another code wrote a number of seconds in front of the word "seconds": "in 1 seconds", "1 Sekunden", "1
+  secondes". And where the limit of codes per hour was reached for a phone number, the page said "Please wait 3540
+  seconds". They now state the wait in words, as the other texts do since 0.3.2: in seconds below a minute, with a
+  singular, and in minutes from there on. In the administration, the time an import took is written as the language
+  writes a number ("1,5 Sekunden" in German), and the two messages of the admin API that name a wait say "1 second".
+  **If you replaced `code.cooldown` or `phone.wait` in your `locales` folder, nothing needs doing:** a text with
+  `{seconds}` loads and reads as before. To get the new wording, use `{wait}` in it. The words are two new texts,
+  `duration.in.second.one` and `duration.in.second.other`; a language you added needs them once a text of it uses
+  `{wait}` there, and shows the time in English until then ([texts that state a
+  time](docs/branding-and-languages.md#texts-that-state-a-time), [#117](https://github.com/progwise/pforte/issues/117)).
+
 ## 0.3.2 (2026-11-19)
 
 **Before you update:** nothing to do. This release has no migration and changes no setting; one setting is new and

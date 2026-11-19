@@ -36,6 +36,9 @@ const ERROR_RESPONSES = {
   503: problemSchema,
 }
 
+/** A wait as the detail of a problem says it, in English as all of the API: "1 second", "42 seconds". */
+const seconds = (count: number) => `${count} second${count === 1 ? '' : 's'}`
+
 export interface LifecycleDependencies {
   db: Database
   auth: AdminAuth
@@ -248,7 +251,7 @@ export const lifecycleRoutes =
               reply,
               429,
               'Too many requests',
-              `${error.message} The change itself was saved; try again in ${error.retryAfterSeconds} seconds.`,
+              `${error.message} The change itself was saved; try again in ${seconds(error.retryAfterSeconds)}.`,
               { 'Retry-After': String(error.retryAfterSeconds) },
             )
           }
@@ -301,7 +304,7 @@ export const lifecycleRoutes =
         } catch (error) {
           if (error instanceof LifecycleError) return refused(reply, error)
           if (error instanceof CodeLimitError) {
-            return problem(reply, 429, 'Too many requests', `${error.message} Try again in ${error.retryAfterSeconds} seconds.`, { 'Retry-After': String(error.retryAfterSeconds) })
+            return problem(reply, 429, 'Too many requests', `${error.message} Try again in ${seconds(error.retryAfterSeconds)}.`, { 'Retry-After': String(error.retryAfterSeconds) })
           }
           if (error instanceof NotifierUnavailableError) return problem(reply, 503, 'Cannot send the message', `${error.message} No code was sent; repeat the call once messages can be sent.`)
           throw error
