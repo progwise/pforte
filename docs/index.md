@@ -32,7 +32,7 @@ in the back office wants to learn. pforte does the small set of things above and
 
 - **Sign-in**: e-mail and password, a second factor by a code sent by SMS or e-mail, "remember this device",
   [passkeys](passkeys.md) for signing in with the device's own check instead of password and code, activation links for
-  new users, password reset. Pages in German, English, French and Hungarian, with your name, logo and colours
+  new users, password reset. Pages in German, English, French and Hungarian, light and dark, with your name, logo and colours
   ([branding and languages](branding-and-languages.md), [codes by SMS](sms.md)).
 - **Protocol**: authorization code flow with PKCE, refresh tokens with rotation, discovery, JWKS, userinfo, RP-initiated and
   back-channel logout.

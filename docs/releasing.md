@@ -8,6 +8,9 @@ For maintainers. A release is a tag `vX.Y.Z` on `main`. Pushing it starts the wo
 - The OpenID conformance suite was run again against `main` ([conformance](conformance.md)); it cannot run in CI.
 - The section **Unreleased** of [CHANGELOG.md](../CHANGELOG.md) says what changed, in words an operator understands, and says
   clearly what **breaks**: a renamed or removed variable, a changed admin API, a change that needs action before updating.
+- That section begins with a paragraph **Before you update**, above "Added": whether there is a migration, which settings
+  are new or changed, and what shows after the update without anybody's doing. `scripts/release.sh` does not write it, and
+  the entry becomes the text of the GitHub release as it is. The entries of the earlier releases show the form.
 
 ## Cut it
 
@@ -43,6 +46,16 @@ The release is the last step: if anything fails before it, there is no release, 
 platforms, tests and scans, and takes the notes from "Unreleased" if the version has no entry yet.
 
 **Pre-releases.** A tag such as `v0.2.0-rc.1` makes a pre-release on GitHub. It gets no `latest` and no `0.2` tag.
+
+## After a release
+
+- Check from outside that the new image is there: `docker pull ghcr.io/progwise/pforte:0.2.0`.
+- Name the new version where the documentation names one, in a pull request of its own: the status line of
+  [README.md](../README.md) and its sentence on what came with the release, and the image to pin in
+  [the quick start](quick-start.md), in both READMEs of the examples, in `examples/production/compose.yaml` and in
+  `examples/swarm/.env.example`. After the release and not with it: until the tag is pushed, that image does not exist.
+- Record the run of the conformance suite in [conformance](conformance.md), if that was not done before the tag.
+- Close the milestone.
 
 ## After the first release
 
