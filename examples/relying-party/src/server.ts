@@ -170,8 +170,14 @@ nothing, until one says <code>light</code> or <code>auto</code> (as the device i
 /** Things to try at pforte, each with its button and what to look at. */
 const thingsToTry = (said: Said, signedIn: boolean) => {
   const look: Record<string, string> = said.color_scheme ? { color_scheme: said.color_scheme } : {}
-  // pforte's own pages take one language (`lang`), the first of the list.
-  const language: Record<string, string> = said.ui_locales ? { lang: said.ui_locales.split(' ')[0]! } : {}
+  // pforte's own pages take one language (`lang`), not a list: the one pforte chooses from the list for the sign-in,
+  // the first it offers, where `fr-CH` counts as `fr`. A list with none of its languages says nothing.
+  const first = (said.ui_locales ?? '')
+    .toLowerCase()
+    .split(/\s+/)
+    .flatMap((tag) => [tag, tag.split('-')[0]!])
+    .find((tag) => switches.ui_locales.choices.includes(tag))
+  const language: Record<string, string> = first ? { lang: first } : {}
   const link = (href: string, label: string) => `<a class="button" href="${escapeHtml(href)}">${label}</a>`
   const button = (action: string, label: string) => `<form method="post" action="${action}"><button>${label}</button></form>`
   const things = [
