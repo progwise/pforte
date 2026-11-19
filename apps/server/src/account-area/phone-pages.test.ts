@@ -147,6 +147,12 @@ describe.skipIf(!hasDatabase)('the account pages: confirming the phone number', 
       const again = await post(browser, '/account/phone/send')
 
       expect(again.headers.location).toBe('/account/phone')
+      // The message travels as the name of the text and the seconds. The sentence, which a `locales` folder can make
+      // long, is made on the page that shows it and is not in the cookie.
+      const cookie = /pforte_account_flash=([\w-]+)\./.exec(String(again.headers['set-cookie']))![1]!
+      const message = JSON.parse(Buffer.from(cookie, 'base64url').toString())
+      expect(message).toMatchObject({ kind: 'error', key: 'phone.wait', values: { seconds: expect.any(Number) } })
+      expect(message.text).toBeUndefined()
       expect((await follow(browser, again)).body).toMatch(/Please wait (\d+ seconds|1 minute) before asking for another code\./)
       expect(phoneCodes()).toHaveLength(1)
     })
