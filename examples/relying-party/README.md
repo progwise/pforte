@@ -11,8 +11,19 @@ to do, in one file ([src/server.ts](src/server.ts)):
 5. Sign out at pforte, which revokes this session's refresh tokens.
 
 It uses the standard [`openid-client`](https://github.com/panva/openid-client) library and
-nothing specific to pforte, so the same code works with any OpenID provider. Sessions are
+nothing specific to pforte for this, so the same code works with any OpenID provider. Sessions are
 in memory; a real application needs a session store.
+
+## Things to try
+
+The page of the application is also a place to try pforte from, made for a phone: nothing has to be typed.
+
+- **Two switches** for what the application tells pforte: the look (`color_scheme`: `light`, `dark`, `auto` or
+  nothing) and the language (`ui_locales`: one of the languages pforte offers, or nothing). The choice is kept in the
+  browser and sent with the sign-in and the sign-out. The application itself is as light or dark as it says.
+- **A button for each thing to try**, with a line on what to look at: signing in and out, refreshing the tokens, and
+  pforte's own pages (the account pages, the administration, the page to set or reset the password). These links
+  are the one part that knows pforte; they carry the look that is chosen.
 
 ## Run it
 
@@ -37,8 +48,8 @@ with the redirect `http://localhost:3400/callback`.
 | `ISSUER` | `http://localhost:3300` | Where pforte runs |
 | `CLIENT_ID` | `demo-web` | The client registered in pforte |
 | `PORT` | `3400` | Port of this application |
-| `UI_LOCALES` | none | The language the application asks pforte's pages to be in, for example `de` or `fr hu`. Sent as `ui_locales` with the sign-in and with the sign-out. Without it pforte chooses by the person and the browser |
-| `COLOR_SCHEME` | none | Whether the application is `light` or `dark`. Sent as `color_scheme` with the sign-in and with the sign-out; pforte's pages then look like it and stay so in that browser. Without it pforte's pages follow the device, or what an application said before |
+| `UI_LOCALES` | none | The language the application asks pforte's pages to be in, for example `de` or `fr hu`, until the switch on its page is used. Sent as `ui_locales` with the sign-in and with the sign-out. Without it pforte chooses by the person and the browser |
+| `COLOR_SCHEME` | none | Whether the application is `light` or `dark`, until the switch on its page is used. Sent as `color_scheme` with the sign-in and with the sign-out; pforte's pages then look like it and stay so in that browser. Without it pforte's pages follow the device, or what an application said before |
 | `BASE_URL` | `http://localhost:<PORT>` | The address people reach it under, if that is not where it listens (behind a proxy). The redirect URI of the client registration is `<BASE_URL>/callback` |
 
 `demo-web` is a public client (no secret). Plain `http` for the issuer is accepted only for

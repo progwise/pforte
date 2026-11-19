@@ -15,6 +15,10 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   activation link: the one an administrator or an application sends, the one a person asks for themselves, and the
   one of the first administrator. The mail states the time that applies. A change applies to links sent from then on
   ([configuration](docs/configuration.md)).
+- **The example application is a place to try pforte from, also on a phone.** Its page has two switches for what
+  it tells pforte (light or dark, and the language) and a button for each thing to try, with a line on what to look
+  at: signing in and out, the account pages, the administration, the page to set or reset the password. Nothing has
+  to be typed into the address bar ([example application](examples/relying-party/README.md#things-to-try)).
 - **A second, small logo for the narrow places: `logoSmall` in `brand.json`.** A branding folder had one `logo` for the
   card of the sign-in pages, for the bar and for the tab of the browser. A wide wordmark is right on the card, but in
   the one-line bar it is a thin strip that still takes a third of the width, and in the tab it cannot be read. With
