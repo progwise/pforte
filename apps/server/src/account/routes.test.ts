@@ -588,6 +588,20 @@ describe.skipIf(!hasDatabase)('activation and password reset pages', () => {
       })
     })
 
+    // The admin API stored `""` as it was until 0.3.2, so a record can hold it. It is no address to lead on to.
+    it('does not count an application whose start address is empty', async () => {
+      await h.api('POST', '/clients', { body: { clientId: 'empty-start-app', name: 'Empty', type: 'public', redirectUris: ['https://empty.example.com/cb'] } })
+      try {
+        await withStartApplications(['demo-web'], async () => {
+          await h.database.pool.query(`update clients set client_uri = '' where client_id = 'empty-start-app'`)
+          const done = await (await activate()).done()
+          expect(done.body).toContain(WEB_BUTTON)
+        })
+      } finally {
+        await h.api('DELETE', '/clients/empty-start-app')
+      }
+    })
+
     it('does so after the confirmation of the phone number as well, taken or skipped', async () => {
       const sms = h.notifier.smsAvailable
       h.notifier.smsAvailable = true

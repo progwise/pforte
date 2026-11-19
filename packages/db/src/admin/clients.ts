@@ -1,4 +1,4 @@
-import { and, asc, eq, isNotNull, sql } from 'drizzle-orm'
+import { and, asc, eq, isNotNull, ne, sql } from 'drizzle-orm'
 import { type DatabaseOrTransaction, recordAuditEvent } from '../audit.js'
 import { clientClaimTypes, clients, oidcPayloads } from '../schema/index.js'
 import { AdminError, type Problem } from './errors.js'
@@ -149,16 +149,26 @@ export const getClient = async (db: DatabaseOrTransaction, clientId: string) => 
  * The application a person is sent on to where nothing says which: the only one an administrator registered that
  * has a start address. With none or several there is no telling, and the answer is nothing. pforte's own clients,
  * the account pages and the administration, have a start address too and do not count: they are not where somebody
- * who activates an account is going.
+ * who activates an account is going. Nor does an empty address, which a record written before 0.3.2 can hold.
  */
 export const findOnlyStartApplication = async (db: DatabaseOrTransaction) => {
   const applications = await db
     .select()
     .from(clients)
-    .where(and(eq(clients.system, false), isNotNull(clients.clientUri)))
+    .where(and(eq(clients.system, false), isNotNull(clients.clientUri), ne(clients.clientUri, '')))
     .limit(2)
   return applications.length === 1 ? applications[0] : undefined
 }
+
+/**
+ * An empty address is no address. The admin API takes `""` for both, and stored as it is the client would have an
+ * address for everything that asks whether there is one.
+ */
+const withoutEmptyAddresses = <Config extends Partial<Pick<ClientConfig, 'clientUri' | 'backchannelLogoutUri'>>>(config: Config): Config => ({
+  ...config,
+  ...(config.clientUri === '' ? { clientUri: null } : {}),
+  ...(config.backchannelLogoutUri === '' ? { backchannelLogoutUri: null } : {}),
+})
 
 /** Refuses to change a client that pforte registered itself. */
 const assertEditable = (client: ClientRow) => {
@@ -252,9 +262,10 @@ const assertAnotherAdminClient = async (tx: DatabaseOrTransaction, clientId: str
 export const createClient = async (
   tx: DatabaseOrTransaction,
   context: RequestContext,
-  input: { clientId: string; secretHash?: string } & ClientConfig,
+  given: { clientId: string; secretHash?: string } & ClientConfig,
   rules: ClientRules = {},
 ) => {
+  const input = withoutEmptyAddresses(given)
   const problems = validateClientConfig(input, rules)
   if (problems.length > 0) throw new AdminError('The client is not valid.', 'invalid', problems)
 
@@ -272,10 +283,11 @@ export const updateClient = async (
   tx: DatabaseOrTransaction,
   context: RequestContext,
   client: ClientRow,
-  wanted: Partial<Omit<ClientConfig, 'type'>>,
+  given: Partial<Omit<ClientConfig, 'type'>>,
   rules: ClientRules = {},
 ) => {
   assertEditable(client)
+  const wanted = withoutEmptyAddresses(given)
   const current = configOf(client)
   const next = { ...current, ...wanted }
   const changes: Record<string, { from: unknown; to: unknown }> = {}

@@ -136,6 +136,19 @@ describe.skipIf(!hasDatabase)('admin API: clients', () => {
       expect((await create({ ...shop, clientId: 'no-start' })).json().client.clientUri).toBeNull()
     })
 
+    // Stored as it is, an empty address would count as one wherever pforte asks whether a client has an address.
+    it('takes an empty address as none, at the creation and at a change', async () => {
+      const created = await create({ ...shop, clientId: 'empty-start', clientUri: '', backchannelLogoutUri: '' })
+      expect(created.statusCode).toBe(201)
+      expect(created.json().client).toMatchObject({ clientUri: null, backchannelLogoutUri: null })
+
+      await h.api('PATCH', '/clients/empty-start', { body: { clientUri: 'https://shop.example.com/start' } })
+      const emptied = await h.api('PATCH', '/clients/empty-start', { body: { clientUri: '' } })
+      expect(emptied.json().clientUri).toBeNull()
+      const stored = await h.database.pool.query(`select client_uri, backchannel_logout_uri from clients where client_id = 'empty-start'`)
+      expect(stored.rows).toEqual([{ client_uri: null, backchannel_logout_uri: null }])
+    })
+
     it('refuses a client id that exists', async () => {
       expect((await create({ ...shop })).statusCode).toBe(409)
     })

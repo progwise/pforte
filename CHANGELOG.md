@@ -55,6 +55,12 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
 
 ### Fixed
 
+- **An empty start address is no start address.** The admin API took `"clientUri": ""` and stored it as it was, so
+  the client had a start address for everything that only asks whether there is one. With the way on after a link
+  sent without an application (below) that would matter: next to one application that really has a start address
+  there seemed to be two, and the page got no button. An empty `clientUri` or `backchannelLogoutUri` is now stored
+  as none (`null`), at the creation of a client and at a change, and a record that already holds an empty start
+  address does not count. **Nothing needs doing** ([#106](https://github.com/progwise/pforte/issues/106)).
 - **The sign-out pages speak the language of the application and of the person.** The question "Sign out
   completely?" and the page after it followed the browser's language alone: a person who used an application in
   German on a phone set to English got them in English. They now choose their language as the sign-in pages do:
