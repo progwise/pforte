@@ -2,6 +2,16 @@ import { endSessions, findUserById } from '@progwise/pforte-db/admin'
 import { sql } from 'drizzle-orm'
 import type { AdminHarness } from './admin-harness.js'
 
+/** Waits until a statement of this database waits for a lock: a request has then got as far as it can. */
+export const untilWaitingForLock = async (h: AdminHarness, otherwise: string) => {
+  for (let attempt = 0; ; attempt++) {
+    const { rows } = await h.database.pool.query(`select count(*) from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock'`)
+    if (Number(rows[0].count) > 0) return
+    if (attempt > 200) throw new Error(otherwise)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+}
+
 /**
  * Ends a person's sessions at the worst moment for a request that is under way: after the request has passed
  * every check it makes on arrival, and before it stores anything.
@@ -28,13 +38,7 @@ export const endSessionsDuring = async <Response>(h: AdminHarness, userId: strin
   await holding
 
   const request = start()
-  // The request has got as far as it can when a statement of this database waits for a lock.
-  for (let attempt = 0; ; attempt++) {
-    const { rows } = await h.database.pool.query(`select count(*) from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock'`)
-    if (Number(rows[0].count) > 0) break
-    if (attempt > 200) throw new Error('the request never waited for the lock on the person: it stores nothing under that lock')
-    await new Promise((resolve) => setTimeout(resolve, 10))
-  }
+  await untilWaitingForLock(h, 'the request never waited for the lock on the person: it stores nothing under that lock')
   try {
     await whileWaiting()
   } finally {

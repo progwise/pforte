@@ -471,6 +471,22 @@ describe.skipIf(!hasDatabase)('user lifecycle', () => {
       expect(await currentCode(database.db, { userId: user.id, purpose: 'activation' })).toBeUndefined()
     })
 
+    it('takes only the code it is told to take: one that another has replaced is over, and nothing is counted against the new one', async () => {
+      const { id } = await asked()
+      const first = (await currentCode(database.db, { userId: id, purpose: 'phone_change' }))!
+      const other = '+4915100000001'
+      // Asked for in another browser, for another number, when the limit of one a minute had passed.
+      await database.pool.query(`update otp_codes set created_at = created_at - interval '2 minutes' where user_id = $1`, [id])
+      const second = await issueCode(database.db, { userId: id, channel: 'sms', purpose: 'phone_change', boundTo: other }, { secrets })
+      const changeWith = (codeId: string, phone: string, code: string) => changePhone(database.db, self(id), { userId: id, phone, code, codeId }, { secrets })
+
+      expect(await changeWith(first.id, B, second.code)).toEqual({ ok: false, reason: 'expired' })
+
+      expect((await database.pool.query(`select attempts from otp_codes where id = $1`, [second.id])).rows[0].attempts).toBe(0)
+      expect((await stored(id)).phone).toBe(A)
+      expect(await changeWith(second.id, other, second.code)).toMatchObject({ ok: true, user: { phone: other } })
+    })
+
     it('waits for a change by the back office that is under way, and then wins: the number the person proved is stored', async () => {
       const { id, code } = await asked()
       const user = await stored(id)

@@ -1,8 +1,11 @@
+import type { Database } from '@progwise/pforte-db'
+import { changePhone } from '@progwise/pforte-db/admin'
 import { hasDatabase } from '@progwise/pforte-db/testing'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { sign, unsign } from '../interaction/signed-cookie.js'
 import { type AdminHarness, createAdminHarness } from '../test/admin-harness.js'
 import { Browser } from '../test/browser.js'
+import { untilWaitingForLock } from '../test/held-user.js'
 import { driveSignIn } from '../test/manage-session.js'
 
 const COOKIE_KEYS = ['k'.repeat(40)]
@@ -380,7 +383,8 @@ describe.skipIf(!hasDatabase)('the account pages: changing the phone number', ()
       const browser = await asked(A.email)
       const other = '+4915100000001'
       // The cookie of somebody who could sign cookies: it names another number than the code was sent to.
-      browser.cookies.set('pforte_account_phone', sign(COOKIE_KEYS, { userId: (await userOf(A.email)).id, phone: other, expiresAt: Date.now() + 60_000 }))
+      const real = unsign<Record<string, unknown>>(COOKIE_KEYS, browser.cookies.get('pforte_account_phone'))!
+      browser.cookies.set('pforte_account_phone', sign(COOKIE_KEYS, { ...real, phone: other }))
 
       const refused = await post(browser, `${CHANGE}/confirm`, { code: h.lastPhoneCode(A.email)!, phone: other })
 
@@ -438,6 +442,51 @@ describe.skipIf(!hasDatabase)('the account pages: changing the phone number', ()
       expect((await userOf(A.email)).phone).toBe(OLD)
     })
 
+    describe('when a second browser has asked for a code since', () => {
+      const other = '+4915100000001'
+      /** The person asked for NEW in one browser and, more than a minute later, for another number in a second one. */
+      const twoBrowsers = async () => {
+        const first = await asked(A.email)
+        const firstCode = h.lastPhoneCode(A.email)!
+        await aMinuteLater(A.email)
+        const second = await asked(A.email, other)
+        return { first, firstCode, second, secondCode: h.lastPhoneCode(A.email)! }
+      }
+      const attemptsOfCurrentCode = async () =>
+        (await h.database.pool.query(`select attempts from otp_codes where user_id = $1 and purpose = 'phone_change' and expires_at > now()`, [(await userOf(A.email)).id])).rows.map((row) => row.attempts)
+
+      it('asks the first browser for the number again: the code that was sent to its number is over', async () => {
+        const { first, second } = await twoBrowsers()
+
+        const page = await first.request('GET', CHANGE)
+
+        expect(page.body).toContain(NUMBER_FIELD)
+        expect(page.body).not.toContain(CODE_FORM)
+        expect(page.body).not.toContain(NEW)
+        // The browser that asked last is asked for its code.
+        const waiting = await second.request('GET', CHANGE)
+        expect(waiting.body).toContain(CODE_FORM)
+        expect(waiting.body).toContain(`by SMS to ${other}.`)
+      })
+
+      it('refuses what the first browser sends from a form that was still open, and counts nothing against the code of the second', async () => {
+        const { first, firstCode, second, secondCode } = await twoBrowsers()
+
+        const refused = await post(first, `${CHANGE}/confirm`, { code: firstCode })
+        // Nor does the code of the second browser make the number of the first the person's.
+        await post(first, `${CHANGE}/confirm`, { code: secondCode })
+
+        expect(refused.headers.location).toBe(CHANGE)
+        expect((await follow(first, refused)).body).toContain('The code is not correct or has expired.')
+        const user = await userOf(A.email)
+        expect(user.phone).toBe(OLD)
+        expect((await h.audit('login.code_failed', user.id)).at(-1)!.details).toMatchObject({ purpose: 'phone_change', reason: 'expired' })
+        expect(await attemptsOfCurrentCode()).toEqual([0])
+        expect((await post(second, `${CHANGE}/confirm`, { code: secondCode })).headers.location).toBe('/account')
+        expect((await userOf(A.email)).phone).toBe(other)
+      })
+    })
+
     it('ends a code that was out to confirm the number the person had', async () => {
       await h.database.pool.query(`update users set phone_verified_at = null where email = $1`, [A.email])
       const browser = await signedIn(A.email)
@@ -485,6 +534,29 @@ describe.skipIf(!hasDatabase)('the account pages: changing the phone number', ()
       expect(synced.statusCode, synced.body).toBe(200)
       expect(synced.json()).toMatchObject({ outcome: 'unchanged', user: { phone: NEW, phoneSetByUserAt: expect.any(String) } })
       expect(await userOf(A.email)).toMatchObject({ phone: NEW, phone_verified_at: confirmedAt })
+    })
+
+    it('a sync that arrives while the person enters the code waits for them, and leaves the number alone then', async () => {
+      await asked(A.email)
+      const { id, first_name: firstName } = await userOf(A.email)
+      const code = h.lastPhoneCode(A.email)!
+
+      const syncing = await h.database.db.transaction(async (tx) => {
+        // The code was right and the number is stored, but the request of the person has not finished.
+        const entered = await changePhone(tx as unknown as Database, { actor: { type: 'user', id }, self: true }, { userId: id, phone: NEW, code }, { secrets: h.accountArea.codeSecrets })
+        expect(entered).toMatchObject({ ok: true })
+        // The source has a number of its own by now, as when the person told the back office as well.
+        const syncing = Promise.resolve(upsert({ firstName, lastName: 'Schmidt', phone: '+4915100000001' }))
+        // Decided on the row as it was before, the sync would store its number and take the confirmation, and
+        // the number would stay the person's: no later run would put it right.
+        await untilWaitingForLock(h, 'the sync never waited for the person: it decides on a row that is no longer true')
+        // Wrapped, so that the transaction is finished here and not held until the sync has answered.
+        return { syncing }
+      })
+
+      expect((await syncing.syncing).json()).toMatchObject({ outcome: 'unchanged', user: { phone: NEW, phoneVerifiedAt: expect.any(String), phoneSetByUserAt: expect.any(String) } })
+      expect(await userOf(A.email)).toMatchObject({ phone: NEW, phone_verified_at: expect.any(Date), phone_set_by_user_at: expect.any(Date) })
+      expect(await h.audit('user.update', id)).toEqual([])
     })
 
     it('a sync that names no number at all, or removes it, leaves it alone as well', async () => {

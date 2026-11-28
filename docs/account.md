@@ -46,6 +46,8 @@ their codes go from the next sign-in on.
   number costs one message and nothing else, and a code that is never entered runs out after ten minutes.
 - **The code is worth something for the number it was sent to only.** The number that waits for its code is kept in a
   signed cookie of that browser and not with the person, so the code is entered in the browser that asked for it.
+  A person has one such code at a time: asking for one in a second browser ends the one the first browser waits for,
+  and the first is asked for the number again.
 - **The person is told by e-mail**, with the new number partly hidden and the address of these pages: see
   [a recent sign-in](#a-change-needs-a-recent-sign-in) for why this change is announced.
 - **The number is the person's from then on.** A sync or an import that still has the old number does not put it back
