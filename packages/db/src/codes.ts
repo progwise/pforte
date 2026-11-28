@@ -47,7 +47,8 @@ export interface CodeOptions {
 
 /**
  * Creates a code for the user and returns it so it can be sent; only its signature is stored. A new
- * code replaces earlier ones for the same purpose. Limits how often codes can be requested, since
+ * code replaces earlier ones for the same purpose. `id` names this one code, for a caller that has to tell it
+ * from the one that replaces it (`checkCode`). Limits how often codes can be requested, since
  * every code costs a message and gives an attacker new guesses. Codes that were used successfully
  * do not count towards the limits.
  */
@@ -87,15 +88,18 @@ export const issueCode = async (
 
     const code = String(randomInt(0, 10 ** CODE_LENGTH)).padStart(CODE_LENGTH, '0')
     const expiresAt = new Date(now.getTime() + CODE_LIFETIME_MS)
-    await tx.insert(otpCodes).values({
-      userId,
-      channel,
-      purpose,
-      codeHash: sign(secrets[0]!, userId, purpose, code, boundTo),
-      expiresAt,
-      createdAt: now,
-    })
-    return { code, expiresAt }
+    const [issued] = await tx
+      .insert(otpCodes)
+      .values({
+        userId,
+        channel,
+        purpose,
+        codeHash: sign(secrets[0]!, userId, purpose, code, boundTo),
+        expiresAt,
+        createdAt: now,
+      })
+      .returning({ id: otpCodes.id })
+    return { id: issued!.id, code, expiresAt }
   })
 
 /**
@@ -138,10 +142,14 @@ export type CodeCheck =
  * comparing, so parallel guesses cannot get more tries than allowed. After five attempts the code is
  * dead: the sixth is refused even when it is right. A right code works once. A code that was issued with
  * `boundTo` is right only together with the same value.
+ *
+ * With `id`, only that one code is checked. Once another has taken its place it is over, as `expired` says, and
+ * the attempt is not counted against the code that replaced it: that one belongs to whoever asked for it, in
+ * another browser perhaps, and somebody typing the old code must not use up its attempts.
  */
 export const checkCode = async (
   db: DatabaseOrTransaction,
-  { userId, purpose, code, boundTo }: { userId: string; purpose: Purpose; code: string; boundTo?: string },
+  { userId, purpose, code, boundTo, id }: { userId: string; purpose: Purpose; code: string; boundTo?: string; id?: string },
   { secrets, now = new Date() }: CodeOptions,
 ): Promise<CodeCheck> => {
   const [current] = await db
@@ -151,7 +159,7 @@ export const checkCode = async (
     .orderBy(sql`${otpCodes.createdAt} desc`)
     .limit(1)
   if (!current) return { ok: false, reason: 'none' }
-  if (current.expiresAt <= now) return { ok: false, reason: 'expired' }
+  if (current.expiresAt <= now || (id !== undefined && current.id !== id)) return { ok: false, reason: 'expired' }
 
   const [attempt] = await db
     .update(otpCodes)
@@ -172,8 +180,8 @@ export const checkCode = async (
 }
 
 /**
- * The code that is currently valid for the user and purpose, if any: through which channel it went, until when,
- * and whether it can still be entered (`usable` is false once its attempts are used up).
+ * The code that is currently valid for the user and purpose, if any: which one it is, through which channel it
+ * went, until when, and whether it can still be entered (`usable` is false once its attempts are used up).
  */
 export const currentCode = async (
   db: DatabaseOrTransaction,
@@ -181,7 +189,7 @@ export const currentCode = async (
   now = new Date(),
 ) => {
   const [code] = await db
-    .select({ channel: otpCodes.channel, expiresAt: otpCodes.expiresAt, usable: sql<boolean>`${otpCodes.attempts} < ${MAX_ATTEMPTS}` })
+    .select({ id: otpCodes.id, channel: otpCodes.channel, expiresAt: otpCodes.expiresAt, usable: sql<boolean>`${otpCodes.attempts} < ${MAX_ATTEMPTS}` })
     .from(otpCodes)
     .where(and(eq(otpCodes.userId, userId), eq(otpCodes.purpose, purpose), isNull(otpCodes.consumedAt), gt(otpCodes.expiresAt, now)))
     .orderBy(sql`${otpCodes.createdAt} desc`)

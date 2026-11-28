@@ -27,6 +27,20 @@ export const findUserByEmail = async (db: DatabaseOrTransaction, email: string) 
   return user
 }
 
+/**
+ * The user with this address, with their row held until the transaction ends. For a change that is decided by
+ * what the row says: whatever else changes the person has finished before this read, or waits for this
+ * transaction. Without it the decision could be made on a row that is no longer true when it is written, such as
+ * a number the person made their own in between (`changePhone`).
+ *
+ * `no key update`, as `confirmPhone` takes it and for the reason given there: a new code refers to the row and
+ * must not wait for it.
+ */
+export const findUserByEmailForChange = async (tx: DatabaseOrTransaction, email: string) => {
+  const [user] = await tx.select().from(users).where(eq(users.email, email)).for('no key update')
+  return user
+}
+
 export interface ListUsersOptions {
   /** Matches e-mail, first name or last name, case-insensitively. */
   search?: string

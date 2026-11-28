@@ -233,6 +233,33 @@ describe.skipIf(!hasDatabase)('one-time codes', () => {
     await expect(issue(userId, new Date(start.getTime() + 1000))).rejects.toMatchObject({ reason: 'cooldown' })
   })
 
+  describe('a check that names the code it means', () => {
+    const later = new Date(start.getTime() + RESEND_COOLDOWN_MS)
+    const checkThat = (userId: string, id: string, code: string) => checkCode(database.db, { userId, purpose: 'login', code, id }, { secrets, now: later })
+
+    it('accepts that code, and the valid code says which one it is', async () => {
+      const userId = await newUser()
+      const { id, code } = await issue(userId)
+
+      expect(await currentCode(database.db, { userId, purpose: 'login' }, start)).toMatchObject({ id })
+      expect(await checkThat(userId, id, code)).toEqual({ ok: true, channel: 'email' })
+    })
+
+    it('says of a code that another has replaced that it is over, and counts nothing against the new one', async () => {
+      const userId = await newUser()
+      const first = await issue(userId)
+      const second = await issue(userId, later)
+
+      expect(await checkThat(userId, first.id, first.code)).toEqual({ ok: false, reason: 'expired' })
+      // Not with the new code either: the form that names the first code is the form of another browser.
+      expect(await checkThat(userId, first.id, second.code)).toEqual({ ok: false, reason: 'expired' })
+
+      const { rows } = await database.pool.query(`select attempts from otp_codes where id = $1`, [second.id])
+      expect(rows[0].attempts).toBe(0)
+      expect(await checkThat(userId, second.id, second.code)).toEqual({ ok: true, channel: 'email' })
+    })
+  })
+
   it('deletes codes that are long expired', async () => {
     const userId = await newUser()
     await issue(userId)

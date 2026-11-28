@@ -2,7 +2,7 @@ import type { Database } from '@progwise/pforte-db'
 import {
   createUser,
   deleteUser,
-  findUserByEmail,
+  findUserByEmailForChange,
   findUserById,
   getUserClaims,
   listUsers,
@@ -287,7 +287,9 @@ export const usersRoutes =
         const upsert = () =>
           db.transaction(async (tx) => {
             const context = requestContext(request)
-            const existing = await findUserByEmail(tx, address)
+            // Held from here on: whose the phone number is, is decided below by what this row says, and the person
+            // may be entering the code for a number of their own at this moment.
+            const existing = await findUserByEmailForChange(tx, address)
 
             let user: UserRow
             let profileChanges: Record<string, { from: unknown; to: unknown }>

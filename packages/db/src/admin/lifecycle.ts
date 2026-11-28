@@ -320,14 +320,16 @@ export const confirmPhone = (
  * import use, leaves it alone. An administrator can still correct it.
  *
  * The code was issued bound to the number it went to, so it is right for that number only: a code for one number
- * cannot make another the person's, whatever the request says. The row is held and the steps are ordered as in
+ * cannot make another the person's, whatever the request says. `codeId` names the code the person was sent:
+ * once another has taken its place, asked for in another browser perhaps, the one they have is over and what they
+ * type is not counted against the new one. The row is held and the steps are ordered as in
  * `confirmPhone`, for the reasons given there. A code that is out to confirm the number the person had confirms
  * nothing any more and is ended, as it is when an administrator changes the number.
  */
 export const changePhone = (
   db: Database,
   context: RequestContext,
-  { userId, phone, code }: { userId: string; phone: string; code: string },
+  { userId, phone, code, codeId }: { userId: string; phone: string; code: string; codeId?: string },
   options: CodeOptions,
 ): Promise<PhoneConfirmation | undefined> =>
   db.transaction(async (tx) => {
@@ -336,7 +338,7 @@ export const changePhone = (
     if (user.status !== 'active') throw new LifecycleError(`Cannot change the phone number of a user who is ${user.status}. It is possible for: active.`)
     const digits = code.replaceAll(' ', '')
     if (!/^\d{6}$/.test(digits)) return { ok: false, reason: 'malformed' }
-    const result = await checkCode(tx, { userId, purpose: 'phone_change', code: digits, boundTo: phone }, options)
+    const result = await checkCode(tx, { userId, purpose: 'phone_change', code: digits, boundTo: phone, id: codeId }, options)
     if (!result.ok) return result
     const now = options.now ?? new Date()
     const [changed] = await tx.update(users).set({ phone, phoneVerifiedAt: now, phoneSetByUserAt: now }).where(eq(users.id, userId)).returning()

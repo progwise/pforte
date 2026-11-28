@@ -16,10 +16,11 @@ export const PHONE_CHANGE = `${PHONE}/change`
 
 const COOKIE = 'pforte_account_phone'
 
-/** The number a code is on its way to, for whom, and until when the code can be entered. */
+/** The number a code is on its way to, which code that is, for whom, and until when it can be entered. */
 interface NewNumber {
   userId: string
   phone: string
+  codeId: string
   expiresAt: number
 }
 
@@ -40,6 +41,11 @@ interface NewNumber {
  * which lasts as long as the code does, and the code itself is bound to the number it was sent to
  * (`changePhone`): it makes that number the person's and no other, whatever the cookie says.
  *
+ * The cookie names the code as well. A person has one code for this at a time, and asking for one in a second
+ * browser ends the one the first browser waits for. The first browser then has nothing to enter any more: its
+ * page asks for the number again, and a code typed into a form that was still open is not counted against the
+ * code of the other browser.
+ *
  * Only where this pforte sends SMS: a number is for codes, and without SMS it could never be confirmed.
  */
 export const registerPhoneChangePages = (app: FastifyInstance, ctx: AccountContext) => {
@@ -50,13 +56,17 @@ export const registerPhoneChangePages = (app: FastifyInstance, ctx: AccountConte
   const selfContext = (request: FastifyRequest, user: AccountUser): RequestContext => ({ actor: { type: 'user', id: user.id }, ...where(request), self: true })
 
   const cookie = (value: string, maxAgeSeconds: number) => setCookieHeader(COOKIE, value, { path: PHONE_CHANGE, maxAgeSeconds, secure, sameSite: 'Lax' })
-  const remember = (reply: FastifyReply, user: AccountUser, phone: string, expiresAt: Date) =>
-    reply.header('Set-Cookie', cookie(sign(cookieKeys, { userId: user.id, phone, expiresAt: expiresAt.getTime() } satisfies NewNumber), Math.ceil(CODE_LIFETIME_MS / 1000)))
+  const remember = (reply: FastifyReply, user: AccountUser, phone: string, issued: { id: string; expiresAt: Date }) =>
+    reply.header(
+      'Set-Cookie',
+      cookie(sign(cookieKeys, { userId: user.id, phone, codeId: issued.id, expiresAt: issued.expiresAt.getTime() } satisfies NewNumber), Math.ceil(CODE_LIFETIME_MS / 1000)),
+    )
   const forget = (reply: FastifyReply) => reply.header('Set-Cookie', cookie('', 0))
-  /** The number this person asked for in this browser, while its code can still be entered. */
+  /** The number this person asked for in this browser and the code that went to it, while the code can still be entered. */
   const newNumberOf = (request: FastifyRequest, user: AccountUser) => {
     const asked = unsign<NewNumber>(cookieKeys, readCookie(request.headers.cookie, COOKIE))
-    return asked && asked.userId === user.id && typeof asked.phone === 'string' && asked.expiresAt > Date.now() ? asked.phone : undefined
+    const complete = asked && asked.userId === user.id && typeof asked.phone === 'string' && typeof asked.codeId === 'string' && asked.expiresAt > Date.now()
+    return complete ? { phone: asked.phone, codeId: asked.codeId } : undefined
   }
 
   app.get<{ Querystring: { other?: string } }>(PHONE_CHANGE, async (request, reply) => {
@@ -66,10 +76,12 @@ export const registerPhoneChangePages = (app: FastifyInstance, ctx: AccountConte
     if (!notifier.smsAvailable) return reply.redirect(ACCOUNT_PATH, 303)
     const { t } = viewFor(request, user)
 
-    // As on the page that confirms a number, the page says what is true: a field for the code only while there is
-    // one that can still be entered, and a number it went to.
+    // As on the page that confirms a number, the page says what is true: a field for the code only while the code
+    // that went to the number of this browser can still be entered. Not for a code another browser asked for
+    // since: that one went elsewhere, and the one sent here is over.
     const asked = request.query.other === '1' ? undefined : newNumberOf(request, user)
-    const waiting = asked !== undefined && (await currentCode(db, { userId: user.id, purpose: 'phone_change' }))?.usable === true
+    const current = asked && (await currentCode(db, { userId: user.id, purpose: 'phone_change' }))
+    const waiting = asked !== undefined && current?.id === asked.codeId && current.usable
     // The number is typed after the new sign-in, not before it: what was typed would be lost on the way.
     if (!waiting && !requireRecentSignIn(reply, session, PHONE_CHANGE)) return reply
 
@@ -77,14 +89,14 @@ export const registerPhoneChangePages = (app: FastifyInstance, ctx: AccountConte
 <div class="panel">
 ${
   waiting
-    ? `<p>${escapeHtml(t('account.phoneChange.sent', { to: asked }))}</p>
+    ? `<p>${escapeHtml(t('account.phoneChange.sent', { to: asked.phone }))}</p>
 <form method="post" action="${PHONE_CHANGE}/confirm">
 <label for="code">${escapeHtml(t('common.code'))}</label>
 <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]*" maxlength="7" required autofocus>
 <button type="submit">${escapeHtml(t('account.phoneChange.confirm'))}</button>
 </form>
 <div class="actions">
-<form method="post" action="${PHONE_CHANGE}/send"><input type="hidden" name="phone" value="${escapeHtml(asked)}"><button type="submit" class="secondary">${escapeHtml(t('common.sendNewCode'))}</button></form>
+<form method="post" action="${PHONE_CHANGE}/send"><input type="hidden" name="phone" value="${escapeHtml(asked.phone)}"><button type="submit" class="secondary">${escapeHtml(t('common.sendNewCode'))}</button></form>
 <a class="button secondary" href="${PHONE_CHANGE}?other=1">${escapeHtml(t('account.phoneChange.other'))}</a>
 </div>`
     : `<p>${escapeHtml(t('account.phoneChange.help'))}</p>
@@ -120,10 +132,10 @@ ${
     }
     try {
       // Bound to the number it goes to: it makes that number the person's and no other.
-      const { code, expiresAt } = await issueCode(db, { userId: user.id, channel: 'sms', purpose: 'phone_change', boundTo: phone }, { secrets: codeSecrets })
-      await notifier.sendPhoneCode({ ...user, phone }, { code, expiresAt })
+      const issued = await issueCode(db, { userId: user.id, channel: 'sms', purpose: 'phone_change', boundTo: phone }, { secrets: codeSecrets })
+      await notifier.sendPhoneCode({ ...user, phone }, { code: issued.code, expiresAt: issued.expiresAt })
       await audit.codeSent(where(request), { userId: user.id, purpose: 'phone_change', channel: 'sms' })
-      remember(reply, user, phone, expiresAt)
+      remember(reply, user, phone, issued)
     } catch (error) {
       // A code for this number or another was sent a moment ago, and the page still asks for that one.
       if (error instanceof CodeLimitError) return redirectWith(reply, PHONE_CHANGE, { kind: 'error', key: 'phone.wait', values: { seconds: error.retryAfterSeconds } })
@@ -154,11 +166,12 @@ ${
     }
     // The cookie lasts as long as the code: without it there is no code that could still be entered, and nothing
     // is checked.
-    const phone = newNumberOf(request, user)
-    if (!phone) return redirectWith(reply, PHONE_CHANGE, { kind: 'error', key: 'code.badOrExpired' })
+    const asked = newNumberOf(request, user)
+    if (!asked) return redirectWith(reply, PHONE_CHANGE, { kind: 'error', key: 'code.badOrExpired' })
+    const { phone, codeId } = asked
 
     const code = typeof request.body?.code === 'string' ? request.body.code : ''
-    const result = await changePhone(db, selfContext(request, user), { userId: user.id, phone, code }, { secrets: codeSecrets }).catch((error: unknown) => {
+    const result = await changePhone(db, selfContext(request, user), { userId: user.id, phone, code, codeId }, { secrets: codeSecrets }).catch((error: unknown) => {
       // The person was locked meanwhile.
       if (error instanceof LifecycleError) return 'nothing' as const
       throw error
