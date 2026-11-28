@@ -34,6 +34,10 @@ export const userSchema = z.object({
   lastName: z.string(),
   phone: z.string().nullable(),
   phoneVerifiedAt: z.string().nullable(),
+  phoneSetByUserAt: z
+    .string()
+    .nullable()
+    .describe('When the person chose the phone number themselves, on the account pages. From then on `PUT /users/by-email/{email}` leaves the number alone.'),
   language: z.string(),
   status: z.enum(USER_STATUSES),
   isAdmin: z.boolean(),
@@ -52,6 +56,7 @@ export const toUserDto = (user: UserRow): z.infer<typeof userSchema> => ({
   lastName: user.lastName,
   phone: user.phone,
   phoneVerifiedAt: user.phoneVerifiedAt?.toISOString() ?? null,
+  phoneSetByUserAt: user.phoneSetByUserAt?.toISOString() ?? null,
   language: user.language,
   status: user.status,
   isAdmin: user.isAdmin,
@@ -183,7 +188,9 @@ export const usersRoutes =
         schema: {
           tags: ['Users'],
           summary: 'Change a user',
-          description: 'Only the fields given are changed. Nothing is written when nothing differs.',
+          description:
+            'Only the fields given are changed. Nothing is written when nothing differs. A new `phone` is stored as not confirmed, also ' +
+            'for a person who chose their number themselves (`phoneSetByUserAt`): this is how an administrator corrects one.',
           params: z.object({ id: z.uuid() }),
           body: z
             .object({
@@ -245,7 +252,8 @@ export const usersRoutes =
           summary: 'Create or update a user by e-mail',
           description:
             'Idempotent, so an hourly import can call it blindly. Updates names, phone and language; never the ' +
-            'password, status or administrator rights. With `claims`, replaces the values of exactly the claim types ' +
+            'password, status or administrator rights. The `phone` of a person who chose their number themselves on the ' +
+            'account pages (`phoneSetByUserAt`) is left as it is, whatever is given here: the number is theirs. With `claims`, replaces the values of exactly the claim types ' +
             'given (see PUT /users/{id}/claims). Writes nothing and says `unchanged` when nothing differs. ' +
             'Everything happens in one transaction: if a claim is invalid, the user is not created or changed either.\n\n' +
             'With `dryRun=true` the same checks and the same diff run, then everything is rolled back: nothing is ' +
@@ -284,7 +292,9 @@ export const usersRoutes =
             let user: UserRow
             let profileChanges: Record<string, { from: unknown; to: unknown }>
             if (existing) {
-              const result = await updateUser(tx, context, existing, profile)
+              // The number a person chose themselves is theirs. The source may still hold the one they had, and
+              // would put it back at every run.
+              const result = await updateUser(tx, context, existing, existing.phoneSetByUserAt ? rest : profile)
               user = result.user
               profileChanges = result.changes
             } else {

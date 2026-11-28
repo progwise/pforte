@@ -34,10 +34,15 @@ const PHONE = /^\+[1-9]\d{6,14}$/
 const LANGUAGE = /^[a-z]{2,3}$/
 const MAX_LENGTH = 200
 
-/** "+49 151 1234567", "0049-151-1234567" and "+49 (151) 1234567" all become +491511234567. */
-const normalizePhone = (value: string) => {
+/**
+ * A phone number as people write it, in the form it is stored in: "+49 151 1234567", "0049-151-1234567" and
+ * "+49 (151) 1234567" all become +491511234567. Undefined for what is no number in international format, such as
+ * one that begins with the 0 of a national number: which country it belongs to is not ours to guess.
+ */
+export const parsePhone = (value: string) => {
   const stripped = value.replace(/[\s\-./()]/g, '')
-  return stripped.startsWith('00') ? `+${stripped.slice(2)}` : stripped
+  const phone = stripped.startsWith('00') ? `+${stripped.slice(2)}` : stripped
+  return PHONE.test(phone) ? phone : undefined
 }
 
 const matches = (pattern: string | null, value: string) => {
@@ -96,8 +101,8 @@ export const validateRows = (
     let phone: string | null | undefined
     if (columns.has.phone) {
       const raw = cell(phoneIndex)
-      phone = raw === '' ? null : normalizePhone(raw)
-      if (phone !== null && !PHONE.test(phone)) {
+      phone = raw === '' ? null : parsePhone(raw)
+      if (phone === undefined) {
         reasons.push(`The phone number "${raw}" must be in international format, e.g. +4915112345678.`)
       }
     }

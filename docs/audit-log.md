@@ -13,7 +13,7 @@ outlives the user it is about.
 | Action | When | Details |
 | --- | --- | --- |
 | `login.password_failed` | A password was not accepted. | `reason`: `wrong_password`, `unknown_user` or `not_allowed` (the account is locked, deactivated or has no password yet). For an address that no user has: `emailHash` instead of a target. |
-| `login.code_sent` | A code went out. | `purpose` (`login`, `password_reset`, `activation`), `channel` (`email` or `sms`), `fellBackToEmail` when an SMS could not be sent. |
+| `login.code_sent` | A code went out. | `purpose` (`login`, `password_reset`, `activation`, `phone_change`), `channel` (`email` or `sms`), `fellBackToEmail` when an SMS could not be sent. |
 | `login.code_failed` | A code was not accepted. | `purpose`, `reason` (`wrong`, `exhausted`, `expired`, `none`; `sessions_ended` at sign-in when the person's sessions were ended after the password was accepted, so that the sign-in has to start again; and for a password reset also `unknown_user`, `not_allowed`, `malformed`). |
 | `login.passkey_failed` | A sign-in with a [passkey](passkeys.md) was refused. | `reason`: `malformed` (no answer of a device), `expired` (the question was not asked in this sign-in, was answered before or has run out), `unknown_passkey` (pforte does not know it, as after it was removed), `not_allowed` (its person is locked or deactivated), `wrong_person` (the device named another person than the passkey belongs to), `verification_failed` (wrong origin or host, the device did not check the person, the signature or its counter did not hold, or the passkey was removed or used by another sign-in while this one was being checked). The target is the person the passkey belongs to, where pforte knows the passkey. |
 | `login.succeeded` | A sign-in was completed. | `method` (`code`, `passkey` or `remembered_device`), `channel`, and `acr`: `urn:pforte:acr:mfa` after a code or with a passkey, `urn:pforte:acr:pwd` on a remembered device. `deviceRemembered: true` when the person ticked "Remember this device" with the code and the browser was not remembered yet. |
@@ -60,6 +60,12 @@ account pages, at the step right after an activation and at the step after a sig
 `login.code_failed` with `purpose: activation` in all three places; the code sent from the account pages or at a
 sign-in is a `login.code_sent` with that purpose and `channel: sms`. At a sign-in the `login.succeeded` comes first:
 the sign-in is complete when the person is asked.
+
+And they can change their phone number on the account pages: `user.phone.change`, with `self: true` and
+`changes.phone` (`from` and `to`, the numbers in full as in a `user.update`, so an administrator can put back the
+number a person had). It is written when the code sent to the new number was right; the number is confirmed by the
+same step, and no `user.phone.confirm` follows. The code is a `login.code_sent` with `purpose: phone_change`, a wrong
+one a `login.code_failed` with that purpose.
 
 An application can show that step in its own pages ([SMS](sms.md#confirming-a-number-in-your-own-application)). Then the
 actor is its client: `user.phone.confirm.request` when it had the code sent (with `expiresAt`, never the code), and

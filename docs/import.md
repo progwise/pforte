@@ -25,7 +25,7 @@ saved by a German Excel works. Save it as "CSV UTF-8"; for an older file use `--
 | --- | --- | --- |
 | `email` | yes | Identifies the user. Must be unique in the file. |
 | `first_name`, `last_name` | yes | |
-| `phone` | no | Spaces, dashes and brackets are removed; `0049…` becomes `+49…`. A blank cell clears the phone, a missing column leaves it alone. |
+| `phone` | no | Spaces, dashes and brackets are removed; `0049…` becomes `+49…`. A blank cell clears the phone, a missing column leaves it alone. The phone of a person who [changed their number themselves](sms.md#whose-number-it-is) is left alone whatever the cell says. |
 | `language` | no | Two or three letters, e.g. `de`. |
 | any claim type | no | The key of a claim type, e.g. `partner_no`. Several values in one cell are separated by `;` (`--value-separator`). A blank cell removes that claim type from the user. |
 

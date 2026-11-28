@@ -337,6 +337,13 @@
                         "null"
                       ]
                     },
+                    "phoneSetByUserAt": {
+                      "description": "When the person chose the phone number themselves, on the account pages. From then on `PUT /users/by-email/{email}` leaves the number alone.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "language": {
                       "type": "string"
                     },
@@ -372,6 +379,7 @@
                     "lastName",
                     "phone",
                     "phoneVerifiedAt",
+                    "phoneSetByUserAt",
                     "language",
                     "status",
                     "isAdmin",
@@ -737,6 +745,13 @@
                               "null"
                             ]
                           },
+                          "phoneSetByUserAt": {
+                            "description": "When the person chose the phone number themselves, on the account pages. From then on `PUT /users/by-email/{email}` leaves the number alone.",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "language": {
                             "type": "string"
                           },
@@ -772,6 +787,7 @@
                           "lastName",
                           "phone",
                           "phoneVerifiedAt",
+                          "phoneSetByUserAt",
                           "language",
                           "status",
                           "isAdmin",
@@ -1100,6 +1116,13 @@
                         "null"
                       ]
                     },
+                    "phoneSetByUserAt": {
+                      "description": "When the person chose the phone number themselves, on the account pages. From then on `PUT /users/by-email/{email}` leaves the number alone.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "language": {
                       "type": "string"
                     },
@@ -1135,6 +1158,7 @@
                     "lastName",
                     "phone",
                     "phoneVerifiedAt",
+                    "phoneSetByUserAt",
                     "language",
                     "status",
                     "isAdmin",
@@ -1399,7 +1423,7 @@
         "tags": [
           "Users"
         ],
-        "description": "Only the fields given are changed. Nothing is written when nothing differs.",
+        "description": "Only the fields given are changed. Nothing is written when nothing differs. A new `phone` is stored as not confirmed, also for a person who chose their number themselves (`phoneSetByUserAt`): this is how an administrator corrects one.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1495,6 +1519,13 @@
                         "null"
                       ]
                     },
+                    "phoneSetByUserAt": {
+                      "description": "When the person chose the phone number themselves, on the account pages. From then on `PUT /users/by-email/{email}` leaves the number alone.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "language": {
                       "type": "string"
                     },
@@ -1530,6 +1561,7 @@
                     "lastName",
                     "phone",
                     "phoneVerifiedAt",
+                    "phoneSetByUserAt",
                     "language",
                     "status",
                     "isAdmin",
@@ -2069,7 +2101,7 @@
         "tags": [
           "Users"
         ],
-        "description": "Idempotent, so an hourly import can call it blindly. Updates names, phone and language; never the password, status or administrator rights. With `claims`, replaces the values of exactly the claim types given (see PUT /users/{id}/claims). Writes nothing and says `unchanged` when nothing differs. Everything happens in one transaction: if a claim is invalid, the user is not created or changed either.\n\nWith `dryRun=true` the same checks and the same diff run, then everything is rolled back: nothing is written and no audit event is recorded. The answer says what would happen (`created`, `updated`, `unchanged`) and what would change, so a dry run cannot disagree with the real call.",
+        "description": "Idempotent, so an hourly import can call it blindly. Updates names, phone and language; never the password, status or administrator rights. The `phone` of a person who chose their number themselves on the account pages (`phoneSetByUserAt`) is left as it is, whatever is given here: the number is theirs. With `claims`, replaces the values of exactly the claim types given (see PUT /users/{id}/claims). Writes nothing and says `unchanged` when nothing differs. Everything happens in one transaction: if a claim is invalid, the user is not created or changed either.\n\nWith `dryRun=true` the same checks and the same diff run, then everything is rolled back: nothing is written and no audit event is recorded. The answer says what would happen (`created`, `updated`, `unchanged`) and what would change, so a dry run cannot disagree with the real call.",
         "requestBody": {
           "required": true,
           "content": {
@@ -2205,6 +2237,13 @@
                                 "null"
                               ]
                             },
+                            "phoneSetByUserAt": {
+                              "description": "When the person chose the phone number themselves, on the account pages. From then on `PUT /users/by-email/{email}` leaves the number alone.",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
                             "language": {
                               "type": "string"
                             },
@@ -2240,6 +2279,7 @@
                             "lastName",
                             "phone",
                             "phoneVerifiedAt",
+                            "phoneSetByUserAt",
                             "language",
                             "status",
                             "isAdmin",
@@ -2405,6 +2445,13 @@
                             "null"
                           ]
                         },
+                        "phoneSetByUserAt": {
+                          "description": "When the person chose the phone number themselves, on the account pages. From then on `PUT /users/by-email/{email}` leaves the number alone.",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
                         "language": {
                           "type": "string"
                         },
@@ -2440,6 +2487,7 @@
                         "lastName",
                         "phone",
                         "phoneVerifiedAt",
+                        "phoneSetByUserAt",
                         "language",
                         "status",
                         "isAdmin",
@@ -6043,6 +6091,13 @@
                         "null"
                       ]
                     },
+                    "phoneSetByUserAt": {
+                      "description": "When the person chose the phone number themselves, on the account pages. From then on `PUT /users/by-email/{email}` leaves the number alone.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "language": {
                       "type": "string"
                     },
@@ -6078,6 +6133,7 @@
                     "lastName",
                     "phone",
                     "phoneVerifiedAt",
+                    "phoneSetByUserAt",
                     "language",
                     "status",
                     "isAdmin",
@@ -6493,6 +6549,13 @@
                         "null"
                       ]
                     },
+                    "phoneSetByUserAt": {
+                      "description": "When the person chose the phone number themselves, on the account pages. From then on `PUT /users/by-email/{email}` leaves the number alone.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "language": {
                       "type": "string"
                     },
@@ -6528,6 +6591,7 @@
                     "lastName",
                     "phone",
                     "phoneVerifiedAt",
+                    "phoneSetByUserAt",
                     "language",
                     "status",
                     "isAdmin",
@@ -6943,6 +7007,13 @@
                         "null"
                       ]
                     },
+                    "phoneSetByUserAt": {
+                      "description": "When the person chose the phone number themselves, on the account pages. From then on `PUT /users/by-email/{email}` leaves the number alone.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "language": {
                       "type": "string"
                     },
@@ -6978,6 +7049,7 @@
                     "lastName",
                     "phone",
                     "phoneVerifiedAt",
+                    "phoneSetByUserAt",
                     "language",
                     "status",
                     "isAdmin",
@@ -7420,6 +7492,13 @@
                             "null"
                           ]
                         },
+                        "phoneSetByUserAt": {
+                          "description": "When the person chose the phone number themselves, on the account pages. From then on `PUT /users/by-email/{email}` leaves the number alone.",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
                         "language": {
                           "type": "string"
                         },
@@ -7455,6 +7534,7 @@
                         "lastName",
                         "phone",
                         "phoneVerifiedAt",
+                        "phoneSetByUserAt",
                         "language",
                         "status",
                         "isAdmin",
@@ -7920,6 +8000,13 @@
                         "null"
                       ]
                     },
+                    "phoneSetByUserAt": {
+                      "description": "When the person chose the phone number themselves, on the account pages. From then on `PUT /users/by-email/{email}` leaves the number alone.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "language": {
                       "type": "string"
                     },
@@ -7955,6 +8042,7 @@
                     "lastName",
                     "phone",
                     "phoneVerifiedAt",
+                    "phoneSetByUserAt",
                     "language",
                     "status",
                     "isAdmin",
@@ -8783,6 +8871,13 @@
                         "null"
                       ]
                     },
+                    "phoneSetByUserAt": {
+                      "description": "When the person chose the phone number themselves, on the account pages. From then on `PUT /users/by-email/{email}` leaves the number alone.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "language": {
                       "type": "string"
                     },
@@ -8818,6 +8913,7 @@
                     "lastName",
                     "phone",
                     "phoneVerifiedAt",
+                    "phoneSetByUserAt",
                     "language",
                     "status",
                     "isAdmin",

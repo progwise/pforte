@@ -37,6 +37,13 @@ export interface Notifier {
    * is the browser it was created with, in words. Always an e-mail, as the notice above.
    */
   sendPasskeyAdded(user: NotifiableUser, notice: { device: string; url?: string }): Promise<void>
+  /**
+   * Tells the user that they have a new mobile number, which gets their codes from now on, with the account pages
+   * where they change it back if it was not them (`url`). `phone` is the new number as the notice names it: partly
+   * hidden. Always an e-mail, as the notices above: it reaches the mailbox, which whoever changed the number may
+   * not hold.
+   */
+  sendPhoneChanged(user: NotifiableUser, notice: { phone: string; url: string }): Promise<void>
 }
 
 /** No way to reach the user is configured. */
@@ -89,6 +96,10 @@ export const createLogNotifier = ({
     async sendPasskeyAdded(user, { device, url }) {
       guard()
       log(`[development notifier] Notice for ${user.email}: a passkey was added (${device}). If it was not them: ${url ?? 'their administration removes it'}`)
+    },
+    async sendPhoneChanged(user, { phone, url }) {
+      guard()
+      log(`[development notifier] Notice for ${user.email}: the mobile number was changed to ${phone}. If it was not them: ${url}`)
     },
   }
 }
@@ -148,6 +159,9 @@ export const createMailNotifier = ({ mailer, sms, organisation, i18n }: MailNoti
         subject: text(user, 'mail.passkeyAdded.subject'),
         text: url ? text(user, 'mail.passkeyAdded.text', { device, url }) : text(user, 'mail.passkeyAdded.textNoLink', { device }),
       })
+    },
+    async sendPhoneChanged(user, { phone, url }) {
+      await mailer.send({ to: user.email, subject: text(user, 'mail.phoneChanged.subject'), text: text(user, 'mail.phoneChanged.text', { phone, url }) })
     },
   }
 }

@@ -3,7 +3,7 @@ import { id, timestamps, timestamptz } from './columns.js'
 import { users } from './users.js'
 
 export const otpChannel = pgEnum('otp_channel', ['sms', 'email'])
-export const otpPurpose = pgEnum('otp_purpose', ['login', 'password_reset', 'activation'])
+export const otpPurpose = pgEnum('otp_purpose', ['login', 'password_reset', 'activation', 'phone_change'])
 
 /** Pending one-time codes. */
 export const otpCodes = pgTable(

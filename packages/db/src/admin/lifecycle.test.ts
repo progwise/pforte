@@ -6,6 +6,7 @@ import { createTestDatabase, hasDatabase } from '../test/test-database.js'
 import { currentCode, issueCode } from '../codes.js'
 import {
   activateUser,
+  changePhone,
   confirmPhone,
   deactivateUser,
   endSessions,
@@ -376,6 +377,116 @@ describe.skipIf(!hasDatabase)('user lifecycle', () => {
       await database.pool.query(`update users set phone = $2, status = 'deactivated' where id = $1`, [id, A])
       await expect(confirm(id, code)).rejects.toThrow(/user who is deactivated/)
       expect((await database.pool.query(`select attempts from otp_codes where user_id = $1`, [id])).rows[0].attempts).toBe(0)
+    })
+  })
+
+  describe('a person changes their phone number', () => {
+    const secrets = ['code-secret-code-secret-code-secret-code']
+    const A = '+4915112345678'
+    const B = '+4915187654321'
+    const self = (userId: string) => ({ actor: { type: 'user' as const, id: userId }, ip: '203.0.113.7', userAgent: 'vitest', self: true })
+    /** An active person with the confirmed number A, who asked for B: the code that was sent to B. */
+    const asked = async ({ phone = A as string | null, wanted = B } = {}) => {
+      const user = await userIn('active')
+      await database.pool.query(`update users set phone = $1, phone_verified_at = case when $1::text is null then null else now() - interval '1 day' end where id = $2`, [phone, user.id])
+      const { code } = await issueCode(database.db, { userId: user.id, channel: 'sms', purpose: 'phone_change', boundTo: wanted }, { secrets })
+      return { id: user.id, code }
+    }
+    const change = (userId: string, phone: string, code: string) => changePhone(database.db, self(userId), { userId, phone, code }, { secrets })
+    const stored = async (userId: string) => (await findUserById(database.db, userId))!
+
+    it('stores the number the code went to, confirmed and as the person’s own, and records what changed', async () => {
+      const { id, code } = await asked()
+
+      const changed = await change(id, B, `${code.slice(0, 3)} ${code.slice(3)}`)
+
+      expect(changed).toMatchObject({ ok: true, user: { id, phone: B, phoneVerifiedAt: expect.any(Date), phoneSetByUserAt: expect.any(Date) } })
+      const after = await stored(id)
+      expect(after).toMatchObject({ phone: B, phoneVerifiedAt: changed?.ok ? changed.user.phoneVerifiedAt : undefined })
+      expect(after.phoneSetByUserAt).toEqual(after.phoneVerifiedAt)
+      expect(await event('user.phone.change', id)).toMatchObject({ actor_type: 'user', actor_id: id, details: { self: true, changes: { phone: { from: A, to: B } } } })
+      // The code worked once.
+      expect(await change(id, B, code)).toEqual({ ok: false, reason: 'none' })
+    })
+
+    it('gives a person without a number their first one', async () => {
+      const { id, code } = await asked({ phone: null })
+
+      expect(await change(id, B, code)).toMatchObject({ ok: true, user: { phone: B } })
+      expect(await event('user.phone.change', id)).toMatchObject({ details: { changes: { phone: { from: null, to: B } } } })
+    })
+
+    it('makes no other number the person’s than the one the code was sent to', async () => {
+      const { id, code } = await asked()
+
+      expect(await change(id, '+4915100000001', code)).toEqual({ ok: false, reason: 'wrong' })
+      expect(await change(id, A, code)).toEqual({ ok: false, reason: 'wrong' })
+
+      expect(await stored(id)).toMatchObject({ phone: A, phoneSetByUserAt: null })
+      expect(await event('user.phone.change', id)).toBeUndefined()
+      // Each of the two was an attempt; the right number with the right code still counts.
+      expect(await change(id, B, code)).toMatchObject({ ok: true })
+    })
+
+    it('does not take the code that confirms a number for one that changes it, nor the other way round', async () => {
+      const user = await userIn('active')
+      await database.pool.query(`update users set phone = $1, phone_verified_at = null where id = $2`, [A, user.id])
+      const confirming = await issueCode(database.db, { userId: user.id, channel: 'sms', purpose: 'activation', boundTo: A }, { secrets })
+      const changing = await issueCode(database.db, { userId: user.id, channel: 'sms', purpose: 'phone_change', boundTo: B }, { secrets })
+
+      if (confirming.code !== changing.code) {
+        expect(await change(user.id, A, confirming.code)).toEqual({ ok: false, reason: 'wrong' })
+        expect(await confirmPhone(database.db, self(user.id), { userId: user.id, code: changing.code }, { secrets })).toEqual({ ok: false, reason: 'wrong' })
+      }
+      expect(await stored(user.id)).toMatchObject({ phone: A, phoneVerifiedAt: null, phoneSetByUserAt: null })
+    })
+
+    it('does not count what is no code at all as an attempt, and knows nobody under an unknown ID', async () => {
+      const { id, code } = await asked()
+
+      for (const typed of ['', 'abc', '12345', '1234567']) expect(await change(id, B, typed)).toEqual({ ok: false, reason: 'malformed' })
+
+      expect((await database.pool.query(`select attempts from otp_codes where user_id = $1`, [id])).rows[0].attempts).toBe(0)
+      expect(await change('0190f6a8-0000-7000-8000-000000000000', B, code)).toBeUndefined()
+    })
+
+    it.each(['locked', 'deactivated'] as const)('changes nothing for a person who is %s, and does not look at the code', async (status) => {
+      const { id, code } = await asked()
+      await database.pool.query(`update users set status = $2 where id = $1`, [id, status])
+
+      await expect(change(id, B, code)).rejects.toBeInstanceOf(LifecycleError)
+
+      expect((await database.pool.query(`select attempts from otp_codes where user_id = $1`, [id])).rows[0].attempts).toBe(0)
+      expect((await stored(id)).phone).toBe(A)
+    })
+
+    it('ends a code that is out to confirm the number the person had', async () => {
+      const user = await userIn('active')
+      await database.pool.query(`update users set phone = $1, phone_verified_at = null where id = $2`, [A, user.id])
+      await issueCode(database.db, { userId: user.id, channel: 'sms', purpose: 'activation', boundTo: A }, { secrets })
+      const { code } = await issueCode(database.db, { userId: user.id, channel: 'sms', purpose: 'phone_change', boundTo: B }, { secrets })
+
+      expect(await change(user.id, B, code)).toMatchObject({ ok: true })
+
+      expect(await currentCode(database.db, { userId: user.id, purpose: 'activation' })).toBeUndefined()
+    })
+
+    it('waits for a change by the back office that is under way, and then wins: the number the person proved is stored', async () => {
+      const { id, code } = await asked()
+      const user = await stored(id)
+      let answered = false
+
+      const { pending } = await database.db.transaction(async (tx) => {
+        await updateUser(tx, context, user, { phone: '+4915100000001' })
+        const pending = change(id, B, code).finally(() => (answered = true))
+        await new Promise((resolve) => setTimeout(resolve, 200))
+        expect(answered, 'the change by the person must wait for the one by the back office').toBe(false)
+        return { pending }
+      })
+
+      expect(await pending).toMatchObject({ ok: true })
+      expect(await stored(id)).toMatchObject({ phone: B, phoneVerifiedAt: expect.any(Date), phoneSetByUserAt: expect.any(Date) })
+      expect(await event('user.phone.change', id)).toMatchObject({ details: { changes: { phone: { from: '+4915100000001', to: B } } } })
     })
   })
 

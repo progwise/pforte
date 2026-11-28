@@ -18,6 +18,7 @@ interface ApiUser {
   lastName: string
   phone: string | null
   phoneVerifiedAt: string | null
+  phoneSetByUserAt: string | null
   language: string
   status: (typeof STATUSES)[number]
   isAdmin: boolean
@@ -254,7 +255,8 @@ ${checkbox({ id: 'isAdmin', label: t('manage.field.isAdmin'), checked: values.is
 <dt>${escapeHtml(t('manage.fact.created'))}</dt><dd>${escapeHtml(formatTime(user.createdAt, language))}</dd>
 <dt>${escapeHtml(t('manage.fact.email'))}</dt><dd>${escapeHtml(t(user.status === 'created' ? 'manage.no' : 'manage.yes'))}</dd>
 <dt>${escapeHtml(t('manage.fact.phone'))}</dt><dd>${user.phone ? escapeHtml(t(user.phoneVerifiedAt ? 'manage.yes' : 'manage.no')) : escapeHtml(t('manage.none'))}</dd>
-</dl>`
+${user.phoneSetByUserAt ? `<dt>${escapeHtml(t('manage.fact.phoneOwn'))}</dt><dd>${escapeHtml(formatTime(user.phoneSetByUserAt, language))}<br><span class="muted">${escapeHtml(t('manage.fact.phoneOwnNote'))}</span></dd>
+` : ''}</dl>`
 
     const claimFields = claimTypes.length
       ? claimTypes

@@ -73,7 +73,7 @@ Login
 - Activation link for new users, who set their first password on activation
 - Login pages in several languages, with the organisation's name, colours and logo from configuration
 - Account pages where a person sees their sessions, remembered devices and recent sign-ins, signs out everywhere,
-  adds and removes passkeys, confirms their phone number and changes the password
+  adds and removes passkeys, confirms and changes their phone number and changes the password
 
 Administration
 

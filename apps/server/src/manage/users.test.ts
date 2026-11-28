@@ -169,6 +169,20 @@ describe.skipIf(!hasDatabase)('the administration: users', () => {
       expect(page.body).toContain('name="claim_team_code" type="text" value="MUC"')
       expect(page.body).toContain('Format: ^[A-Z]{3}$')
       expect(page.body).toContain('href="/manage/users"')
+      // Nobody chose that number but the back office.
+      expect(page.body).not.toContain('Phone chosen by the person')
+    })
+
+    it('says when the person chose their number themselves, and that a sync leaves it alone', async () => {
+      const anna = await userId('anna.schmidt@example.com')
+      await h.database.pool.query(`update users set phone_verified_at = now(), phone_set_by_user_at = '2026-11-20T09:30:00Z' where id = $1`, [anna])
+      try {
+        const page = await get(`/manage/users/${anna}`)
+
+        expect(page.body).toMatch(/<dt>Phone chosen by the person<\/dt><dd>[^<]*20[^<]*2026[^<]*<br><span class="muted">On their account pages\. A sync or an import leaves this number alone; you can still change it here\.<\/span><\/dd>/)
+      } finally {
+        await h.database.pool.query(`update users set phone_set_by_user_at = null where id = $1`, [anna])
+      }
     })
 
     it('answers not found for somebody who does not exist, or an address that is not an id', async () => {

@@ -2,14 +2,14 @@
 
 Every person who has an account can open `https://id.example.com/account` (your pforte address followed by `/account`),
 see how they are signed in and protect themselves: end their sessions, forget devices, add and remove passkeys, change
-the password. The pages
+the password and their mobile number. The pages
 are for the people who sign in, not for those who run pforte: that is [the administration](administration.md).
 
 ## What a person can do
 
 | Page | What it shows | What can be done |
 | --- | --- | --- |
-| **Overview** | Name, e-mail address, mobile phone number (all but its first and last digits hidden) and language. | Confirm the phone number, if it is not confirmed yet and this pforte [sends SMS](sms.md): see below. Nothing else. |
+| **Overview** | Name, e-mail address, mobile phone number (all but its first and last digits hidden) and language. | Where this pforte [sends SMS](sms.md): confirm the phone number, if it is not confirmed yet, and change it or add one. See below. Nothing else. |
 | **Signed in** | The browsers in which the person is signed in, with the applications of each and how they signed in there (with a code, with a passkey, or with the password only on a remembered device), and the applications that stay signed in without a browser because they hold a refresh token, such as an app on a phone. | *Sign out everywhere*: ends every session and application, this page included, and forgets the remembered devices. Applications with a back-channel logout address are told ([signing out](integrating-a-client.md#signing-out)). |
 | **Devices** | The devices on which no code is asked for, with the browser, when it was last used and until when it is remembered. | Forget one, or all. The next sign-in there asks for a code. |
 | **Sign-ins** | The last ten times somebody signed in to the account or tried to: a sign-in with a code, with a passkey or on a remembered device, a wrong password, a wrong code, a passkey that was refused, a hold after too many attempts, each with the time, the network address and the browser. Only what happened at the sign-in: a wrong code at the password reset or an activation is in the audit log, not here. | Nothing. A person who sees a line that was not them changes their password. |
@@ -22,18 +22,38 @@ the cookie of a remembered device is not sent to these pages. A browser is named
 name is shown by the line it sends about itself. A passkey is listed with the browser it was created with; a synced one
 also works on the person's other devices.
 
-**The overview is read-only.** Your back office or the system you [sync users](syncing-users.md) from owns the name, the
-e-mail address and the phone number and would overwrite whatever a person typed here, so the page says that changes go
-through the organisation. The links of your [branding](branding-and-languages.md), such as imprint and privacy policy,
-are below the page as on every other one.
+**Name, e-mail address and language are read-only.** Your back office or the system you [sync users](syncing-users.md)
+from owns them and would overwrite whatever a person typed here, so the page says that changes go through the
+organisation. The links of your [branding](branding-and-languages.md), such as imprint and privacy policy, are below the
+page as on every other one.
 
-**The one thing a person does there is confirm their phone number.** Codes go by SMS only to a number the person has
+**A person confirms their phone number there.** Codes go by SMS only to a number the person has
 confirmed, which normally happens right after they chose their first password. Somebody who skipped that step, had no
 number then, or whose number the back office has changed since, sees "Not confirmed, so your sign-in codes come by
 e-mail" next to the number, with the button *Confirm with a code by SMS*. pforte sends a code to the stored number, the
 person enters it, and from the next sign-in on the codes come by SMS. The number itself is not changed. The button is
 there only when this pforte sends SMS at all. The same question is asked [at a sign-in](sms.md#phone-numbers), so a
 person need not find these pages for it.
+
+**And changes it.** The mobile number is the one detail that is the person's own: the phone is in their hand, and only
+they know when they got a new one. Next to the number is the link *Change number* (*Add a number* for somebody who has
+none). The person types the new number with its country code, as they would write it (`+49 151 87654321`,
+`0049 151 …`); a number without a country code is refused, because pforte does not guess the country. pforte sends a
+code by SMS to the new number, the person enters it, and the number is theirs: stored, confirmed at once, and where
+their codes go from the next sign-in on.
+
+- **Nothing changes before the code is entered.** The number they had stays stored and gets their codes. A mistyped
+  number costs one message and nothing else, and a code that is never entered runs out after ten minutes.
+- **The code is worth something for the number it was sent to only.** The number that waits for its code is kept in a
+  signed cookie of that browser and not with the person, so the code is entered in the browser that asked for it.
+- **The person is told by e-mail**, with the new number partly hidden and the address of these pages: see
+  [a recent sign-in](#a-change-needs-a-recent-sign-in) for why this change is announced.
+- **The number is the person's from then on.** A sync or an import that still has the old number does not put it back
+  ([phone numbers](sms.md#whose-number-it-is)). An administrator can still correct it.
+- **Only where this pforte sends SMS.** A number is for codes, and without SMS it could not be confirmed. The overview
+  then offers nothing and says that changes go through the organisation.
+
+A person cannot remove their number here, only replace it.
 
 **There is no password field.** The change of password is the reset, with a new code to the mailbox or the phone. So
 somebody who finds a computer unlocked cannot set a password with what is on the screen.
@@ -54,7 +74,7 @@ stay made for a desk.
 ## A change needs a recent sign-in
 
 Looking needs a session. A change (signing out everywhere, forgetting a device, adding or removing a passkey, asking for
-the code of a new password or of the phone number) needs a sign-in with a code or a passkey that is **at most five minutes old**, checked on every single
+the code of a new password or of the phone number, giving a new phone number) needs a sign-in with a code or a passkey that is **at most five minutes old**, checked on every single
 action. If the sign-in is
 older, the person signs in again, with password and code or with their passkey, even though they are signed in, and comes back to the page they
 were on. What they were about to do is not done for them: the page says to repeat it, however long the sign-in took.
@@ -68,6 +88,13 @@ not know.
 Confirming the phone number takes two steps as well. The sign-in is checked when the code is sent. Entering the code is
 not checked again: the code is newer than the sign-in and runs out after ten minutes, and the person may have waited for
 the SMS.
+
+Changing the phone number works the same way: the sign-in is checked when the page for the new number is opened and
+again when the code is sent, not when it is entered. This change is worth more to an attacker than the others, because
+whoever gets a number of their own into an account receives its codes from then on. So it is announced like a new
+passkey: the person gets an e-mail, which reaches the mailbox and not the new phone. If the change was not theirs, they
+sign in (asking for the code by e-mail), put their number back, sign out everywhere and choose a new password; an
+administrator can do the same for them and finds the number they had in the audit log.
 
 Every change is written to the [audit log](audit-log.md) with the person as the actor and `self: true` in the details, so
 an administrator can tell it from the same action done by the back office.
