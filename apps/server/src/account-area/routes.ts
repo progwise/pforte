@@ -17,6 +17,7 @@ import { createFlash, type Flash } from '../own-login/flash.js'
 import { safeNext } from '../own-login/oidc.js'
 import { createOwnSignIn } from '../own-login/sign-in.js'
 import type { Passkeys } from '../passkeys/index.js'
+import { allowPictures, pictureElement } from '../pictures/show.js'
 import type { Background } from '../security/background.js'
 import { refuseForeignPosts } from '../security/origin-check.js'
 import type { Ui } from '../ui/index.js'
@@ -25,6 +26,7 @@ import { ACCOUNT_PATH, ACCOUNT_UI_CLIENT_ID } from './constants.js'
 import { registerPasskeyPages } from './passkey-pages.js'
 import { PHONE_CHANGE, registerPhoneChangePages } from './phone-change-pages.js'
 import { PHONE, registerPhonePages } from './phone-pages.js'
+import { PICTURE, registerPicturePages } from './picture-pages.js'
 import { registerSecurityPages } from './security-pages.js'
 import { type AccountSession, type AccountUser, createAccountGate } from './session.js'
 
@@ -41,8 +43,8 @@ export interface AccountAreaDependencies {
   clientLogouts: ClientLogouts
   /** Sends the code with which a person chooses a new password. */
   sendPasswordResetCode: SendPasswordResetCode
-  /** The limit on asking for a new password, the same one as on the page for a forgotten one, and those on the code for the phone number. */
-  limiter: Pick<RateLimiter, 'resetRequest' | 'codeResend' | 'codeBlockedFor' | 'codeFailed'>
+  /** The limit on asking for a new password, the same one as on the page for a forgotten one, those on the code for the phone number, and the one on uploading pictures. */
+  limiter: Pick<RateLimiter, 'resetRequest' | 'codeResend' | 'codeBlockedFor' | 'codeFailed' | 'pictureUpload'>
   audit: Pick<LoginAudit, 'resetRequested' | 'codeSent' | 'codeFailed' | 'blocked'>
   /** Sends the code that confirms a phone number, where this installation sends SMS at all, and the notice of a new number. */
   notifier: Pick<Notifier, 'smsAvailable' | 'sendPhoneCode' | 'sendPhoneChanged'>
@@ -220,7 +222,7 @@ export const accountAreaRoutes =
 
     // --- Start page: who am I. The organisation owns the name, the e-mail address and the language, so nothing here
     // changes them. The mobile number is the person's: they confirm the one that is stored, so that codes go to it,
-    // or give another one. Both only where this pforte sends SMS.
+    // or give another one. Both only where this pforte sends SMS. The picture is the person's as well, everywhere.
 
     app.get(ACCOUNT_PATH, async (request, reply) => {
       const signedIn = await gate.requireAccountSession(request, reply)
@@ -237,10 +239,12 @@ export const accountAreaRoutes =
       const fact = (label: MessageKey, value: string) => `<dt>${escapeHtml(t(label))}</dt><dd>${escapeHtml(value)}</dd>`
       const { smsAvailable } = dependencies.notifier
       const changePhone = smsAvailable ? `<br><a href="${PHONE_CHANGE}">${escapeHtml(t(user.phone ? 'account.profile.changePhone' : 'account.profile.addPhone'))}</a>` : ''
+      const picture = `<dt>${escapeHtml(t('account.profile.picture'))}</dt><dd>${user.pictureKey ? `${pictureElement(user.pictureKey, t('account.picture.current'))}` : `${escapeHtml(t('account.profile.noPicture'))}<br>`}<a href="${PICTURE}">${escapeHtml(t(user.pictureKey ? 'account.profile.changePicture' : 'account.profile.addPicture'))}</a></dd>`
       const content = `<h1>${escapeHtml(t('account.title'))}</h1>
 <div class="panel">
 <h2>${escapeHtml(t('account.profile.title'))}</h2>
 <dl class="facts">
+${picture}
 ${fact('account.profile.name', `${user.firstName} ${user.lastName}`.trim())}
 ${fact('account.profile.email', user.email)}
 ${
@@ -253,6 +257,7 @@ ${fact('account.profile.language', languageName)}
 </dl>
 <p class="muted">${escapeHtml(t(smsAvailable ? 'account.profile.noteOwnPhone' : 'account.profile.note'))}</p>
 </div>`
+      if (user.pictureKey) allowPictures(reply, ui.pages.contentSecurityPolicy)
       return reply.type('text/html').send(page(request, reply, user, 'start', t('account.title'), content))
     })
 
@@ -261,6 +266,7 @@ ${fact('account.profile.language', languageName)}
     registerPasskeyPages(app, context)
     registerPhonePages(app, context)
     registerPhoneChangePages(app, context)
+    registerPicturePages(app, context)
   }
 
 /** What the pages of the area share: who the person is, how a page is drawn, and the step-up before a change. */

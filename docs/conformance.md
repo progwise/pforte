@@ -152,8 +152,8 @@ that matters.
 Warnings are accepted for certification. These are known and intended:
 
 - `oidcc-scope-profile`, `oidcc-scope-email`: not all standard claims of the scope are returned.
-  pforte only returns claims it holds (for example no `picture` or `birthdate`); inventing values
-  would be wrong. (`email_verified` is returned since #6.)
+  pforte only returns claims it holds (for example no `birthdate`, and `picture` only for a person
+  who gave themselves one); inventing values would be wrong. (`email_verified` is returned since #6.)
 - `oidcc-scope-email`: the e-mail is also in the ID token. Claims for the granted scopes are
   deliberately placed in the ID token so applications can read them without a second request.
 - `oidcc-claims-essential`: `name` is not in the userinfo, because pforte does not support the

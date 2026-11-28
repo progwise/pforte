@@ -89,7 +89,7 @@ export const createProvider = async ({ config, db, onError, ui = createUi() }: P
     acrValues: [ACR_PASSWORD, ACR_SECOND_FACTOR],
     // The sign-in pages follow `ui_locales`, so applications can see which languages exist.
     discovery: { ui_locales_supported: ui.i18n.languages },
-    findAccount: createFindAccount(db),
+    findAccount: createFindAccount(db, config.issuer),
     clientBasedCORS: cors.clientBasedCORS,
     responseTypes: ['code'],
     // OpenID Connect Core requires the authorization endpoint to accept POST as well as GET. A

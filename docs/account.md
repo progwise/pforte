@@ -2,14 +2,14 @@
 
 Every person who has an account can open `https://id.example.com/account` (your pforte address followed by `/account`),
 see how they are signed in and protect themselves: end their sessions, forget devices, add and remove passkeys, change
-the password and their mobile number. The pages
+the password and their mobile number, and give themselves a picture. The pages
 are for the people who sign in, not for those who run pforte: that is [the administration](administration.md).
 
 ## What a person can do
 
 | Page | What it shows | What can be done |
 | --- | --- | --- |
-| **Overview** | Name, e-mail address, mobile phone number (all but its first and last digits hidden) and language. | Where this pforte [sends SMS](sms.md): confirm the phone number, if it is not confirmed yet, and change it or add one. See below. Nothing else. |
+| **Overview** | The person's picture, name, e-mail address, mobile phone number (all but its first and last digits hidden) and language. | Add, change or remove [the picture](#a-picture). Where this pforte [sends SMS](sms.md): confirm the phone number, if it is not confirmed yet, and change it or add one. See below. Nothing else. |
 | **Signed in** | The browsers in which the person is signed in, with the applications of each and how they signed in there (with a code, with a passkey, or with the password only on a remembered device), and the applications that stay signed in without a browser because they hold a refresh token, such as an app on a phone. | *Sign out everywhere*: ends every session and application, this page included, and forgets the remembered devices. Applications with a back-channel logout address are told ([signing out](integrating-a-client.md#signing-out)). |
 | **Devices** | The devices on which no code is asked for, with the browser, when it was last used and until when it is remembered. | Forget one, or all. The next sign-in there asks for a code. |
 | **Sign-ins** | The last ten times somebody signed in to the account or tried to: a sign-in with a code, with a passkey or on a remembered device, a wrong password, a wrong code, a passkey that was refused, a hold after too many attempts, each with the time, the network address and the browser. Only what happened at the sign-in: a wrong code at the password reset or an activation is in the audit log, not here. | Nothing. A person who sees a line that was not them changes their password. |
@@ -57,6 +57,35 @@ their codes go from the next sign-in on.
 
 A person cannot remove their number here, only replace it.
 
+### A picture
+
+**A person gives themselves a picture**, replaces it and removes it. Applications they sign in to get its address as
+the claim `picture` ([claims](integrating-a-client.md#what-your-application-receives)) and can show it next to the name.
+Next to *Picture* on the overview is the link *Add a picture* (*Change picture* for somebody who has one), which leads
+to a page with one field for a file.
+
+- **JPEG, PNG or WebP, up to 10 MB**, which is what a photo from a phone needs. Nothing else is read.
+- **What is uploaded is not what is kept.** pforte reads the picture, turns it the way the camera held it, cuts it to a
+  square around what stands out in it, makes it 512 pixels wide and writes it anew as a JPEG. The upload is thrown
+  away. With it goes everything a camera notes in a file: where and when the picture was taken, with which device.
+  See [a person's picture](security.md#a-persons-picture).
+- **The picture has an address of its own**, such as `https://id.example.com/pictures/Q0p3…`, which is served
+  **without a sign-in**: an application fetches it from its server or puts it into its own pages. The address is random,
+  says nothing about the person and changes with every new picture. Whoever has it has the picture, and the page says so
+  before anything is uploaded.
+- **Only the person sets it.** No sync, import or administrator can give somebody a picture, so nothing overwrites it.
+  An administrator can remove one ([administration](administration.md#users)); the person can upload another after that.
+- **A person without a picture has no claim `picture`**, and each application shows what it shows for anybody without
+  one. pforte makes no stand-in.
+- **An application learns of a new picture at the person's next sign-in there**, or when it next asks for the user
+  information. One that has copied the picture keeps its copy until then, also after the picture was removed here.
+- **The picture of somebody who is locked or deactivated is not served** until they are active again. It is deleted with
+  the person.
+- **Ten uploads an hour** for one person ([rate limits](rate-limiting.md)): making the picture is work for the server.
+
+If pforte runs behind a proxy, the proxy has to let an upload of 10 MB through. Caddy does; nginx allows 1 MB unless
+`client_max_body_size` says otherwise.
+
 **There is no password field.** The change of password is the reset, with a new code to the mailbox or the phone. So
 somebody who finds a computer unlocked cannot set a password with what is on the screen.
 
@@ -76,7 +105,7 @@ stay made for a desk.
 ## A change needs a recent sign-in
 
 Looking needs a session. A change (signing out everywhere, forgetting a device, adding or removing a passkey, asking for
-the code of a new password or of the phone number, giving a new phone number) needs a sign-in with a code or a passkey that is **at most five minutes old**, checked on every single
+the code of a new password or of the phone number, giving a new phone number, setting or removing the picture) needs a sign-in with a code or a passkey that is **at most five minutes old**, checked on every single
 action. If the sign-in is
 older, the person signs in again, with password and code or with their passkey, even though they are signed in, and comes back to the page they
 were on. What they were about to do is not done for them: the page says to repeat it, however long the sign-in took.

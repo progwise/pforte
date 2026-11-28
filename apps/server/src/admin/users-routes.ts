@@ -6,6 +6,7 @@ import {
   findUserById,
   getUserClaims,
   listUsers,
+  removePicture,
   type RequestContext,
   setUserClaims,
   updateUser,
@@ -19,6 +20,7 @@ import { claimValues } from './claims-routes.js'
 import { isUniqueViolation } from './db-errors.js'
 import type { ClientLogouts } from '../oidc/client-logouts.js'
 import { problem, problemSchema } from './problem.js'
+import { pictureUrl } from '../pictures/address.js'
 
 const USER_STATUSES = ['created', 'active', 'locked', 'deactivated'] as const
 
@@ -38,6 +40,10 @@ export const userSchema = z.object({
     .string()
     .nullable()
     .describe('When the person chose the phone number themselves, on the account pages. From then on `PUT /users/by-email/{email}` leaves the number alone.'),
+  picture: z
+    .string()
+    .nullable()
+    .describe('The address of the picture the person gave themselves on the account pages, as applications get it in the claim `picture`. It is served without a sign-in and changes with every new picture.'),
   language: z.string(),
   status: z.enum(USER_STATUSES),
   isAdmin: z.boolean(),
@@ -49,7 +55,7 @@ export const userSchema = z.object({
 type UserRow = NonNullable<Awaited<ReturnType<typeof findUserById>>>
 
 /** The API's view of a user. Password hash, activation token and failed-login state stay inside. */
-export const toUserDto = (user: UserRow): z.infer<typeof userSchema> => ({
+export const toUserDto = (user: UserRow, issuer: string): z.infer<typeof userSchema> => ({
   id: user.id,
   email: user.email,
   firstName: user.firstName,
@@ -57,6 +63,7 @@ export const toUserDto = (user: UserRow): z.infer<typeof userSchema> => ({
   phone: user.phone,
   phoneVerifiedAt: user.phoneVerifiedAt?.toISOString() ?? null,
   phoneSetByUserAt: user.phoneSetByUserAt?.toISOString() ?? null,
+  picture: user.pictureKey ? pictureUrl(issuer, user.pictureKey) : null,
   language: user.language,
   status: user.status,
   isAdmin: user.isAdmin,
@@ -87,7 +94,7 @@ class DryRunRollback extends Error {
 }
 
 export const usersRoutes =
-  ({ db, auth, clientLogouts }: { db: Database; auth: AdminAuth; /** Tells the applications of a deleted user. */ clientLogouts: ClientLogouts }) =>
+  ({ db, auth, clientLogouts, issuer }: { db: Database; auth: AdminAuth; /** Tells the applications of a deleted user. */ clientLogouts: ClientLogouts; /** The public address of pforte, for the address of a picture. */ issuer: string }) =>
   async (instance: FastifyInstance) => {
     const app = instance.withTypeProvider<ZodTypeProvider>()
     const onRequest = auth.require('directory', 'admin')
@@ -120,7 +127,7 @@ export const usersRoutes =
         if (request.body.isAdmin !== undefined && !hasScope(request, 'admin')) return adminOnly(reply)
         try {
           const user = await db.transaction((tx) => createUser(tx, requestContext(request), request.body))
-          return reply.code(201).header('Location', `/admin/users/${user.id}`).send(toUserDto(user))
+          return reply.code(201).header('Location', `/admin/users/${user.id}`).send(toUserDto(user, issuer))
         } catch (error) {
           if (isUniqueViolation(error)) return conflict(reply)
           throw error
@@ -160,7 +167,7 @@ export const usersRoutes =
           after: cursor,
           limit,
         })
-        return { items: items.map(toUserDto), nextCursor }
+        return { items: items.map((user) => toUserDto(user, issuer)), nextCursor }
       },
     )
 
@@ -177,7 +184,7 @@ export const usersRoutes =
       },
       async (request, reply) => {
         const user = await findUserById(db, request.params.id)
-        return user ? toUserDto(user) : notFound(reply)
+        return user ? toUserDto(user, issuer) : notFound(reply)
       },
     )
 
@@ -212,7 +219,7 @@ export const usersRoutes =
             const user = await findUserById(tx, request.params.id)
             return user ? updateUser(tx, requestContext(request), user, request.body) : undefined
           })
-          return result ? toUserDto(result.user) : notFound(reply)
+          return result ? toUserDto(result.user, issuer) : notFound(reply)
         } catch (error) {
           if (isUniqueViolation(error)) return conflict(reply)
           throw error
@@ -240,6 +247,28 @@ export const usersRoutes =
         if (!deleted) return notFound(reply)
         clientLogouts.send(deleted.user, deleted.logouts)
         return reply.code(204).send(null)
+      },
+    )
+
+    app.delete(
+      '/users/:id/picture',
+      {
+        onRequest,
+        schema: {
+          tags: ['Users'],
+          summary: 'Remove the picture of a user',
+          description:
+            'For the picture that should not be there. Its address answers nothing any more, and applications get no `picture` from the ' +
+            'next sign-in on; one that has kept a copy shows it until it asks again. There is no call that sets a picture: a person ' +
+            'gives themselves one on the account pages, and can do so again after this.',
+          params: z.object({ id: z.uuid() }),
+          response: { 204: z.null(), ...ERROR_RESPONSES },
+        },
+      },
+      async (request, reply) => {
+        if (!(await findUserById(db, request.params.id))) return notFound(reply)
+        const removed = await removePicture(db, requestContext(request), request.params.id)
+        return removed ? reply.code(204).send(null) : problem(reply, 404, 'Not found', 'The user has no picture.')
       },
     )
 
@@ -338,7 +367,7 @@ export const usersRoutes =
             throw error
           }
 
-          const body = { dryRun: false, outcome: result.outcome, user: toUserDto(result.user), claims: result.claims }
+          const body = { dryRun: false, outcome: result.outcome, user: toUserDto(result.user, issuer), claims: result.claims }
           return result.outcome === 'created' ? reply.code(201).send(body as never) : reply.send(body as never)
         })
       },

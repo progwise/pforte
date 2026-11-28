@@ -96,6 +96,7 @@ const activationValidityMs = config.activationLinkDays * 24 * 60 * 60 * 1000
 const app = buildApp({
   ui,
   passkeys,
+  pictures: { db },
   trustProxy: config.trustProxy,
   issuer: config.issuer,
   getDatabaseTime: () => getDatabaseTime(db),

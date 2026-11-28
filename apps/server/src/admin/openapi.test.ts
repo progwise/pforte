@@ -14,6 +14,7 @@ const OPERATIONS = [
   'DELETE /admin/users/{id}/devices',
   'DELETE /admin/users/{id}/devices/{deviceId}',
   'DELETE /admin/users/{id}/passkeys/{passkeyId}',
+  'DELETE /admin/users/{id}/picture',
   'GET /admin/audit-events',
   'GET /admin/claim-types',
   'GET /admin/clients',

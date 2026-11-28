@@ -38,6 +38,7 @@ and *Not now* still leads to the application.
 | Wrong codes | 30 per IP per 15 minutes | Wrong, expired-by-attempts and malformed codes at sign-in, password reset and phone confirmation. On top of this, a code allows 5 attempts. |
 | Refused passkeys | 30 per IP per 15 minutes | Sign-ins with a passkey that pforte refused, for whatever reason. A held-back address is not checked at all, also not with the right passkey. |
 | Asking for another code | 10 per IP per hour | "Send a new code" and "send it by e-mail instead", and every code to confirm a phone number on the account pages or at a sign-in, or to change it on the account pages. The first code of a sign-in is not counted: it needs the password. A user also gets at most one code a minute and five an hour. |
+| Pictures a person uploads | 10 per person per hour | Every upload on the [account pages](account.md#a-picture) that is a file of the right size, whether it becomes a picture or not: reading it is the work. Counted by person, not by address. |
 | Password reset requests | 5 per address and 30 per IP per hour | Every request, for an address that exists or not. |
 | Wrong activation links | 20 per IP per 15 minutes | Links that do not work. |
 | Failed authentication of applications and administrators | 30 per IP per 15 minutes | Wrong client secrets at `/token`, and missing or wrong tokens at `/admin`. |

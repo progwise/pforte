@@ -39,7 +39,7 @@ in the back office wants to learn. pforte does the small set of things above and
 - **Administration**: users, clients, claim types, an audit log and CSV import, in the browser and through an admin API
   ([the administration](administration.md), [importing users](import.md)).
 - **Account pages**: every person sees where they are signed in, their remembered devices and recent sign-ins, can sign out
-  everywhere, forget devices, add and remove passkeys, confirm and change their phone number and change the password, after a
+  everywhere, forget devices, add and remove passkeys, confirm and change their phone number, give themselves a picture and change the password, after a
   sign-in with two factors ([the account pages](account.md)).
 - **Safety**: rate limits on sign-in, an audit of sign-in events, security headers, and a production start that refuses weak
   secrets ([security measures](security.md), [threat model](threat-model.md)).

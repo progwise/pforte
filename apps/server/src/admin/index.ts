@@ -174,7 +174,7 @@ export const adminRoutes =
       },
     )
 
-    await app.register(usersRoutes({ db, auth, clientLogouts }))
+    await app.register(usersRoutes({ db, auth, clientLogouts, issuer: provider.issuer }))
     await app.register(claimsRoutes({ db, auth }))
     await app.register(devicesRoutes({ db, auth }))
     await app.register(passkeysRoutes({ db, auth }))
