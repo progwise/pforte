@@ -13,8 +13,9 @@ export const PHONE = `${ACCOUNT_PATH}/phone`
 
 /**
  * Confirming the phone number, for a person who could not do it when they chose their first password: they
- * skipped the step, had no number then, or the back office has changed it since. The number itself is the
- * organisation's and is not changed here; the person only shows that they hold the phone.
+ * skipped the step, had no number then, or the back office has changed it since. The number itself is not changed
+ * here; the person only shows that they hold the phone. Another number is given on the pages next to these
+ * (`registerPhoneChangePages`).
  *
  * It is the step of the activation, with the same codes and limits. Sending the code needs a recent sign-in, as
  * every change here does, and it is what costs a message. Entering it does not ask again: the code is newer proof

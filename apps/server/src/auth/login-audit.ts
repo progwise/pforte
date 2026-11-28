@@ -11,7 +11,7 @@ export interface Origin {
   userAgent?: string
 }
 
-export type CodePurpose = 'login' | 'password_reset' | 'activation'
+export type CodePurpose = 'login' | 'password_reset' | 'activation' | 'phone_change'
 
 /**
  * Why a sign-in with a passkey was refused: the answer was no answer, its question was not asked here or had run

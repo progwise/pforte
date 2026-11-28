@@ -64,7 +64,10 @@ What to know:
 - **What it does not touch.** The e-mail address is the key. The call never sets a password, never changes the status and never
   grants administrator rights.
 - **One transaction.** If a claim is invalid, nothing is created or changed, so you never get a person with half their claims.
-- **`phone`** is optional, in the form `+4915112345678`; `null` removes it. `language` is a code of two or three letters such as `de`; it chooses the language of the pages and mails for the person (`de`, `en`, `fr` and `hu` are built in).
+- **`phone`** is optional, in the form `+4915112345678`; `null` removes it. It is **ignored for a person who changed their number
+  themselves** on the account pages: the number is theirs from then on, and your source may still hold the one they had. The user in
+  the answer has `phoneSetByUserAt` (a time, or `null`) and the number pforte has, so a job can carry it back to its source
+  ([whose number it is](sms.md#whose-number-it-is)). `language` is a code of two or three letters such as `de`; it chooses the language of the pages and mails for the person (`de`, `en`, `fr` and `hu` are built in).
 - **Dry run.** Add `?dryRun=true`: the same checks and the same difference run, then everything is taken back. You get what *would*
   happen, and nothing is written or recorded:
 

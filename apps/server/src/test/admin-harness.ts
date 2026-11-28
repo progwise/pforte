@@ -64,7 +64,7 @@ export const createAdminHarness = async ({
   const { notifier, notifications, lastCode, lastResetCode, lastPhoneCode } = createRecordingNotifier()
   const sendPasswordResetCode = createPasswordResetSender({ db: database.db, notifier, codeSecrets: deriveCodeSecrets(COOKIE_KEYS), issuer })
   const passkeys = createPasskeys({ issuer, ui, db: database.db, notifier, background, cookieKeys: COOKIE_KEYS, name: 'Example Inc.', accountPages })
-  const accountArea = { db: database.db, issuer, cookieKeys: COOKIE_KEYS, ui, timeZone: 'Europe/Berlin', clientLogouts, sendPasswordResetCode, limiter, audit: loginAudit, passkeys, notifier, codeSecrets: deriveCodeSecrets(COOKIE_KEYS) }
+  const accountArea = { db: database.db, issuer, cookieKeys: COOKIE_KEYS, ui, timeZone: 'Europe/Berlin', clientLogouts, sendPasswordResetCode, limiter, audit: loginAudit, passkeys, notifier, codeSecrets: deriveCodeSecrets(COOKIE_KEYS), background }
   const app = buildApp({
     ui,
     issuer,

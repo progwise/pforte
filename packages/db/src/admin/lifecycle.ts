@@ -7,7 +7,7 @@ import { assertAdminStays } from './admins.js'
 import { revokeUserDevices } from './devices.js'
 import { endPasskeySteps } from './passkeys.js'
 import { lockUserRow } from '../users.js'
-import { checkCode, type CodeCheck, type CodeOptions } from '../codes.js'
+import { checkCode, type CodeCheck, type CodeOptions, withdrawCodeUnlessHeld } from '../codes.js'
 import type { Database } from '../index.js'
 import type { RequestContext } from './users.js'
 
@@ -308,6 +308,41 @@ export const confirmPhone = (
       .returning()
     await recordAuditEvent(tx, audit(context, 'user.phone.confirm', confirmed!, {}))
     return { ok: true, user: confirmed! }
+  })
+
+/**
+ * A person makes `phone` their own number, with the code that was sent to it. Until then nothing has changed: the
+ * number they had is stored and gets their codes, so a mistyped number costs nothing but a message. If the code is
+ * right, the new number is stored and is confirmed at once, since the code is the confirmation. Returns undefined
+ * when there is no such user, and throws a `LifecycleError` for one who is not active.
+ *
+ * From then on the number is the person's (`phoneSetByUserAt`): the upsert by e-mail address, which a sync and an
+ * import use, leaves it alone. An administrator can still correct it.
+ *
+ * The code was issued bound to the number it went to, so it is right for that number only: a code for one number
+ * cannot make another the person's, whatever the request says. The row is held and the steps are ordered as in
+ * `confirmPhone`, for the reasons given there. A code that is out to confirm the number the person had confirms
+ * nothing any more and is ended, as it is when an administrator changes the number.
+ */
+export const changePhone = (
+  db: Database,
+  context: RequestContext,
+  { userId, phone, code }: { userId: string; phone: string; code: string },
+  options: CodeOptions,
+): Promise<PhoneConfirmation | undefined> =>
+  db.transaction(async (tx) => {
+    const [user] = await tx.select().from(users).where(eq(users.id, userId)).for('no key update')
+    if (!user) return undefined
+    if (user.status !== 'active') throw new LifecycleError(`Cannot change the phone number of a user who is ${user.status}. It is possible for: active.`)
+    const digits = code.replaceAll(' ', '')
+    if (!/^\d{6}$/.test(digits)) return { ok: false, reason: 'malformed' }
+    const result = await checkCode(tx, { userId, purpose: 'phone_change', code: digits, boundTo: phone }, options)
+    if (!result.ok) return result
+    const now = options.now ?? new Date()
+    const [changed] = await tx.update(users).set({ phone, phoneVerifiedAt: now, phoneSetByUserAt: now }).where(eq(users.id, userId)).returning()
+    await withdrawCodeUnlessHeld(tx, { userId, purpose: 'activation' }, now)
+    await recordAuditEvent(tx, audit(context, 'user.phone.change', changed!, { changes: { phone: { from: user.phone, to: phone } } }))
+    return { ok: true, user: changed! }
   })
 
 export const endSessions = async (tx: DatabaseOrTransaction, context: RequestContext, user: UserRow) => {

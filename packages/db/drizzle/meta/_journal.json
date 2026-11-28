@@ -113,6 +113,13 @@
       "when": 1794842133698,
       "tag": "0015_add_session_epoch",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1795882352991,
+      "tag": "0016_add_phone_set_by_user",
+      "breakpoints": true
     }
   ]
 }

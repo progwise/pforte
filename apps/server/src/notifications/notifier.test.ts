@@ -36,6 +36,13 @@ describe('development notifier', () => {
     expect(lines[0]).toContain('https://id.example.com/account/passkeys')
   })
 
+  it('writes the notice that the phone number was changed to the log', async () => {
+    const lines: string[] = []
+    await createLogNotifier({ log: (message) => lines.push(message), production: false }).sendPhoneChanged(user, { phone: '+49•••••••••21', url: 'https://id.example.com/account' })
+    expect(lines).toEqual([expect.stringContaining('ada@example.com: the mobile number was changed to +49•••••••••21')])
+    expect(lines[0]).toContain('https://id.example.com/account')
+  })
+
   it('refuses in production and keeps secrets out of the log', async () => {
     const lines: string[] = []
     const notifier = createLogNotifier({ log: (message) => lines.push(message), production: true })
@@ -44,6 +51,7 @@ describe('development notifier', () => {
     await expect(notifier.sendResetCode(user, { code: '1', expiresAt: new Date(), url: 'x', channel: 'email' as const })).rejects.toBeInstanceOf(NotifierUnavailableError)
     await expect(notifier.sendPasswordChanged(user, { url: 'x' })).rejects.toBeInstanceOf(NotifierUnavailableError)
     await expect(notifier.sendPasskeyAdded(user, { device: 'x', url: 'x' })).rejects.toBeInstanceOf(NotifierUnavailableError)
+    await expect(notifier.sendPhoneChanged(user, { phone: 'x', url: 'x' })).rejects.toBeInstanceOf(NotifierUnavailableError)
     expect(lines).toEqual([])
   })
 })
@@ -177,6 +185,25 @@ describe('mail notifier', () => {
       expect(mail.to).toBe('ada@example.com')
       expect(mail.text).toContain('Safari, iPhone')
       expect(mail.text).toContain('https://id.example.com/account/passkeys')
+      expect(mail.text).not.toMatch(/\{[a-zA-Z]+\}/)
+    }
+  })
+
+  it('tells the user by mail that their phone number was changed, in their language, with the number in part and the account pages', async () => {
+    sent.length = 0
+    const notice = { phone: '+49•••••••••21', url: 'https://id.example.com/account' }
+    for (const language of ['en', 'de', 'fr', 'hu']) await notifier.sendPhoneChanged({ ...user, language }, notice)
+    expect(sent.map((mail) => mail.subject)).toEqual([
+      'The mobile number of your account at Example Inc. was changed',
+      'Die Mobilnummer Ihres Kontos bei Example Inc. wurde geändert',
+      'Le numéro de portable de votre compte chez Example Inc. a été modifié',
+      'Megváltozott a(z) Example Inc. fiókjához tartozó mobilszám',
+    ])
+    for (const mail of sent) {
+      expect(mail.to).toBe('ada@example.com')
+      expect(mail.text).toContain('Ada')
+      expect(mail.text).toContain(notice.phone)
+      expect(mail.text).toContain(notice.url)
       expect(mail.text).not.toMatch(/\{[a-zA-Z]+\}/)
     }
   })

@@ -93,6 +93,27 @@ The same can be done at any time on [the account pages](account.md): the overvie
 and has the button *Confirm with a code by SMS*. An administrator sees on a person's page whether the phone is
 confirmed, and cannot confirm it for them: only the person holds the phone.
 
+### Whose number it is
+
+Until a person says otherwise, the number is the organisation's: the administration, the admin API, an import or a sync
+sets it, and each change drops the confirmation.
+
+A person can **change their number themselves** on [the account pages](account.md), with a code sent to the new
+number. From then on the number is theirs:
+
+- **A sync or an import leaves it alone.** `PUT /admin/users/by-email/{email}`, which both use, ignores `phone` for that
+  person, whatever it names: the number they had, another one, or `null`. Everything else in the call is applied as
+  before, and the answer says `unchanged` when nothing else differs. Otherwise a source that still has the old number
+  would put it back at its next run, and the person would be asked to confirm a number they no longer have.
+- **The API says so.** A user has `phoneSetByUserAt`, the time of the person's last change, or `null`. A job that wants
+  to keep its source up to date reads the person's number from pforte when that field is set.
+- **An administrator can still correct it**, in the administration or with `PATCH /admin/users/{id}`. The corrected
+  number is not confirmed, as after every change by the back office, and it stays the person's: the source still does not
+  overwrite it.
+- **There is no way back to the source** for that person. If you need one, open an issue and say what for.
+
+The change is in the [audit log](audit-log.md) as `user.phone.change`, with the number the person had and the new one.
+
 ### Confirming a number in your own application
 
 Your application can also show the step itself, for example in its profile page. pforte still sends the code and

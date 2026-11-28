@@ -71,6 +71,8 @@ export const adminEn = {
   'manage.fact.lastSignIn': 'Last sign-in',
   'manage.fact.created': 'Created',
   'manage.fact.phone': 'Phone confirmed',
+  'manage.fact.phoneOwn': 'Phone chosen by the person',
+  'manage.fact.phoneOwnNote': 'On their account pages. A sync or an import leaves this number alone; you can still change it here.',
   'manage.fact.email': 'E-mail confirmed',
   'manage.claims.title': 'Claims',
   'manage.claims.help': 'What applications are told about this person. One value per line; empty removes the claim.',

@@ -17,11 +17,13 @@ import { createFlash, type Flash } from '../own-login/flash.js'
 import { safeNext } from '../own-login/oidc.js'
 import { createOwnSignIn } from '../own-login/sign-in.js'
 import type { Passkeys } from '../passkeys/index.js'
+import type { Background } from '../security/background.js'
 import { refuseForeignPosts } from '../security/origin-check.js'
 import type { Ui } from '../ui/index.js'
 import { escapeHtml, type PageSet } from '../ui/pages.js'
 import { ACCOUNT_PATH, ACCOUNT_UI_CLIENT_ID } from './constants.js'
 import { registerPasskeyPages } from './passkey-pages.js'
+import { PHONE_CHANGE, registerPhoneChangePages } from './phone-change-pages.js'
 import { PHONE, registerPhonePages } from './phone-pages.js'
 import { registerSecurityPages } from './security-pages.js'
 import { type AccountSession, type AccountUser, createAccountGate } from './session.js'
@@ -42,8 +44,10 @@ export interface AccountAreaDependencies {
   /** The limit on asking for a new password, the same one as on the page for a forgotten one, and those on the code for the phone number. */
   limiter: Pick<RateLimiter, 'resetRequest' | 'codeResend' | 'codeBlockedFor' | 'codeFailed'>
   audit: Pick<LoginAudit, 'resetRequested' | 'codeSent' | 'codeFailed' | 'blocked'>
-  /** Sends the code that confirms a phone number, where this installation sends SMS at all. */
-  notifier: Pick<Notifier, 'smsAvailable' | 'sendPhoneCode'>
+  /** Sends the code that confirms a phone number, where this installation sends SMS at all, and the notice of a new number. */
+  notifier: Pick<Notifier, 'smsAvailable' | 'sendPhoneCode' | 'sendPhoneChanged'>
+  /** Sends that notice after the answer, so that a mail server that is down does not turn a change into an error. */
+  background: Background
   /** The secrets that sign one-time codes (see `deriveCodeSecrets`). */
   codeSecrets: string[]
   /** How a person gets a new passkey, and the script that asks the device. */
@@ -214,8 +218,9 @@ export const accountAreaRoutes =
       return reply.type('text/html').send(page)
     })
 
-    // --- Start page: who am I, read-only. The organisation owns these details, so nothing here changes them. The one
-    // thing a person can do is confirm the phone number that is stored, so that codes go to it.
+    // --- Start page: who am I. The organisation owns the name, the e-mail address and the language, so nothing here
+    // changes them. The mobile number is the person's: they confirm the one that is stored, so that codes go to it,
+    // or give another one. Both only where this pforte sends SMS.
 
     app.get(ACCOUNT_PATH, async (request, reply) => {
       const signedIn = await gate.requireAccountSession(request, reply)
@@ -230,6 +235,8 @@ export const accountAreaRoutes =
         // not a language tag the runtime knows: the tag itself is shown
       }
       const fact = (label: MessageKey, value: string) => `<dt>${escapeHtml(t(label))}</dt><dd>${escapeHtml(value)}</dd>`
+      const { smsAvailable } = dependencies.notifier
+      const changePhone = smsAvailable ? `<br><a href="${PHONE_CHANGE}">${escapeHtml(t(user.phone ? 'account.profile.changePhone' : 'account.profile.addPhone'))}</a>` : ''
       const content = `<h1>${escapeHtml(t('account.title'))}</h1>
 <div class="panel">
 <h2>${escapeHtml(t('account.profile.title'))}</h2>
@@ -239,12 +246,12 @@ ${fact('account.profile.email', user.email)}
 ${
   canConfirmPhone(user, dependencies.notifier)
     ? `<dt>${escapeHtml(t('account.profile.phone'))}</dt><dd>${escapeHtml(maskPhone(user.phone))}<br><span class="muted">${escapeHtml(t('account.profile.phoneUnconfirmed'))}</span>
-<form method="post" action="${PHONE}/send"><button type="submit" class="secondary">${escapeHtml(t('account.phone.send'))}</button></form></dd>`
-    : fact('account.profile.phone', user.phone ? maskPhone(user.phone) : t('account.profile.noPhone'))
+<form method="post" action="${PHONE}/send"><button type="submit" class="secondary">${escapeHtml(t('account.phone.send'))}</button></form>${changePhone}</dd>`
+    : `<dt>${escapeHtml(t('account.profile.phone'))}</dt><dd>${escapeHtml(user.phone ? maskPhone(user.phone) : t('account.profile.noPhone'))}${changePhone}</dd>`
 }
 ${fact('account.profile.language', languageName)}
 </dl>
-<p class="muted">${escapeHtml(t('account.profile.note'))}</p>
+<p class="muted">${escapeHtml(t(smsAvailable ? 'account.profile.noteOwnPhone' : 'account.profile.note'))}</p>
 </div>`
       return reply.type('text/html').send(page(request, reply, user, 'start', t('account.title'), content))
     })
@@ -253,6 +260,7 @@ ${fact('account.profile.language', languageName)}
     registerSecurityPages(app, context)
     registerPasskeyPages(app, context)
     registerPhonePages(app, context)
+    registerPhoneChangePages(app, context)
   }
 
 /** What the pages of the area share: who the person is, how a page is drawn, and the step-up before a change. */

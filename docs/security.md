@@ -50,6 +50,7 @@ affected either.
 | `pforte_device_new` | The token of a device that an activation remembered, until the next sign-in in that browser moves it into `pforte_device`. | like `pforte_device` |
 | `pforte_manage`, `pforte_manage_login`, `pforte_manage_flash` | The session of a person in the administration, the sign-in on its way there and back, and the message an action leaves for the next page. Signed. | `HttpOnly`, `Secure` (https), `SameSite=Strict`, path `/manage`; 8 hours at most, 10 minutes, 2 minutes |
 | `pforte_account`, `pforte_account_login`, `pforte_account_flash` | The same for [the account pages](account.md). The session holds who the person is, which sign-in it came from and when, no token. Signed. | `HttpOnly`, `Secure` (https), `SameSite=Lax`, path `/account`; 1 hour, 10 minutes, 2 minutes |
+| `pforte_account_phone` | The new mobile number a person asked for on the account pages, while its code can be entered: whose it is, the number, and until when. Signed. The code is bound to the number as well, so the cookie alone changes nothing. | `HttpOnly`, `Secure` (https), `SameSite=Lax`, path `/account/phone/change`; 10 minutes |
 | `pforte_passkey_step` | A random token for a sign-in that is complete while the person is asked to [confirm their phone number](sms.md#phone-numbers) and whether they want a [passkey](passkeys.md). Who signed in and how is kept at pforte, under the hash of the token, and ends with the person's sessions. | `HttpOnly`, `Secure` (https), `SameSite=Strict`, 15 minutes, only for that sign-in's path |
 | `pforte_activation_passkey` | The same for the question at the end of an activation. | like the above, path `/activate` |
 | `pforte_passkey_offer` | Who has answered the offer of a passkey in this browser, and until when each is left alone: 90 days after "not now", 400 days after a passkey was created or used. A person is a short hash in it, not their id. Signed. | `HttpOnly`, `Secure` (https), `SameSite=Strict`, 400 days, path `/`: the sign-in pages and the activation both read and write it |
@@ -111,6 +112,15 @@ When a passkey is added to an account, pforte sends the person an e-mail that sa
 created with and the page where it can be removed. A passkey signs in without password and code, so one that somebody
 else added must not go unnoticed. As with the changed password, the notice is always an e-mail, is sent after the
 passkey is stored, and cannot be turned off; a mail server that is down does not undo the passkey.
+
+## A new phone number is announced
+
+When a person gives their account another mobile number on [the account pages](account.md), pforte sends them an
+e-mail that says so, with the new number partly hidden and the address of the account pages. The codes go to that
+number from then on, so a number that somebody else put in must not go unnoticed. The notice is always an e-mail and
+never an SMS: it has to reach the person, not the new phone. Like the two above it is sent after the change is
+stored and cannot be turned off; a mail server that is down does not undo the change. Nothing is sent when an
+administrator, an import or a sync changes a number: those codes then go by e-mail until the person has confirmed it.
 
 ## Passkeys
 

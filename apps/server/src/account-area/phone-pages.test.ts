@@ -71,14 +71,15 @@ describe.skipIf(!hasDatabase)('the account pages: confirming the phone number', 
       ['the number is confirmed', async () => void (await h.database.pool.query(`update users set phone_verified_at = now() where email = $1`, [A.email]))],
       ['there is no number', async () => void (await h.database.pool.query(`update users set phone = null where email = $1`, [A.email]))],
       ['this pforte sends no SMS', async () => void (h.notifier.smsAvailable = false)],
-    ])('offers nothing when %s', async (_name, arrange) => {
+    ])('does not offer to confirm when %s', async (_name, arrange) => {
       const browser = await signedIn(A.email)
       await arrange()
 
       const page = await browser.request('GET', '/account')
 
       expect(page.body).not.toContain(NOTE)
-      expect(page.body).not.toContain('/account/phone')
+      // The one address of these pages that the overview may still name is the one that changes the number.
+      expect(page.body.replaceAll('/account/phone/change', '')).not.toContain('/account/phone')
       // and the addresses behind the button do nothing either
       expect((await browser.request('GET', '/account/phone')).headers.location).toBe('/account')
       expect((await post(browser, '/account/phone/send')).headers.location).toBe('/account')
@@ -194,7 +195,7 @@ describe.skipIf(!hasDatabase)('the account pages: confirming the phone number', 
       const overview = await follow(browser, done)
       expect(overview.body).toContain('<p class="flash ok" role="status">Phone number confirmed</p>')
       expect(overview.body).not.toContain(NOTE)
-      expect(overview.body).not.toContain('/account/phone')
+      expect(overview.body).not.toContain('/account/phone/send')
       const { id, phone_verified_at: at } = await userOf(A.email)
       expect(at).toBeInstanceOf(Date)
       expect((await h.audit('user.phone.confirm', id)).at(-1)).toMatchObject({ actor_type: 'user', actor_id: id, details: { email: A.email, self: true } })

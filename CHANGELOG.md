@@ -8,6 +8,33 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
 
 ## Unreleased
 
+### Added
+
+- **A person changes their mobile number themselves, on the account pages.** The overview was read-only: a new number
+  had to come from the back office or from the system the users are synced from, and until it did, the person's codes
+  went by SMS to a number they no longer had. Next to the number the overview now has *Change number* (*Add a number*
+  for somebody without one). The person types the new number with its country code, gets a code by SMS at that number
+  and enters it; the number is then stored and confirmed, and their codes go there. Until the code is entered nothing
+  changes, so a mistyped number costs one message. It needs a sign-in with a code or a passkey that is at most five
+  minutes old, the person is told of the change by e-mail, and it is in the audit log as `user.phone.change`. **Only
+  where pforte sends SMS**; without `SMS_PROVIDER` the overview is as it was. A person cannot remove their number, and
+  name, e-mail address and language stay the organisation's
+  ([the account pages](docs/account.md), [#124](https://github.com/progwise/pforte/issues/124)).
+- **A number a person chose is theirs: a sync or an import no longer overwrites it.** `PUT
+  /admin/users/by-email/{email}` ignores `phone` for a person who changed their number themselves, and says `unchanged`
+  when nothing else differs. Otherwise a source that still has the old number would put it back at its next run.
+  **If your source should follow, read the number from pforte:** a user has the new field `phoneSetByUserAt` (a time,
+  or `null`). An administrator can still correct the number, in the administration or with `PATCH /admin/users/{id}`;
+  the person's page there says when the person chose it. For everybody who never changed their number, the sync and
+  the import work as before ([whose number it is](docs/sms.md#whose-number-it-is)).
+
+  With it come a migration (a column for the person, a kind of code), which pforte applies at start, the cookie
+  `pforte_account_phone` (the number that waits for its code, 10 minutes, [cookies](docs/security.md#cookies)), and new texts
+  for an installation with a `locales` folder: `account.profile.noteOwnPhone`, `account.profile.changePhone`,
+  `account.profile.addPhone`, the texts under `account.phoneChange.`, `mail.phoneChanged.subject` and
+  `mail.phoneChanged.text`, and in the administration `manage.fact.phoneOwn` and `manage.fact.phoneOwnNote`. A
+  language you added shows them in English until it has them.
+
 ### Fixed
 
 - **A wait of one second reads "1 second", and a long one is said in minutes.** The two texts that say how long to wait

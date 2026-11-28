@@ -69,6 +69,8 @@ export const adminDe: AdminCatalog = {
   'manage.fact.lastSignIn': 'Letzte Anmeldung',
   'manage.fact.created': 'Angelegt',
   'manage.fact.phone': 'Telefon bestätigt',
+  'manage.fact.phoneOwn': 'Telefon von der Person gewählt',
+  'manage.fact.phoneOwnNote': 'Auf ihren Kontoseiten. Ein Abgleich oder ein Import lässt diese Nummer unverändert; hier können Sie sie weiterhin ändern.',
   'manage.fact.email': 'E-Mail bestätigt',
   'manage.claims.title': 'Claims',
   'manage.claims.help': 'Was Anwendungen über diese Person erfahren. Ein Wert pro Zeile; leer entfernt den Claim.',

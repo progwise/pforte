@@ -16,6 +16,12 @@ export const users = pgTable(
     /** E.164, e.g. +4915112345678. */
     phone: text(),
     phoneVerifiedAt: timestamptz(),
+    /**
+     * Set when the person chose the number themselves, on the account pages. From then on the number is theirs: a
+     * sync or an import that names another one leaves it alone (the upsert by e-mail address). An administrator
+     * can still correct it, and it stays the person's after that.
+     */
+    phoneSetByUserAt: timestamptz(),
     /** Set when the user proves they own the address: with the activation link or a code sent by e-mail. */
     emailVerifiedAt: timestamptz(),
     firstName: text().notNull(),

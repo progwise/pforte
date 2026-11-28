@@ -1,13 +1,15 @@
 import { type NotifiableUser, type Notifier, NotifierUnavailableError } from '../notifications/notifier.js'
 
 export interface Notification {
-  kind: 'activation' | 'reset-code' | 'login-code' | 'phone-code' | 'password-changed' | 'passkey-added'
+  kind: 'activation' | 'reset-code' | 'login-code' | 'phone-code' | 'password-changed' | 'passkey-added' | 'phone-changed'
   user: NotifiableUser
   channel?: 'email' | 'sms'
   url?: string
   code?: string
   /** The browser a passkey was created with, as the notice names it. */
   device?: string
+  /** The new number as the notice of a changed number names it. */
+  phone?: string
   expiresAt?: Date
   applicationName?: string
 }
@@ -46,6 +48,10 @@ export const createRecordingNotifier = () => {
     async sendPasskeyAdded(user, notice) {
       if (notifier.failWith) throw notifier.failWith
       notifications.push({ kind: 'passkey-added', user, channel: 'email', url: notice.url, device: notice.device })
+    },
+    async sendPhoneChanged(user, notice) {
+      if (notifier.failWith) throw notifier.failWith
+      notifications.push({ kind: 'phone-changed', user, channel: 'email', url: notice.url, phone: notice.phone })
     },
   }
   /** The newest sign-in code sent to this e-mail address. */

@@ -70,7 +70,8 @@ administration ends with the button *Continue to Administration*. A second one, 
   number). The search is a form that is also a link, so a search can be bookmarked or sent to a colleague. Long lists are
   paged ("Next users").
 - **A person's page** shows their status, when they last signed in, when they were created, and whether e-mail and phone are
-  confirmed. Below that are the **profile** (names, e-mail, mobile phone, language, and whether they are an administrator)
+  confirmed. If the person chose their phone number themselves on the account pages, it says since when: a sync or an import
+  leaves that number alone, and you can still change it in the profile ([whose number it is](sms.md#whose-number-it-is)). Below that are the **profile** (names, e-mail, mobile phone, language, and whether they are an administrator)
   and their **claims**: one value per line for every claim type that exists, with its format and description. A form that
   cannot be saved comes back with what you typed and says what is wrong, field by field.
 - **New user** creates a person in the status "Not activated". Sending them the activation link comes next to it.
