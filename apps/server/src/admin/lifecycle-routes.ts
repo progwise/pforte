@@ -97,7 +97,7 @@ export const lifecycleRoutes =
           })
           if (!locked) return noUser(reply)
           clientLogouts.send(locked.user, locked.logouts)
-          return toUserDto(locked.user)
+          return toUserDto(locked.user, issuer)
         } catch (error) {
           if (error instanceof LifecycleError) return refused(reply, error)
           throw error
@@ -128,7 +128,7 @@ export const lifecycleRoutes =
           })
           if (!user) return noUser(reply)
           await limiter.forgetAddress(user.email)
-          return toUserDto(user)
+          return toUserDto(user, issuer)
         } catch (error) {
           if (error instanceof LifecycleError) return refused(reply, error)
           throw error
@@ -156,7 +156,7 @@ export const lifecycleRoutes =
           })
           if (!deactivated) return noUser(reply)
           clientLogouts.send(deactivated.user, deactivated.logouts)
-          return toUserDto(deactivated.user)
+          return toUserDto(deactivated.user, issuer)
         } catch (error) {
           if (error instanceof LifecycleError) return refused(reply, error)
           throw error
@@ -201,7 +201,7 @@ export const lifecycleRoutes =
             await notifier.sendActivationLink(asUser(result.user), { url, expiresAt: result.activation.expiresAt, applicationName: client?.name })
           }
           return {
-            user: toUserDto(result.user),
+            user: toUserDto(result.user, issuer),
             activation: { linkSent: Boolean(result.activation), expiresAt: result.activation?.expiresAt.toISOString() ?? null },
           }
         } catch (error) {
@@ -243,7 +243,7 @@ export const lifecycleRoutes =
           // Before the code is sent: the sessions are gone whether or not the mail can go out.
           clientLogouts.send(user, reset.logouts)
           await sendPasswordResetCode(user, { clientId: client?.clientId })
-          return toUserDto(user)
+          return toUserDto(user, issuer)
         } catch (error) {
           if (error instanceof LifecycleError) return refused(reply, error)
           if (error instanceof CodeLimitError) {
@@ -335,7 +335,7 @@ export const lifecycleRoutes =
           const result = await confirmPhone(db, requestContext(request), { userId: request.params.id, code: request.body.code }, { secrets: codeSecrets })
           if (!result) return noUser(reply)
           if (!result.ok) return problem(reply, 422, 'Wrong code', 'The code is not correct, has expired or was tried too often. Send a new one.')
-          return toUserDto(result.user)
+          return toUserDto(result.user, issuer)
         } catch (error) {
           if (error instanceof LifecycleError) return refused(reply, error)
           throw error

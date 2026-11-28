@@ -1,3 +1,4 @@
+import type { Database } from '@progwise/pforte-db'
 import Fastify, { type FastifyServerOptions } from 'fastify'
 import { accountRoutes, type AccountDependencies } from './account/routes.js'
 import { type AccountAreaDependencies, accountAreaRoutes } from './account-area/routes.js'
@@ -12,6 +13,7 @@ import type { Ui } from './ui/index.js'
 import type { ManageDependencies } from './manage/context.js'
 import { manageRoutes } from './manage/routes.js'
 import { oidcRoutes } from './oidc/routes.js'
+import { pictureRoutes } from './pictures/routes.js'
 import type { Passkeys } from './passkeys/index.js'
 import type { ProviderHolder } from './oidc/provider.js'
 
@@ -26,6 +28,8 @@ export interface AppDependencies {
   account?: AccountDependencies
   /** The account pages under /account, where a person sees how they are signed in. */
   accountArea?: AccountAreaDependencies
+  /** Serves the pictures people gave themselves, at the address of the claim `picture`. */
+  pictures?: { db: Database }
   /** Serves the script of the pages that create a passkey. */
   passkeys?: Pick<Passkeys, 'script'>
   /** How many proxies stand in front of pforte; see `Config.trustProxy`. */
@@ -42,7 +46,7 @@ export interface AppDependencies {
   }
 }
 
-export const buildApp = ({ getDatabaseTime, oidc, admin, account, accountArea, manage, ui, passkeys, trustProxy = 0, issuer, logStream }: AppDependencies) => {
+export const buildApp = ({ getDatabaseTime, oidc, admin, account, accountArea, manage, ui, passkeys, pictures, trustProxy = 0, issuer, logStream }: AppDependencies) => {
   // "The first N proxies are trusted": the client is what the Nth proxy from the end says it is.
   const options: FastifyServerOptions = {
     logger: logStream ? { stream: logStream, serializers: logSerializers } : process.env.NODE_ENV !== 'test' ? { serializers: logSerializers } : false,
@@ -84,6 +88,9 @@ export const buildApp = ({ getDatabaseTime, oidc, admin, account, accountArea, m
   }
   if (passkeys) {
     void app.register(passkeys.script.routes)
+  }
+  if (pictures) {
+    void app.register(pictureRoutes(pictures))
   }
   if (account) {
     void app.register(accountRoutes(account))

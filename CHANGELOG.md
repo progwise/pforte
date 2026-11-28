@@ -35,6 +35,28 @@ The entry of a release becomes the text of its GitHub release. Changes that are 
   `mail.phoneChanged.text`, and in the administration `manage.fact.phoneOwn` and `manage.fact.phoneOwnNote`. A
   language you added shows them in English until it has them.
 
+- **A person gives themselves a picture, and applications get it as the claim `picture`.** pforte had no picture of
+  anybody, so applications showed a generated pattern or a name only. The overview of the account pages now has
+  *Add a picture*: the person uploads a JPEG, PNG or WebP of up to 10 MB, and pforte makes a square JPEG of 512 pixels
+  from it, without what the camera noted in the file (place, time, device). An application that asks for the scope
+  `profile` gets the address of that picture in the ID token and at the userinfo endpoint; a person without a picture
+  has no such claim. The address is served **without a sign-in**, cannot be guessed and changes with every new
+  picture. Only the person sets their picture; an administrator can remove one, on the person's page in the
+  administration or with the new `DELETE /admin/users/{id}/picture`, and a user of the admin API has the new field
+  `picture` (the address, or `null`). It needs a sign-in with a code or a passkey that is at most five minutes old, is
+  limited to ten uploads an hour for a person, and is in the audit log as `user.picture.set` and `user.picture.remove`
+  ([the account pages](docs/account.md#a-picture), [a person's picture](docs/security.md#a-persons-picture),
+  [#123](https://github.com/progwise/pforte/issues/123)).
+
+  With it come a migration (a table for the pictures, a column for the person), which pforte applies at start, and a
+  new package in the image, `sharp`, which reads the pictures. **If pforte runs behind a proxy, it has to let an upload
+  of 10 MB through** (nginx: `client_max_body_size`). Pictures are in the database, so its backup has them. For an
+  installation with a `locales` folder: the texts `account.profile.note` and `account.profile.noteOwnPhone` now say
+  that the picture can be changed here, so a text of your own under these keys needs the same change; new are
+  `account.profile.picture`, `account.profile.noPicture`, `account.profile.changePicture`, `account.profile.addPicture`
+  and the texts under `account.picture.`, and in the administration `manage.fact.picture`, the texts under
+  `manage.picture.` and `manage.flash.pictureRemoved`.
+
 ### Fixed
 
 - **A wait of one second reads "1 second", and a long one is said in minutes.** The two texts that say how long to wait

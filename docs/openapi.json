@@ -344,6 +344,13 @@
                         "null"
                       ]
                     },
+                    "picture": {
+                      "description": "The address of the picture the person gave themselves on the account pages, as applications get it in the claim `picture`. It is served without a sign-in and changes with every new picture.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "language": {
                       "type": "string"
                     },
@@ -380,6 +387,7 @@
                     "phone",
                     "phoneVerifiedAt",
                     "phoneSetByUserAt",
+                    "picture",
                     "language",
                     "status",
                     "isAdmin",
@@ -752,6 +760,13 @@
                               "null"
                             ]
                           },
+                          "picture": {
+                            "description": "The address of the picture the person gave themselves on the account pages, as applications get it in the claim `picture`. It is served without a sign-in and changes with every new picture.",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "language": {
                             "type": "string"
                           },
@@ -788,6 +803,7 @@
                           "phone",
                           "phoneVerifiedAt",
                           "phoneSetByUserAt",
+                          "picture",
                           "language",
                           "status",
                           "isAdmin",
@@ -1123,6 +1139,13 @@
                         "null"
                       ]
                     },
+                    "picture": {
+                      "description": "The address of the picture the person gave themselves on the account pages, as applications get it in the claim `picture`. It is served without a sign-in and changes with every new picture.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "language": {
                       "type": "string"
                     },
@@ -1159,6 +1182,7 @@
                     "phone",
                     "phoneVerifiedAt",
                     "phoneSetByUserAt",
+                    "picture",
                     "language",
                     "status",
                     "isAdmin",
@@ -1526,6 +1550,13 @@
                         "null"
                       ]
                     },
+                    "picture": {
+                      "description": "The address of the picture the person gave themselves on the account pages, as applications get it in the claim `picture`. It is served without a sign-in and changes with every new picture.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "language": {
                       "type": "string"
                     },
@@ -1562,6 +1593,7 @@
                     "phone",
                     "phoneVerifiedAt",
                     "phoneSetByUserAt",
+                    "picture",
                     "language",
                     "status",
                     "isAdmin",
@@ -2095,6 +2127,281 @@
         }
       }
     },
+    "/admin/users/{id}/picture": {
+      "delete": {
+        "summary": "Remove the picture of a user",
+        "tags": [
+          "Users"
+        ],
+        "description": "For the picture that should not be there. Its address answers nothing any more, and applications get no `picture` from the next sign-in on; one that has kept a copy shows it until it asks again. There is no call that sets a picture: a person gives themselves one on the account pages, and can do so again after this.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-required-scopes": [
+          "directory",
+          "admin"
+        ],
+        "responses": {
+          "204": {
+            "description": "Default Response"
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "number"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "number"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "number"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "number"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "number"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/users/by-email/{email}": {
       "put": {
         "summary": "Create or update a user by e-mail",
@@ -2244,6 +2551,13 @@
                                 "null"
                               ]
                             },
+                            "picture": {
+                              "description": "The address of the picture the person gave themselves on the account pages, as applications get it in the claim `picture`. It is served without a sign-in and changes with every new picture.",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
                             "language": {
                               "type": "string"
                             },
@@ -2280,6 +2594,7 @@
                             "phone",
                             "phoneVerifiedAt",
                             "phoneSetByUserAt",
+                            "picture",
                             "language",
                             "status",
                             "isAdmin",
@@ -2452,6 +2767,13 @@
                             "null"
                           ]
                         },
+                        "picture": {
+                          "description": "The address of the picture the person gave themselves on the account pages, as applications get it in the claim `picture`. It is served without a sign-in and changes with every new picture.",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
                         "language": {
                           "type": "string"
                         },
@@ -2488,6 +2810,7 @@
                         "phone",
                         "phoneVerifiedAt",
                         "phoneSetByUserAt",
+                        "picture",
                         "language",
                         "status",
                         "isAdmin",
@@ -6098,6 +6421,13 @@
                         "null"
                       ]
                     },
+                    "picture": {
+                      "description": "The address of the picture the person gave themselves on the account pages, as applications get it in the claim `picture`. It is served without a sign-in and changes with every new picture.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "language": {
                       "type": "string"
                     },
@@ -6134,6 +6464,7 @@
                     "phone",
                     "phoneVerifiedAt",
                     "phoneSetByUserAt",
+                    "picture",
                     "language",
                     "status",
                     "isAdmin",
@@ -6556,6 +6887,13 @@
                         "null"
                       ]
                     },
+                    "picture": {
+                      "description": "The address of the picture the person gave themselves on the account pages, as applications get it in the claim `picture`. It is served without a sign-in and changes with every new picture.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "language": {
                       "type": "string"
                     },
@@ -6592,6 +6930,7 @@
                     "phone",
                     "phoneVerifiedAt",
                     "phoneSetByUserAt",
+                    "picture",
                     "language",
                     "status",
                     "isAdmin",
@@ -7014,6 +7353,13 @@
                         "null"
                       ]
                     },
+                    "picture": {
+                      "description": "The address of the picture the person gave themselves on the account pages, as applications get it in the claim `picture`. It is served without a sign-in and changes with every new picture.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "language": {
                       "type": "string"
                     },
@@ -7050,6 +7396,7 @@
                     "phone",
                     "phoneVerifiedAt",
                     "phoneSetByUserAt",
+                    "picture",
                     "language",
                     "status",
                     "isAdmin",
@@ -7499,6 +7846,13 @@
                             "null"
                           ]
                         },
+                        "picture": {
+                          "description": "The address of the picture the person gave themselves on the account pages, as applications get it in the claim `picture`. It is served without a sign-in and changes with every new picture.",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
                         "language": {
                           "type": "string"
                         },
@@ -7535,6 +7889,7 @@
                         "phone",
                         "phoneVerifiedAt",
                         "phoneSetByUserAt",
+                        "picture",
                         "language",
                         "status",
                         "isAdmin",
@@ -8007,6 +8362,13 @@
                         "null"
                       ]
                     },
+                    "picture": {
+                      "description": "The address of the picture the person gave themselves on the account pages, as applications get it in the claim `picture`. It is served without a sign-in and changes with every new picture.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "language": {
                       "type": "string"
                     },
@@ -8043,6 +8405,7 @@
                     "phone",
                     "phoneVerifiedAt",
                     "phoneSetByUserAt",
+                    "picture",
                     "language",
                     "status",
                     "isAdmin",
@@ -8878,6 +9241,13 @@
                         "null"
                       ]
                     },
+                    "picture": {
+                      "description": "The address of the picture the person gave themselves on the account pages, as applications get it in the claim `picture`. It is served without a sign-in and changes with every new picture.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "language": {
                       "type": "string"
                     },
@@ -8914,6 +9284,7 @@
                     "phone",
                     "phoneVerifiedAt",
                     "phoneSetByUserAt",
+                    "picture",
                     "language",
                     "status",
                     "isAdmin",

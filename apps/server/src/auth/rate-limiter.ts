@@ -22,6 +22,8 @@ export const LIMITS = {
   resetPerAddress: { max: 5, windowSeconds: ONE_HOUR },
   /** Activation links that were wrong, from one IP. */
   activationFailuresPerIp: { max: 20, windowSeconds: FIFTEEN_MINUTES },
+  /** Pictures one person uploads on the account pages. Each is read and written anew, which is work for the server. */
+  pictureUploadsPerPerson: { max: 10, windowSeconds: ONE_HOUR },
   /** Failed authentications of a client or an administrator, from one IP. */
   clientAuthFailuresPerIp: { max: 30, windowSeconds: FIFTEEN_MINUTES },
 } as const
@@ -63,6 +65,8 @@ export interface RateLimiter {
   activationFailed(ip: string | undefined): Promise<void>
   clientAuthBlockedFor(ip: string | undefined): Promise<number>
   clientAuthFailed(ip: string | undefined): Promise<void>
+  /** Counts a picture this person uploads and returns the wait if that was one too many. */
+  pictureUpload(userId: string): Promise<number>
   /** Forgets everything counted against an address, so an administrator can let someone in at once. */
   forgetAddress(email: string): Promise<void>
 }
@@ -109,6 +113,7 @@ export const createRateLimiter = ({ db, secret, now = () => new Date() }: RateLi
     activationFailed: (ip) => count(db, [rule(`activate:ip:${ipKey(ip)}`, LIMITS.activationFailuresPerIp)], now()),
     clientAuthBlockedFor: (ip) => blockedFor(db, [rule(`clientauth:ip:${ipKey(ip)}`, LIMITS.clientAuthFailuresPerIp)], now()),
     clientAuthFailed: (ip) => count(db, [rule(`clientauth:ip:${ipKey(ip)}`, LIMITS.clientAuthFailuresPerIp)], now()),
+    pictureUpload: (userId) => consume(db, rule(`picture:user:${userId}`, LIMITS.pictureUploadsPerPerson), now()),
     async forgetAddress(email) {
       const a = address(email)
       await clearPrefix(db, `pw:addrip:${a}:`)

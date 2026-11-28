@@ -120,6 +120,13 @@
       "when": 1795882352991,
       "tag": "0016_add_phone_set_by_user",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1795894242733,
+      "tag": "0017_add_user_pictures",
+      "breakpoints": true
     }
   ]
 }

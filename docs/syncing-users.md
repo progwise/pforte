@@ -62,7 +62,8 @@ What to know:
   always lists in the API, also for a claim type that holds only one; a value must match the pattern of its claim type, and the type
   must exist (create it first, in the administration).
 - **What it does not touch.** The e-mail address is the key. The call never sets a password, never changes the status and never
-  grants administrator rights.
+  grants administrator rights. Nor does it set a picture: a person gives themselves one on [the account pages](account.md#a-picture),
+  and the user in the answer has its address as `picture` (or `null`).
 - **One transaction.** If a claim is invalid, nothing is created or changed, so you never get a person with half their claims.
 - **`phone`** is optional, in the form `+4915112345678`; `null` removes it. It is **ignored for a person who changed their number
   themselves** on the account pages: the number is theirs from then on, and your source may still hold the one they had. The user in

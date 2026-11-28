@@ -22,6 +22,11 @@ export const users = pgTable(
      * can still correct it, and it stays the person's after that.
      */
     phoneSetByUserAt: timestamptz(),
+    /**
+     * Names the person's picture (`user_pictures.key`), and is the random part of the address it is served at.
+     * Empty for a person without one.
+     */
+    pictureKey: text().unique('users_picture_key_unique'),
     /** Set when the user proves they own the address: with the activation link or a code sent by e-mail. */
     emailVerifiedAt: timestamptz(),
     firstName: text().notNull(),

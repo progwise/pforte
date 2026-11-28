@@ -379,6 +379,7 @@ dl.facts dt { color: var(--muted); }
 dl.facts dd { margin: 0; }
 @media (max-width: 40rem) { dl.facts { grid-template-columns: 1fr; } dl.facts dt { margin-top: 0.5rem; } }
 form.below { margin-top: 1rem; }
+.avatar { display: block; width: 6rem; height: 6rem; margin-bottom: 0.4rem; border-radius: 50%; background: var(--background); }
 
 /*
  * The bar is one line wherever the wide one does not fit one row: the logo and the sections as a menu that opens, with

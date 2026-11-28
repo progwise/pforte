@@ -1,13 +1,14 @@
 import { findActiveUserById, getClaimsForClient } from '@progwise/pforte-db/oidc'
 import type { Database } from '@progwise/pforte-db'
 import type { FindAccount } from 'oidc-provider'
+import { pictureUrl } from '../pictures/address.js'
 
 /** Standard OpenID claims kept per scope. Claim types from the database are added to `openid`. */
 export const standardClaims = {
   openid: ['sub', 'email', 'email_verified'],
   // Clients always get the e-mail with `openid`; the scope exists so that requesting it is valid.
   email: ['email', 'email_verified'],
-  profile: ['name', 'given_name', 'family_name', 'locale'],
+  profile: ['name', 'given_name', 'family_name', 'locale', 'picture'],
   phone: ['phone_number', 'phone_number_verified'],
 } as const
 
@@ -16,7 +17,7 @@ export const standardClaims = {
  * user therefore loses access as soon as their existing tokens are used or refreshed.
  */
 export const createFindAccount =
-  (db: Database): FindAccount =>
+  (db: Database, issuer: string): FindAccount =>
   async (ctx, sub) => {
     const user = await findActiveUserById(db, sub)
     if (!user) return undefined
@@ -36,6 +37,8 @@ export const createFindAccount =
           given_name: user.firstName,
           family_name: user.lastName,
           locale: user.language,
+          // Left out for a person without a picture, so that each application keeps its own stand-in.
+          ...(user.pictureKey ? { picture: pictureUrl(issuer, user.pictureKey) } : {}),
           ...(user.phone
             ? { phone_number: user.phone, phone_number_verified: user.phoneVerifiedAt !== null }
             : {}),

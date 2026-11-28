@@ -122,6 +122,41 @@ never an SMS: it has to reach the person, not the new phone. Like the two above 
 stored and cannot be turned off; a mail server that is down does not undo the change. Nothing is sent when an
 administrator, an import or a sync changes a number: those codes then go by e-mail until the person has confirmed it.
 
+## A person's picture
+
+A person can upload a picture of themselves on [the account pages](account.md#a-picture), and applications get its
+address as the claim `picture`. A file from outside and an address anybody can fetch are both things pforte has nowhere
+else, so this is what is done about them.
+
+- **Only three formats are opened**: JPEG, PNG and WebP, told by the first bytes of the file and not by its name or
+  what the browser says it is. The library that reads pictures ([sharp](https://sharp.pixelplumbing.com), with libvips)
+  knows many more, SVG among them, and none of those readers sees an upload. A file whose content is another format than
+  its first bytes claim is refused as well.
+- **Nothing that was uploaded is served.** pforte decodes the picture and writes a new one from its pixels: a square
+  JPEG of 512 pixels. Only that is stored; the upload is gone when the request ends. So a file that is a picture and
+  something else at once (a script after the picture data, say) leaves nothing behind but its pixels.
+- **What a camera notes is removed**: place and time, the device, a preview of the uncut picture, colour profiles and
+  comments. The picture is turned the way the camera held it first, since the note that says so goes too.
+- **Size is bounded three times**: 10 MB for the file, 64 million pixels for the picture it claims to be (a small file
+  can claim to be an enormous one), and 15 seconds for making it. One picture is worked on by one thread.
+- **Uploading needs a sign-in with two factors that is at most five minutes old**, as every change on the account
+  pages, comes from pforte's own page only, and is limited to ten an hour for a person ([rate limits](rate-limiting.md)).
+- **The address is the protection of the picture.** It is `/pictures/` and 128 random bits, names nobody, and there is
+  no list of pictures; a new picture gets a new address and the old one answers `404`. It is served without a sign-in,
+  because that is how applications fetch it. So a picture is as private as its address: every application the person
+  signs in to with the scope `profile` gets it, and shows it to whoever it shows it to.
+- **It is served as a JPEG and as nothing else**, with `nosniff`, a policy that allows nothing (`default-src 'none';
+  sandbox`) and `Cross-Origin-Resource-Policy: cross-origin`, so that applications can show it in their pages. It sets
+  no cookie. Browsers and proxies may keep it for a day, not longer: a picture that was removed is gone from them soon.
+- **pforte's own pages load it from pforte only.** The pages that show a picture (the overview, the page for the
+  picture, a person's page in the administration) add `img-src 'self'` to the policy every page has.
+- **An administrator can remove a picture**, in the administration or with `DELETE /admin/users/{id}/picture`, and
+  nobody but the person can set one. The picture of somebody who is locked or deactivated is not served. Setting and
+  removing are in the [audit log](audit-log.md), without the picture and without its address.
+
+Pictures are stored in the database, about 30 to 60 kB each, so a backup of the database has them and the image still
+writes nothing to disk.
+
 ## Passkeys
 
 A passkey is made on the person's device and pforte keeps its public half; with it the person signs in without
@@ -239,6 +274,10 @@ logs as short as your obligations allow.
   push and **every Monday**. The scan (Trivy) fails on high or critical findings that have a fix, in the operating system
   packages of the base image and in the Node packages. Accepted findings go into `.trivyignore`, each with its reason and a date
   to look at it again. The base image is pinned by digest, and Dependabot proposes new ones (after the same 14 days).
+- **Two packages bring compiled code**: the one that hashes passwords, and [sharp](https://sharp.pixelplumbing.com),
+  which reads [the pictures people upload](#a-persons-picture) and carries the library libvips with it. The scan sees
+  the packages, not the libraries inside them: a fix for those arrives as a new version of the package, which Dependabot
+  proposes.
 - **The repository** protects `main` with rules: changes arrive only through pull requests, which can be merged when `check`,
   `dependencies`, `image` and `signoff` have passed, with linear history, and no force-push or deletion. Tags `v*`, which start
   a release and publish the image, can only be created by administrators and cannot be moved or deleted without that right.

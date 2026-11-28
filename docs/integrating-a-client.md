@@ -111,6 +111,7 @@ The same can be done with the admin API (`POST /admin/clients`; the OpenAPI docu
 | `email`, `email_verified` | The address; `true` once the person has received and entered a code sent to it. Always present. |
 | `acr`, `amr` | How the person signed in, see below. Always present. |
 | `name`, `given_name`, `family_name`, `locale` | With the scope `profile`. `locale` is the person's language. |
+| `picture` | With the scope `profile`, if the person gave themselves a picture on [the account pages](account.md#a-picture): the address of a square JPEG of 512 pixels, which your server or the person's browser fetches without a sign-in. The address changes when the picture does, so it can be kept as long as it is the one in the claim. A person without a picture has no such claim. |
 | `phone_number`, `phone_number_verified` | With the scope `phone`, if the person has a mobile number. |
 | Your claim types | The claim types assigned to the client, such as `partner_no`. A type that holds several values per person is an **array** (`"partner_no": ["00892", "01234"]`), another is a string. A claim the person has no value for is left out. |
 | `auth_time` | When the person last signed in, if you asked for `max_age`. |

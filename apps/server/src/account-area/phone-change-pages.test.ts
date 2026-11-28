@@ -83,11 +83,11 @@ describe.skipIf(!hasDatabase)('the account pages: changing the phone number', ()
   }
 
   describe('the overview', () => {
-    it('offers to change the number, and says that it is the one detail that can be changed here', async () => {
+    it('offers to change the number, and says that it can be changed here', async () => {
       const page = await (await signedIn(A.email)).request('GET', '/account')
 
       expect(page.body).toContain(`•78${LINK}</dd>`)
-      expect(page.body).toContain('only the mobile number can be changed here.')
+      expect(page.body).toContain('only the mobile number and the picture can be changed here.')
       expect(page.body).not.toContain(OLD)
     })
 
@@ -115,7 +115,7 @@ describe.skipIf(!hasDatabase)('the account pages: changing the phone number', ()
       const page = await browser.request('GET', '/account')
 
       expect(page.body).not.toContain('/account/phone')
-      expect(page.body).toContain('it cannot be changed here.')
+      expect(page.body).toContain('only the picture can be changed here.')
       expect((await browser.request('GET', CHANGE)).headers.location).toBe('/account')
       expect((await post(browser, `${CHANGE}/send`, { phone: NEW })).headers.location).toBe('/account')
       expect((await post(browser, `${CHANGE}/confirm`, { code: '123456' })).headers.location).toBe('/account')

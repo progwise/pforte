@@ -225,6 +225,20 @@ ${name === 'delete' ? field({ id: 'confirmEmail', type: 'email', label: t('manag
     return redirectWith(reply, `${BASE}/${id}`, { kind: 'ok', key: 'manage.flash.passkeyRemoved' })
   })
 
+  // --- The picture: removing it needs no confirmation, the person can give themselves one again
+
+  app.post<{ Params: { id: string } }>(`${BASE}/:id/picture/remove`, async (request, reply) => {
+    const session = requireSession(request, reply)
+    if (!session) return reply
+    const { id } = request.params
+    if (!UUID.test(id)) return notFound(request, reply, session)
+    const response = await api(request, session, { method: 'DELETE', url: `/users/${id}/picture` })
+    if (response.statusCode === 401) return sessionEnded(reply)
+    if (response.statusCode >= 400 && response.statusCode !== 404) return redirectWith(reply, `${BASE}/${id}`, { kind: 'error', text: problemText(response.json()) })
+    // No picture any more is what was asked for, whoever removed it.
+    return redirectWith(reply, `${BASE}/${id}`, { kind: 'ok', key: 'manage.flash.pictureRemoved' })
+  })
+
   app.post<{ Params: { id: string } }>(`${BASE}/:id/devices-revoke-all`, async (request, reply) => {
     const session = requireSession(request, reply)
     if (!session) return reply

@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import { allowPictures } from '../pictures/show.js'
 import { escapeHtml } from '../ui/pages.js'
 import { MANAGE_PATH } from './constants.js'
 import type { ManageContext, ManageSession } from './context.js'
@@ -19,6 +20,8 @@ interface ApiUser {
   phone: string | null
   phoneVerifiedAt: string | null
   phoneSetByUserAt: string | null
+  /** The address of the picture the person gave themselves. */
+  picture: string | null
   language: string
   status: (typeof STATUSES)[number]
   isAdmin: boolean
@@ -256,6 +259,8 @@ ${checkbox({ id: 'isAdmin', label: t('manage.field.isAdmin'), checked: values.is
 <dt>${escapeHtml(t('manage.fact.email'))}</dt><dd>${escapeHtml(t(user.status === 'created' ? 'manage.no' : 'manage.yes'))}</dd>
 <dt>${escapeHtml(t('manage.fact.phone'))}</dt><dd>${user.phone ? escapeHtml(t(user.phoneVerifiedAt ? 'manage.yes' : 'manage.no')) : escapeHtml(t('manage.none'))}</dd>
 ${user.phoneSetByUserAt ? `<dt>${escapeHtml(t('manage.fact.phoneOwn'))}</dt><dd>${escapeHtml(formatTime(user.phoneSetByUserAt, language))}<br><span class="muted">${escapeHtml(t('manage.fact.phoneOwnNote'))}</span></dd>
+` : ''}${user.picture ? `<dt>${escapeHtml(t('manage.fact.picture'))}</dt><dd><img class="avatar" src="${escapeHtml(user.picture)}" alt="${escapeHtml(t('manage.picture.alt', { name: fullName(user) || user.email }))}" width="96" height="96"><span class="muted">${escapeHtml(t('manage.picture.note'))}</span>
+<form class="below" method="post" action="${BASE}/${user.id}/picture/remove"><button type="submit" class="secondary">${escapeHtml(t('manage.picture.remove'))}</button></form></dd>
 ` : ''}</dl>`
 
     const claimFields = claimTypes.length
@@ -295,6 +300,7 @@ ${claimTypes.length ? `<p><button type="submit">${escapeHtml(t('manage.claims.sa
 
 ${await userPanels(ctx, request, session, user)}`
 
+    if (user.picture) allowPictures(reply, ui.pages.contentSecurityPolicy)
     const html = page(request, reply, session, 'users', fullName(user) || user.email, content)
     return reply.code(extra.status ?? 200).type('text/html').send(extra.error ? withFlash(html, extra.error) : html)
   }
